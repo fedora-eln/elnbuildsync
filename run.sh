@@ -22,7 +22,7 @@ pip install requests
 ln -sf /etc/pki/tls/certs/ca-bundle.crt $(python3 -c 'import requests; print(requests.certs.where())')
 
 pip install -r test-requirements.txt
-python3 distrobuildsync distrobuildsync --version
+python3 distrobuildsync --version
 
 # Added for debug
 sleep 10h
