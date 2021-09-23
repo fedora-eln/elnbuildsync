@@ -23,24 +23,25 @@ export NSS_WRAPPER_GROUP=/etc/group
 
 # generate_container_user
 
-# echo "EXECUTING klist"
+echo "EXECUTING klist"
 klist
 
-# echo "EXECUTING ssh to the pkgs.devel.redhat.com"
+echo "EXECUTING ssh to the pkgs.devel.redhat.com"
 ssh pkgs.devel.redhat.com
 
 
 python3 --version
 
+echo "Activation virtualenv"
 virtualenv .venv 
 . .venv/bin/activate
 pip install --upgrade pip
 pip install requests
 ln -sf /etc/pki/tls/certs/ca-bundle.crt $(python3 -c 'import requests; print(requests.certs.where())')
-python3 -c 'import requests; print(requests.get("https://engineering.redhat.com/"))'
 
 pip install -r test-requirements.txt
 python3 distrobuildsync --help
 
 # Added for debug
+echo "Sleep 10 hours. Debugging..."
 sleep 10h
