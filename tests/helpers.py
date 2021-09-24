@@ -5,6 +5,8 @@ import os
 import subprocess
 import tempfile
 
+import sys
+
 GIT_HASH_REGEX = r"^[0-9a-f]{5,40}$"
 
 DATA_DIR = os.path.join(os.path.abspath(os.path.dirname(__file__)), "data")
@@ -42,36 +44,30 @@ def run_cmds(cmds):
 
 
 def setup_test_repo(git_repo_dir, cfg_file=None):
-    clone_dirobj = tempfile.TemporaryDirectory()
-    clone_dir = clone_dirobj.name
-
-    # setup a simple bare repo containing a README and a optional config file
-    cmds = [
-        ["cd", "/tmp"],
-        ["git", "init", "--bare", git_repo_dir],
-        ["rm", "-rf", clone_dir],
-        ["git", "clone", git_repo_dir, clone_dir],
-        ["cd", clone_dir],
-        ["git", "config", "user.name", "John Doe"],
-        ["git", "config", "user.email", "jdoe@example.com"],
-        ["bash", "-c", "echo test > README"],
-    ]
-    if cfg_file:
+    with tempfile.TemporaryDirectory() as clone_dir:
+        # setup a simple bare repo containing a README and a optional config file
+        cmds = [
+            ["cd", "/tmp"],
+            ["git", "init", "--bare", git_repo_dir],
+            ["rm", "-rf", clone_dir],
+            ["git", "clone", git_repo_dir, clone_dir],
+            ["cd", clone_dir],
+            ["git", "config", "user.name", "John Doe"],
+            ["git", "config", "user.email", "jdoe@example.com"],
+            ["bash", "-c", "echo test > README"],
+        ]
+        if cfg_file:
+            cmds.extend([["cp", cfg_file, "distrobaker.yaml"]])
         cmds.extend(
             [
-                ["cp", cfg_file, "distrobaker.yaml"],
+                ["git", "add", "."],
+                ["git", "commit", "-m", "Initial commit"],
+                ["git", "push"],
+                ["cd", git_repo_dir],
+                ["git", "branch", "-m", "main"],
             ]
         )
-    cmds.extend(
-        [
-            ["git", "add", "."],
-            ["git", "commit", "-m", "Initial commit"],
-            ["git", "push"],
-            ["cd", git_repo_dir],
-            ["git", "branch", "-m", "main"],
-        ]
-    )
-    run_cmds(cmds)
+        run_cmds(cmds)
 
 
 def last_commit(repodir):

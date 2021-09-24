@@ -2,9 +2,12 @@ import os
 import sys
 import tempfile
 
-from lib import distrobuildsync
+import distrobuildsync
+from distrobuildsync import config
 from parameterized import parameterized
-from tests import helpers
+import helpers
+import re
+import responses
 
 try:
     import unittest2 as unittest
@@ -13,34 +16,20 @@ except ImportError:
 
 
 class TestConfigSetting(unittest.TestCase):
-    def test_initial_config(self):
-        # configuration should start out empty
-        cfg = distrobuildsync.get_config()
-        self.assertIs(type(cfg), dict)
-        self.assertFalse(cfg)
-
     def test_load_config(self):
         with tempfile.TemporaryDirectory() as td:
             helpers.setup_test_repo(
                 td,
                 os.path.join(helpers.DATA_DIR, "config", "distrobaker.yaml"),
             )
-            # attempting to load config without specifying a branch will fail
-            cfg = distrobuildsync.load_config(td)
-            self.assertIsNone(cfg)
-            # try again specifying the branch
-            cfg = distrobuildsync.load_config(td + "#main")
-
-        print("DEBUG loaded config = %s", cfg, file=sys.stderr)
-        self.assertIs(type(cfg), dict)
-        self.assertIsNotNone(cfg)
-        # make sure what was loaded matches get_config()
-        self.assertEqual(cfg, distrobuildsync.get_config())
+            # try loading the config
+            config.scmurl = td + "#main"
+            config.load_config()
 
         # verify some derived values are present in the configuration
         # with the expected values
         self.assertEqual(
-            cfg["comps"]["rpms"]["ipa"],
+            config.comps["rpms"]["ipa"],
             {
                 "source": "freeipa.git#f33",
                 "destination": "ipa.git#fluff-42.0.0-alpha",
@@ -48,7 +37,7 @@ class TestConfigSetting(unittest.TestCase):
             },
         )
         self.assertEqual(
-            cfg["comps"]["modules"]["testmodule:master"],
+            config.comps["modules"]["testmodule:master"],
             {
                 "source": "testmodule.git#master",
                 "destination": "testmodule#stream-master-fluff-42.0.0-alpha-experimental",
@@ -66,11 +55,7 @@ class TestConfigSetting(unittest.TestCase):
                 "distrobaker-no-configuration.yaml",
                 "configuration block is missing",
             ),
-            (
-                "no trigger",
-                "distrobaker-no-trigger.yaml",
-                "trigger missing",
-            ),
+            ("no trigger", "distrobaker-no-trigger.yaml", "trigger missing"),
             (
                 "no source profile",
                 "distrobaker-no-source-profile.yaml",
@@ -83,12 +68,11 @@ class TestConfigSetting(unittest.TestCase):
     ):
         with tempfile.TemporaryDirectory() as td:
             helpers.setup_test_repo(
-                td,
-                os.path.join(helpers.DATA_DIR, "config", config_file),
+                td, os.path.join(helpers.DATA_DIR, "config", config_file)
             )
-            with self.assertLogs(distrobuildsync.logger) as cm:
-                cfg = distrobuildsync.load_config(td + "#main")
-            self.assertIsNone(cfg)
+            with self.assertLogs(config.logger) as cm:
+                config.scmurl = td + "#main"
+                config.load_config()
             # make sure expected_error appears in logger output
             self.assertTrue(
                 helpers.strings_with_substring(cm.output, expected_error),
@@ -96,3 +80,46 @@ class TestConfigSetting(unittest.TestCase):
                     expected_error, cm.output
                 ),
             )
+
+    @responses.activate
+    def test_load_autopackagelist(self):
+        def request_callback(request):
+            return (200, {}, "PackageA\nPackageB")
+
+        responses.add_callback(
+            responses.GET,
+            re.compile("https://cr.example.com/.*"),
+            callback=request_callback,
+        )
+
+        with tempfile.TemporaryDirectory() as td:
+            helpers.setup_test_repo(
+                td,
+                os.path.join(
+                    helpers.DATA_DIR,
+                    "config",
+                    "distrobaker-autopackagelist.yaml",
+                ),
+            )
+            config.scmurl = td + "#main"
+            config.load_config()
+
+        # verify some derived values are present in the configuration
+        # with the expected values
+        self.assertEqual(
+            config.comps["rpms"]["PackageA"],
+            {
+                "source": "PackageA.git#rawhide",
+                "destination": "PackageA.git#rawhide",
+                "cache": {"source": "PackageA", "destination": "PackageA"},
+            },
+        )
+
+        self.assertEqual(
+            config.comps["rpms"]["PackageB"],
+            {
+                "source": "PackageB.git#rawhide",
+                "destination": "PackageB.git#rawhide",
+                "cache": {"source": "PackageB", "destination": "PackageB"},
+            },
+        )
