@@ -34,7 +34,7 @@ ln -sf /etc/pki/tls/certs/ca-bundle.crt $(python3 -c 'import requests; print(req
 
 pip install -r test-requirements.txt
 
-python3 -c "from distrobuildsync import main; main()" -l debug --distrogitsync-endpoint http://distrogitsync:8080 "https://gitlab.cee.redhat.com/osci/distrobaker_config.git#rhel9"
+python3 -c "from distrobuildsync import main; main()" -l debug --distrogitsync-endpoint http://distrogitsync:8080 "https://sgallagh.fedorapeople.org/distrobaker.yaml"
 
 # Added for debug
 # echo "Sleep 10 hours. Debugging..."
