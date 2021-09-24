@@ -8,12 +8,11 @@ COPY docker_files/ /tmp
 RUN INSTALL_PKGS="python3 python3-devel python3-setuptools python3-pip python3-virtualenv nss_wrapper \
         gettext rpm wget tar which openssl krb5-devel redhat-rpm-config libcurl-devel rpm-devel \
         httpd httpd-devel atlas-devel gcc-gfortran libffi-devel gcc libffi-devel libtool-ltdl enchant \
-        git wget krb5-workstation krb5-libs openssl-devel nss_wrapper koji git \
+        git wget krb5-workstation krb5-libs openssl-devel nss_wrapper koji git fedora-messaging \
         /tmp/redhat-internal-cert-install-0.1-23.el7.csb.noarch.rpm" && \
     dnf -y --setopt=tsflags=nodocs install $INSTALL_PKGS && \
-    dnf -y clean all --enablerepo='*'
-
-RUN rpm -i /tmp/python3-brewkoji-1.27-1.fc34eng.noarch.rpm \
+    dnf -y clean all --enablerepo='*' && \
+    rpm -i /tmp/python3-brewkoji-1.27-1.fc34eng.noarch.rpm \
            /tmp/brewkoji-1.27-1.fc34eng.noarch.rpm && \
     rm -fr /tmp/python3-brewkoji-1.27-1.fc34eng.noarch.rpm \
            /tmp/brewkoji-1.27-1.fc34eng.noarch.rpm \
@@ -26,6 +25,12 @@ RUN mv /tmp/stream.conf /etc/koji.conf.d/stream.conf && \
     mv /tmp/passwd.template / && \
     mv /tmp/distrobaker_centos_id_rsa.pub /tmp/.ssh/
 
+RUN mkdir /etc/fedora-messaging/ && \
+    mv /tmp/cacert.pem /etc/fedora-messaging/ && \
+    mv /tmp/fedora-key.pem /etc/fedora-messaging/ && \
+    mv /tmp/fedora-cert.pem /etc/fedora-messaging/ && \
+    mv /tmp/config.toml /etc/fedora-messaging/
+
 RUN mv /tmp/RH-IT-Root-CA.crt /etc/pki/ca-trust/source/anchors && \
     update-ca-trust extract
 
@@ -36,8 +41,8 @@ RUN git config --global user.email "example@distrobaker.com" && \
     git config --global user.name "DistroBaker"
 
 RUN cp /tmp/ssh_config /tmp/.ssh/ssh_config && \
-    chmod 600 /tmp/.ssh/ssh_config
-RUN rm -fr /etc/ssh/ssh_config && \
+    chmod 600 /tmp/.ssh/ssh_config && \
+    rm -fr /etc/ssh/ssh_config && \
     cp /tmp/ssh_config /etc/ssh/ssh_config && \
     chmod 600 /tmp/.ssh/ssh_config
 
