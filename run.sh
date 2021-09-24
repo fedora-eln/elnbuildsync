@@ -33,8 +33,9 @@ pip install requests
 ln -sf /etc/pki/tls/certs/ca-bundle.crt $(python3 -c 'import requests; print(requests.certs.where())')
 
 pip install -r test-requirements.txt
-python3 distrobuildsync --help
+
+python3 -c "from distrobuildsync import main; main()" -l debug --distrogitsync-endpoint http://distrogitsync:8080 "https://gitlab.cee.redhat.com/osci/distrobaker_config.git#rhel9"
 
 # Added for debug
-echo "Sleep 10 hours. Debugging..."
-sleep 10h
+# echo "Sleep 10 hours. Debugging..."
+# sleep 10h
