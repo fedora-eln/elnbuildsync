@@ -25,8 +25,7 @@ RUN mv /tmp/stream.conf /etc/koji.conf.d/stream.conf && \
     mv /tmp/passwd.template / && \
     mv /tmp/distrobaker_centos_id_rsa.pub /tmp/.ssh/
 
-RUN mkdir /etc/fedora-messaging/ && \
-    mv /tmp/cacert.pem /etc/fedora-messaging/ && \
+RUN mv /tmp/cacert.pem /etc/fedora-messaging/ && \
     mv /tmp/fedora-key.pem /etc/fedora-messaging/ && \
     mv /tmp/fedora-cert.pem /etc/fedora-messaging/ && \
     mv /tmp/config.toml /etc/fedora-messaging/
