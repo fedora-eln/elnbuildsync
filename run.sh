@@ -9,8 +9,6 @@ echo "Running scheduler"
 sleep 3
 
 # This method should be executed manually each time user login to the pod
-# generate_container_user() {
-
 export passwd_output_dir="/tmp"
 export USER_ID=$(id -u)
 export GROUP_ID=$(id -g)
@@ -19,16 +17,11 @@ export LD_PRELOAD=libnss_wrapper.so
 export NSS_WRAPPER_PASSWD=${passwd_output_dir}/passwd
 export NSS_WRAPPER_GROUP=/etc/group
 
-# }
-
-# generate_container_user
-
 echo "EXECUTING klist"
 klist
 
 # echo "EXECUTING ssh to the pkgs.devel.redhat.com"
 # ssh pkgs.devel.redhat.com
-
 
 python3 --version
 
