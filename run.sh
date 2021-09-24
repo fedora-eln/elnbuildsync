@@ -26,8 +26,8 @@ export NSS_WRAPPER_GROUP=/etc/group
 echo "EXECUTING klist"
 klist
 
-echo "EXECUTING ssh to the pkgs.devel.redhat.com"
-ssh pkgs.devel.redhat.com
+# echo "EXECUTING ssh to the pkgs.devel.redhat.com"
+# ssh pkgs.devel.redhat.com
 
 
 python3 --version
