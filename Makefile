@@ -7,3 +7,4 @@ dependencies:
 
 unit: dependencies
 	python3 -m unittest discover -s tests/ -p 'test_*'
+
