@@ -18,7 +18,7 @@ RUN INSTALL_PKGS="python3 python3-devel python3-setuptools python3-pip python3-v
            /tmp/brewkoji-1.27-1.fc34eng.noarch.rpm \
            /tmp/redhat-internal-cert-install-0.1-23.el7.csb.noarch.rpm
 
-RUN mkdir /tmp/.ssh /centos_rsa /keytab /.cache /etc/fedora-messaging && \
+RUN mkdir /tmp/.ssh /centos_rsa /keytab /.cache && \
     touch /.gitconfig .gitconfig distrobaker_centos_id_rsa.pub
 
 RUN mv /tmp/stream.conf /etc/koji.conf.d/stream.conf && \
