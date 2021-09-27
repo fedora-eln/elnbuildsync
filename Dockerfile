@@ -9,7 +9,8 @@ RUN INSTALL_PKGS="python3 python3-devel python3-setuptools python3-pip python3-v
         gettext rpm wget tar which openssl krb5-devel redhat-rpm-config libcurl-devel rpm-devel \
         httpd httpd-devel atlas-devel gcc-gfortran libffi-devel gcc libffi-devel libtool-ltdl enchant \
         git wget krb5-workstation krb5-libs openssl-devel nss_wrapper koji git fedora-messaging \
-        /tmp/redhat-internal-cert-install-0.1-23.el7.csb.noarch.rpm" && \
+        /tmp/redhat-internal-cert-install-0.1-23.el7.csb.noarch.rpm \
+        /tmp/fedora-messaging-2.1.0-1.fc34.src.rpm" && \
     dnf -y --setopt=tsflags=nodocs install $INSTALL_PKGS && \
     dnf -y clean all --enablerepo='*' && \
     rpm -i /tmp/python3-brewkoji-1.27-1.fc34eng.noarch.rpm \
