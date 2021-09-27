@@ -36,7 +36,7 @@ pip install -r test-requirements.txt
 
 export FEDORA_MESSAGING_CONF=/etc/fedora-messaging/config.toml
 
-python3 -c "from distrobuildsync import main; main()" -l debug --distrogitsync-endpoint http://distrogitsync:8080 "https://gitlab.com/sturivny/test_oc.git"
+python3 -c "from distrobuildsync import main; main()" -u 15 -l debug --distrogitsync-endpoint http://distrogitsync:8080 "https://gitlab.com/sturivny/test_oc.git"
 
 # Added for debug
 # echo "Sleep 10 hours. Debugging..."
