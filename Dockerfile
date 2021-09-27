@@ -9,8 +9,7 @@ RUN INSTALL_PKGS="python3 python3-devel python3-setuptools python3-pip python3-v
         gettext rpm wget tar which openssl krb5-devel redhat-rpm-config libcurl-devel rpm-devel \
         httpd httpd-devel atlas-devel gcc-gfortran libffi-devel gcc libffi-devel libtool-ltdl enchant \
         git wget krb5-workstation krb5-libs openssl-devel nss_wrapper koji git fedora-messaging \
-        /tmp/redhat-internal-cert-install-0.1-23.el7.csb.noarch.rpm \
-        /tmp/fedora-messaging-2.1.0-1.fc34.src.rpm" && \
+        /tmp/redhat-internal-cert-install-0.1-23.el7.csb.noarch.rpm" && \
     dnf -y --setopt=tsflags=nodocs install $INSTALL_PKGS && \
     dnf -y clean all --enablerepo='*' && \
     rpm -i /tmp/python3-brewkoji-1.27-1.fc34eng.noarch.rpm \
@@ -19,17 +18,17 @@ RUN INSTALL_PKGS="python3 python3-devel python3-setuptools python3-pip python3-v
            /tmp/brewkoji-1.27-1.fc34eng.noarch.rpm \
            /tmp/redhat-internal-cert-install-0.1-23.el7.csb.noarch.rpm
 
-RUN mkdir /tmp/.ssh /centos_rsa /keytab /.cache && \
+RUN mkdir /tmp/.ssh /centos_rsa /keytab /.cache /etc/fedora-messaging && \
     touch /.gitconfig .gitconfig distrobaker_centos_id_rsa.pub
 
 RUN mv /tmp/stream.conf /etc/koji.conf.d/stream.conf && \
     mv /tmp/passwd.template / && \
     mv /tmp/distrobaker_centos_id_rsa.pub /tmp/.ssh/
 
-# RUN mv /tmp/cacert.pem /etc/fedora-messaging/ && \
-#    mv /tmp/fedora-key.pem /etc/fedora-messaging/ && \
-#    mv /tmp/fedora-cert.pem /etc/fedora-messaging/ && \
-RUN  mv /tmp/config.toml /etc/fedora-messaging/config.toml
+RUN mv /tmp/cacert.pem /etc/fedora-messaging/ && \
+    mv /tmp/fedora-key.pem /etc/fedora-messaging/ && \
+    mv /tmp/fedora-cert.pem /etc/fedora-messaging/ && \
+    mv /tmp/config.toml /etc/fedora-messaging/config.toml
 
 RUN mv /tmp/RH-IT-Root-CA.crt /etc/pki/ca-trust/source/anchors && \
     update-ca-trust extract
