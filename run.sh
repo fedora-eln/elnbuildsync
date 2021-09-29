@@ -4,7 +4,7 @@ set -eo pipefail
 export KRB5CCNAME=FILE:/tmp/tgt
 
 echo "Running scheduler"
-(while true; do kinit -k -t /keytab/distrobaker.keytab distrobaker/distrobaker.osci.redhat.com@REDHAT.COM; sleep 1h; done) &
+(while true; do kinit -k -t /keytab/distrobaker.keytab bpeck/jenkins-continuous-infra.apps.ci.centos.org@FEDORAPROJECT.ORG; sleep 1h; done) &
 
 sleep 3
 
