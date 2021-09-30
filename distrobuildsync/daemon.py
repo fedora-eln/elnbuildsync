@@ -6,6 +6,7 @@ import re
 import sys
 
 from . import config
+from . import health
 from . import listener
 from . import kojihelpers
 
@@ -72,6 +73,15 @@ def parse_args():
         "--distrogitsync-endpoint",
         dest="distrogitsync",
         help="API endpoint for distrogitsync to trigger the sync of git repositories (eg. http://distrogitsync:8080/)",
+    )
+
+    ap.add_argument(
+        "-p",
+        "--port",
+        type=int,
+        dest="port",
+        help="The port on which to answer health checks.",
+        default=8080,
     )
 
     args = ap.parse_args()
@@ -184,7 +194,10 @@ def main():
     config.scmurl = args.config
 
     # Read in the config file
-    if not config.load_config():
+    try:
+        config.load_config()
+    except Exception as e:
+        logger.exception(e)
         logger.critical("Could not load configuration.")
         sys.exit(128)
 
@@ -206,7 +219,11 @@ def main():
     # Start listening for Fedora Messages
     fedora_messaging.api.twisted_consume(listener.process_message)
 
+    site = health.setup_health_checks()
+    reactor.listenTCP(args.port, site)
+
     logger.debug("Starting Twisted mainloop")
+    health.started = True
     reactor.run()
 
 

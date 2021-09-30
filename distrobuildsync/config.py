@@ -11,6 +11,8 @@ from queue import SimpleQueue
 
 from twisted.internet.defer import inlineCallbacks
 
+from . import health
+
 # Global logger
 logger = logging.getLogger(__name__)
 
@@ -149,10 +151,11 @@ def update_config():
     try:
         ref = yield get_config_ref(scmurl)
     except UnknownRefError as e:
-        logger.critical(e)
-        raise ConfigError(
+        logger.info(e)
+        logger.critical(
             f"The configuration repository is unavailable, skipping update.  Checking again in {config_timer} seconds."
         )
+        return
 
     # If we're using the automatic package list (such as with Fedora ELN), we cannot
     # assume that it remains unchanged, so we need to reload it each interval.
@@ -162,8 +165,16 @@ def update_config():
         )
         return
 
-    main, comps = yield load_config()
-    config_ref = ref
+    try:
+        yield load_config()
+        config_ref = ref
+    except ConfigError as e:
+        logger.info(e)
+        logger.critical(
+            f"The configuration is invalid, skipping update.  Checking again in {config_timer} seconds."
+        )
+        return
+
 
 
 def get_distro_packages(
@@ -242,8 +253,8 @@ def load_config():
             logger.info("Configuration fetched successfully.")
             break
     else:
-        logger.error("Failed to fetch configuration, giving up.")
-        return None
+        raise ConfigError("Failed to fetch configuration, giving up.")
+
     if os.path.isfile(os.path.join(cdir.name, "distrobaker.yaml")):
         try:
             with open(os.path.join(cdir.name, "distrobaker.yaml")) as f:
@@ -252,14 +263,14 @@ def load_config():
                 "%s loaded, processing.",
                 os.path.join(cdir.name, "distrobaker.yaml"),
             )
-        except Exception:
-            logger.exception("Could not parse distrobaker.yaml.")
-            return None
+        except Exception as e:
+            logger.info(e)
+            raise ConfigError("Could not parse distrobaker.yaml.")
     else:
-        logger.error(
+        raise ConfigError(
             "Configuration repository does not contain distrobaker.yaml."
         )
-        return None
+
     n = dict()
     if "configuration" in y:
         cnf = y["configuration"]
@@ -269,54 +280,54 @@ def load_config():
                 if "scm" in cnf[k]:
                     n[k]["scm"] = str(cnf[k]["scm"])
                 else:
-                    logger.error("Configuration error: %s.scm missing.", k)
-                    return None
+                    raise ConfigError("%s.scm missing.", k)
+
                 if "cache" in cnf[k]:
                     n[k]["cache"] = dict()
                     for kc in ("url", "cgi", "path"):
                         if kc in cnf[k]["cache"]:
                             n[k]["cache"][kc] = str(cnf[k]["cache"][kc])
                         else:
-                            logger.error(
-                                "Configuration error: %s.cache.%s missing.",
+                            raise ConfigError(
+                                "%s.cache.%s missing.",
                                 k,
                                 kc,
                             )
-                            return None
                 else:
-                    logger.error("Configuration error: %s.cache missing.", k)
-                    return None
+                    raise ConfigError("%s.cache missing.", k)
+
                 if "profile" in cnf[k]:
                     n[k]["profile"] = str(cnf[k]["profile"])
                 else:
-                    logger.error("Configuration error: %s.profile missing.", k)
-                    return None
+                    raise ConfigError("%s.profile missing.", k)
+
                 if "mbs" in cnf[k]:
                     n[k]["mbs"] = cnf[k]["mbs"]
                 else:
-                    logger.error("Configuration error: %s.mbs missing.", k)
-                    return None
+                    raise ConfigError("%s.mbs missing.", k)
+
             else:
-                logger.error("Configuration error: %s missing.", k)
-                return None
+                raise ConfigError("%s missing.", k)
+
         if "trigger" in cnf:
             n["trigger"] = dict()
             for k in ("rpms", "modules"):
                 if k in cnf["trigger"]:
                     n["trigger"][k] = str(cnf["trigger"][k])
                 else:
-                    logger.error("Configuration error: trigger.%s missing.", k)
+                    raise ConfigError("trigger.%s missing.", k)
+
         else:
-            logger.error("Configuration error: trigger missing.")
-            return None
+            raise ConfigError("trigger missing.")
+
         if "build" in cnf:
             n["build"] = dict()
             for k in ("prefix", "target", "platform"):
                 if k in cnf["build"]:
                     n["build"][k] = str(cnf["build"][k])
                 else:
-                    logger.error("Configuration error: build.%s missing.", k)
-                    return None
+                    raise ConfigError("build.%s missing.", k)
+
             if "scratch" in cnf["build"]:
                 n["build"]["scratch"] = bool(cnf["build"]["scratch"])
             else:
@@ -325,27 +336,26 @@ def load_config():
                 )
                 n["build"]["scratch"] = False
         else:
-            logger.error("Configuration error: build missing.")
-            return None
+            raise ConfigError("build missing.")
+
         if "git" in cnf:
             n["git"] = dict()
             for k in ("author", "email", "message"):
                 if k in cnf["git"]:
                     n["git"][k] = str(cnf["git"][k])
                 else:
-                    logger.error("Configuration error: git.%s missing.", k)
-                    return None
+                    raise ConfigError("git.%s missing.", k)
+
         else:
-            logger.error("Configuration error: git missing.")
-            return None
+            raise ConfigError("git missing.")
+
         if "control" in cnf:
             n["control"] = dict()
             for k in ("build", "merge", "strict"):
                 if k in cnf["control"]:
                     n["control"][k] = bool(cnf["control"][k])
                 else:
-                    logger.error("Configuration error: control.%s missing.", k)
-                    return None
+                    raise ConfigError("control.%s missing.", k)
 
             n["control"]["autopackagelist"] = None
             if "autopackagelist" in cnf["control"]:
@@ -373,8 +383,8 @@ def load_config():
                         cns,
                     )
         else:
-            logger.error("Configuration error: control missing.")
-            return None
+            raise ConfigError("control missing.")
+
         if "defaults" in cnf:
             n["defaults"] = dict()
             for dk in ("cache", "rpms", "modules"):
@@ -392,16 +402,14 @@ def load_config():
                                 dkk,
                             )
                 else:
-                    logger.error(
-                        "Configuration error: defaults.%s missing.", dk
-                    )
-                    return None
+                    raise ConfigError("defaults.%s missing.", dk)
+
         else:
-            logger.error("Configuration error: defaults missing.")
-            return None
+            raise ConfigError("defaults missing.")
+
     else:
-        logger.error("The required configuration block is missing.")
-        return None
+        raise ConfigError("The required configuration block is missing.")
+
     components = 0
     nc = {"rpms": dict(), "modules": dict()}
     if "components" in y:
@@ -478,4 +486,3 @@ def load_config():
             logger.info("No components explicitly configured.")
     main = n
     comps = nc
-    return main, comps
