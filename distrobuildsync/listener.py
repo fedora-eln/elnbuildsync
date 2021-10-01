@@ -33,8 +33,8 @@ def process_message(msg):
     if msg.topic.endswith("buildsys.repo.done"):
         tag = msg.body["tag"]
         if tag in config.awaited_repos:
+            logger.info(f"Repo {tag} has regenerated")
             for deferred in config.awaited_repos[tag]:
-                logger.info(f"Repo {tag} has regenerated")
                 try:
                     deferred.callback(None)
                 except AlreadyCalledError:
@@ -58,9 +58,7 @@ def process_message(msg):
     target_override = None
     ref_overrides = None
     tag = msg.body["tag"]
-    upstream_build_tag = config.main["trigger"]["rpms"].replace(
-        "-gate", "-build"
-    )
+    upstream_build_tag = config.main["trigger"]["rpms"].replace("-gate", "-build")
 
     # Check that we are watching for this tag
     if tag == config.main["trigger"]["rpms"]:
@@ -72,9 +70,7 @@ def process_message(msg):
     elif tag == config.main["trigger"]["modules"]:
         ns = "modules"
     else:
-        logger.debug(
-            f"Message tag {tag} not configured as a trigger, ignoring."
-        )
+        logger.debug(f"Message tag {tag} not configured as a trigger, ignoring.")
         return
 
     # Check whether this component is meaningful to us
@@ -106,9 +102,7 @@ def process_message(msg):
 
     scmurl = kojihelpers.get_scmurl(msg.body["build_id"])
 
-    rd = RebuildData(
-        ns, comp, version, release, scmurl, target_override, ref_overrides
-    )
+    rd = RebuildData(ns, comp, version, release, scmurl, target_override, ref_overrides)
 
     reactor.callFromThread(config.batch_processor.reset)
     reactor.callFromThread(config.message_queue.put, rd)
@@ -139,8 +133,7 @@ def rebuild_batch(target, builds):
     # skip tagging and waiting for the repo if source and destination build systems differ
     if (
         not config.dry_run
-        and config.main["source"]["profile"]
-        == config.main["destination"]["profile"]
+        and config.main["source"]["profile"] == config.main["destination"]["profile"]
     ):
         with bsys.multicall(batch=config.koji_batch) as mc:
             for build in builds:
@@ -176,14 +169,10 @@ def build_components(target, builds):
 
             dry = "DRY-RUN: " if config.dry_run else ""
             scratch = "Scratch-b" if config.main["build"]["scratch"] else "B"
-            logger.info(
-                f"{dry}{scratch}uilding {downstream_scmurl} for {target}"
-            )
+            logger.info(f"{dry}{scratch}uilding {downstream_scmurl} for {target}")
 
             if not config.dry_run:
-                kojihelpers.call_distrogitsync(
-                    namespace, component, rd.ref_overrides
-                )
+                kojihelpers.call_distrogitsync(namespace, component, rd.ref_overrides)
                 bsys.build(
                     downstream_scmurl,
                     target,
