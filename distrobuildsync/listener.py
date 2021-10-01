@@ -33,8 +33,8 @@ def process_message(msg):
     if msg.topic.endswith("buildsys.repo.done"):
         tag = msg.body["tag"]
         if tag in config.awaited_repos:
+            logger.info(f"Repo {tag} has regenerated")
             for deferred in config.awaited_repos[tag]:
-                logger.info(f"Repo {tag} has regenerated")
                 try:
                     deferred.callback(None)
                 except AlreadyCalledError:
