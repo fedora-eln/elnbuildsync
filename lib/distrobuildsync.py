@@ -25,9 +25,7 @@ dry_run = False
 distrogitsync = None
 
 # Matching the namespace/component text format
-cre = re.compile(
-    r"^(?P<namespace>rpms|modules)/(?P<component>[A-Za-z0-9:._+-]+)$"
-)
+cre = re.compile(r"^(?P<namespace>rpms|modules)/(?P<component>[A-Za-z0-9:._+-]+)$")
 
 
 def loglevel(val=None):
@@ -75,13 +73,11 @@ def pretend(val=None):
 
 
 def distrogitsync_url(val=None):
-    """Gets and, optionally, sets the distrogitsync_url mode.
-    """
+    """Gets and, optionally, sets the distrogitsync_url mode."""
     global distrogitsync
     if val is not None:
         distrogitsync = val
     return distrogitsync
-
 
 
 def get_config():
@@ -155,9 +151,7 @@ def load_config(crepo):
         scm["ref"] = "master"
     for attempt in range(retry):
         try:
-            git.Repo.clone_from(scm["link"], cdir.name).git.checkout(
-                scm["ref"]
-            )
+            git.Repo.clone_from(scm["link"], cdir.name).git.checkout(scm["ref"])
         except Exception:
             logger.warning(
                 "Failed to fetch configuration, retrying (#%d).",
@@ -183,9 +177,7 @@ def load_config(crepo):
             logger.exception("Could not parse distrobaker.yaml.")
             return None
     else:
-        logger.error(
-            "Configuration repository does not contain distrobaker.yaml."
-        )
+        logger.error("Configuration repository does not contain distrobaker.yaml.")
         return None
     n = dict()
     if "configuration" in y:
@@ -302,9 +294,7 @@ def load_config(crepo):
                     n["defaults"][dk] = dict()
                     for dkk in ("source", "destination"):
                         if dkk in cnf["defaults"][dk]:
-                            n["defaults"][dk][dkk] = str(
-                                cnf["defaults"][dk][dkk]
-                            )
+                            n["defaults"][dk][dkk] = str(cnf["defaults"][dk][dkk])
                         else:
                             logger.error(
                                 "Configuration error: defaults.%s.%s missing.",
@@ -312,9 +302,7 @@ def load_config(crepo):
                                 dkk,
                             )
                 else:
-                    logger.error(
-                        "Configuration error: defaults.%s missing.", dk
-                    )
+                    logger.error("Configuration error: defaults.%s missing.", dk)
                     return None
         else:
             logger.error("Configuration error: defaults missing.")
@@ -344,9 +332,10 @@ def load_config(crepo):
                         "component": cname,
                         "stream": sname,
                     }
-                    nc[k][p]["destination"] = n["defaults"][k][
-                        "destination"
-                    ] % {"component": cname, "stream": sname}
+                    nc[k][p]["destination"] = n["defaults"][k]["destination"] % {
+                        "component": cname,
+                        "stream": sname,
+                    }
                     nc[k][p]["cache"] = {
                         "source": n["defaults"]["cache"]["source"]
                         % {"component": cname, "stream": sname},
@@ -361,9 +350,7 @@ def load_config(crepo):
                     if "cache" in cnf[k][p]:
                         for ck in ("source", "destination"):
                             if ck in cnf[k][p]["cache"]:
-                                nc[k][p]["cache"][ck] = str(
-                                    cnf[k][p]["cache"][ck]
-                                )
+                                nc[k][p]["cache"][ck] = str(cnf[k][p]["cache"][ck])
             logger.info(
                 "Found %d configured component(s) in the %s namespace.",
                 len(nc[k]),
@@ -447,7 +434,7 @@ def build_comp(comp, ref, ns="rpms", target=None, ref_overrides=None):
                     ns,
                     buildcomp,
                     ref,
-                    target or c["main"]["build"]["target"]
+                    target or c["main"]["build"]["target"],
                 )
             return task
         except Exception:
@@ -465,7 +452,7 @@ def build_comp(comp, ref, ns="rpms", target=None, ref_overrides=None):
         ms = split_module(buildcomp)
         buildscmurl = "{}/{}/{}.git?#{}".format(
             c["main"]["build"]["prefix"], ns, ms["name"], ref
-         )
+        )
         ps = split_module(c["main"]["build"]["platform"])
         cdst = c["main"]["defaults"][ns]["destination"] % {
             "component": ms["name"],
@@ -618,7 +605,10 @@ def create_side_tag(downstream_target, upstream_sidetag):
     upstream_tag = upstream_koji.getTag(upstream_sidetag)
     if "downstream_sidetag" in upstream_tag["extra"]:
         downstream_sidetag = upstream_tag["extra"]["downstream_sidetag"]
-        logger.info("Downstream sidetag for %s already exists: %s." % (upstream_sidetag, downstream_sidetag))
+        logger.info(
+            "Downstream sidetag for %s already exists: %s."
+            % (upstream_sidetag, downstream_sidetag)
+        )
         return downstream_sidetag
 
     logger.info("Creating downstream sidetag for %s." % upstream_sidetag)
@@ -629,17 +619,30 @@ def create_side_tag(downstream_target, upstream_sidetag):
 
     # Create downstream sidetag
     if not dry_run:
-        downstream_sidetag = downstream_koji.createSideTag(downstream_tag, suffix="stack-gate")["name"]
+        downstream_sidetag = downstream_koji.createSideTag(
+            downstream_tag, suffix="stack-gate"
+        )["name"]
     else:
-        logger.info("Running in dry_run mode, not creating downstream_sidetag for %s." % downstream_tag)
+        logger.info(
+            "Running in dry_run mode, not creating downstream_sidetag for %s."
+            % downstream_tag
+        )
         downstream_sidetag = "%s-dry-run-mode-stack-gate" % downstream_tag
 
     # Set the mapping between upstream sidetag and downstream sidetag.
     if not dry_run:
-        upstream_koji.editTag2(upstream_sidetag, extra={"downstream_sidetag": downstream_sidetag})
-        logger.info("Downstream sidetag for %s created: %s." % (upstream_sidetag, downstream_sidetag))
+        upstream_koji.editTag2(
+            upstream_sidetag, extra={"downstream_sidetag": downstream_sidetag}
+        )
+        logger.info(
+            "Downstream sidetag for %s created: %s."
+            % (upstream_sidetag, downstream_sidetag)
+        )
     else:
-        logger.info("Running in dry_run mode, not editing upstream_sidetag %s ." % upstream_sidetag)
+        logger.info(
+            "Running in dry_run mode, not editing upstream_sidetag %s ."
+            % upstream_sidetag
+        )
     return downstream_sidetag
 
 
@@ -668,14 +671,12 @@ def rebuild_downstream(ns, comp, nvr, downstream_target=None, ref_overrides=None
     :param str downstream_target: Name of the downstream target to build the component
         in or None to use the default one from configuration file.
     """
-    if (
-        comp in c["comps"][ns]
-        or not c["main"]["control"]["strict"]
-    ):
+    if comp in c["comps"][ns] or not c["main"]["control"]["strict"]:
         if comp in c["main"]["control"]["exclude"][ns]:
             logger.info(
                 "The %s/%s component is excluded from sync, skipping.",
-                ns, comp,
+                ns,
+                comp,
             )
             return
 
@@ -688,7 +689,9 @@ def rebuild_downstream(ns, comp, nvr, downstream_target=None, ref_overrides=None
         ref = split_scmurl(scmurl)["ref"]
         if ref is not None:
             call_distrogitsync(ns, comp_name, ref_overrides)
-            task = build_comp(comp, ref, ns=ns, target=downstream_target, ref_overrides=ref_overrides)
+            task = build_comp(
+                comp, ref, ns=ns, target=downstream_target, ref_overrides=ref_overrides
+            )
             if task is not None:
                 logger.info(
                     "Build submission of %s/%s complete, task %s, trigger processed.",
@@ -762,8 +765,9 @@ def process_message(msg):
             bi = get_build_info(nvr)
             ref_overrides = get_ref_overrides(bi["modulemd"])
             rebuild_downstream("modules", comp, nvr, ref_overrides=ref_overrides)
-        elif ((tag.startswith(upstream_build_tag) and tag.endswith("-stack-gate"))
-              or tag.startswith("%s-side" % upstream_build_tag)):
+        elif (
+            tag.startswith(upstream_build_tag) and tag.endswith("-stack-gate")
+        ) or tag.startswith("%s-side" % upstream_build_tag):
             logger.info("Handling a sidetag RPM trigger for %s, tag %s.", comp, tag)
             downstream_sidetag = create_side_tag(c["main"]["build"]["target"], tag)
             rebuild_downstream("rpms", comp, nvr, downstream_sidetag)
@@ -786,9 +790,7 @@ def process_components(compset):
         return None
 
     if not compset:
-        logger.debug(
-            "No components selected, gathering components from triggers."
-        )
+        logger.debug("No components selected, gathering components from triggers.")
         compset.update(
             "{}/{}".format("rpms", x["package_name"])
             for x in get_buildsys("source").listTagged(
@@ -837,7 +839,7 @@ def process_components(compset):
                 ref_overrides = get_ref_overrides(bi["modulemd"])
             else:
                 ref_overrides = None
-            call_distrogitsync( m["namespace"], m["component"], ref_overrides)
+            call_distrogitsync(m["namespace"], m["component"], ref_overrides)
             build_comp(m["component"], ref, m["namespace"], ref_overrides=ref_overrides)
         else:
             logger.error("No git reference in %s." % scmurl)
@@ -926,9 +928,7 @@ def get_build(comp, ns="rpms"):
         return None
     if ns == "rpms":
         try:
-            nvr = bsys.listTagged(
-                c["main"]["trigger"][ns], package=comp, latest=True
-            )
+            nvr = bsys.listTagged(c["main"]["trigger"][ns], package=comp, latest=True)
         except Exception:
             logger.exception(
                 "An error occured while getting the latest build for %s/%s.",
@@ -968,30 +968,28 @@ def get_build(comp, ns="rpms"):
         logger.debug(
             "Found %d total builds for %s/%s",
             len(builds),
-             ns,
+            ns,
             cname,
-         )
+        )
         # find the latest build for name:stream
         latest = None
         latest_version = 0
         for b in builds:
             binfo = get_build_info(b["nvr"])
-            if (
-                binfo is None
-                or binfo["name"] is None
-                or binfo["stream"] is None
-            ):
+            if binfo is None or binfo["name"] is None or binfo["stream"] is None:
                 logger.error(
                     "Could not get module info for %s, skipping.",
                     b["nvr"],
                 )
-            elif cname == binfo["name"] and sname == binfo["stream"] and int(binfo["module_version"]) >= latest_version:
+            elif (
+                cname == binfo["name"]
+                and sname == binfo["stream"]
+                and int(binfo["module_version"]) >= latest_version
+            ):
                 latest = b["nvr"]
                 latest_version = int(binfo["module_version"])
         if latest:
-            logger.debug(
-                "Located the latest build for %s/%s: %s", ns, comp, latest
-            )
+            logger.debug("Located the latest build for %s/%s: %s", ns, comp, latest)
             return latest
         logger.error("Did not find any builds for %s/%s.", ns, comp)
         return None
@@ -1050,7 +1048,8 @@ def get_buildsys(which, force_login=False):
                 bsys.gssapi_login()
             except Exception:
                 logger.exception(
-                    "Failed authenticating against the %s koji instance, skipping." % which
+                    "Failed authenticating against the %s koji instance, skipping."
+                    % which
                 )
                 return None
             logger.debug(
@@ -1061,9 +1060,7 @@ def get_buildsys(which, force_login=False):
             get_buildsys.source_session_start_time = datetime.datetime.now()
         else:
             get_buildsys.destination = bsys
-            get_buildsys.destination_session_start_time = (
-                datetime.datetime.now()
-            )
+            get_buildsys.destination_session_start_time = datetime.datetime.now()
     else:
         logger.debug(
             "The %s koji instance is already initialized, fetching from cache.",

@@ -73,9 +73,7 @@ def get_buildsys(which, force_login=False):
             get_buildsys.source_session_start_time = datetime.datetime.now()
         else:
             get_buildsys.destination = bsys
-            get_buildsys.destination_session_start_time = (
-                datetime.datetime.now()
-            )
+            get_buildsys.destination_session_start_time = datetime.datetime.now()
     else:
         logger.debug(
             "The %s koji instance is already initialized, fetching from cache.",
@@ -174,9 +172,7 @@ def get_build(comp, ns="rpms"):
 
     if ns == "rpms":
         try:
-            nvr = bsys.listTagged(
-                config.main["trigger"][ns], package=comp, latest=True
-            )
+            nvr = bsys.listTagged(config.main["trigger"][ns], package=comp, latest=True)
         except Exception:
             logger.exception(
                 "An error occured while getting the latest build for %s/%s.",
@@ -217,14 +213,8 @@ def get_build(comp, ns="rpms"):
         latest_version = 0
         for b in builds:
             binfo = get_build_info(b["nvr"])
-            if (
-                binfo is None
-                or binfo["name"] is None
-                or binfo["stream"] is None
-            ):
-                logger.error(
-                    "Could not get module info for %s, skipping.", b["nvr"]
-                )
+            if binfo is None or binfo["name"] is None or binfo["stream"] is None:
+                logger.error("Could not get module info for %s, skipping.", b["nvr"])
             elif (
                 cname == binfo["name"]
                 and sname == binfo["stream"]
@@ -233,9 +223,7 @@ def get_build(comp, ns="rpms"):
                 latest = b["nvr"]
                 latest_version = int(binfo["module_version"])
         if latest:
-            logger.debug(
-                "Located the latest build for %s/%s: %s", ns, comp, latest
-            )
+            logger.debug("Located the latest build for %s/%s: %s", ns, comp, latest)
             return latest
         logger.error("Did not find any builds for %s/%s.", ns, comp)
         return None
@@ -288,9 +276,7 @@ def get_scmurl(build_id):
     try:
         buildinfo = bsys.getBuild(build_id, strict=True)
     except koji.GenericError as e:
-        logger.exception(
-            f"Could not retrieve information for build {build_id}"
-        )
+        logger.exception(f"Could not retrieve information for build {build_id}")
         return None
 
     return buildinfo["source"]
@@ -314,9 +300,7 @@ def call_distrogitsync(ns, comp, ref_overrides=None):
         if config.distrogitsync:
             logger.info("Calling distrogitsync for %s/%s" % (namespace, c))
             try:
-                r = requests.post(
-                    "%s/%s/%s" % (config.distrogitsync, namespace, c)
-                )
+                r = requests.post("%s/%s/%s" % (config.distrogitsync, namespace, c))
                 r.raise_for_status()
             except requests.exceptions.RequestException:
                 logger.exception("Failed to contact distrogitsync")

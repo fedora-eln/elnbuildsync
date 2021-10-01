@@ -16,9 +16,7 @@ from twisted.internet import reactor, task
 logger = config.logger
 
 # Matching the namespace/component text format
-cre = re.compile(
-    r"^(?P<namespace>rpms|modules)/(?P<component>[A-Za-z0-9:._+-]+)$"
-)
+cre = re.compile(r"^(?P<namespace>rpms|modules)/(?P<component>[A-Za-z0-9:._+-]+)$")
 
 
 def parse_args():
@@ -109,9 +107,7 @@ def oneshot(compset):
         return None
 
     if not compset:
-        logger.debug(
-            "No components selected, gathering components from triggers."
-        )
+        logger.debug("No components selected, gathering components from triggers.")
         compset.update(
             "{}/{}".format("rpms", x["package_name"])
             for x in kojihelpers.get_buildsys("source").listTagged(
@@ -203,9 +199,7 @@ def main():
 
     if args.oneshot:
         return oneshot(
-            set([i for i in args.select.split(" ") if i])
-            if args.select
-            else set()
+            set([i for i in args.select.split(" ") if i]) if args.select else set()
         )
 
     # Schedule configuration updates
