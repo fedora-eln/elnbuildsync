@@ -1,16 +1,27 @@
 from . import config
 
-import datetime
 import koji
 import requests
 import yaml
 
+from cachetools import cached, TTLCache
+from enum import auto, Enum
 from twisted.internet import reactor, task
 from twisted.internet.defer import Deferred, inlineCallbacks
 
 logger = config.logger
 
 
+class BuildSystemType(Enum):
+    source = auto()
+    destination = auto()
+
+
+# Set the cache size to be equal to the number of build system types
+# multiplied by the possible values for force_login (2)
+#
+# Set TTL to slightly less than an hour, to be safe
+@cached(cache=TTLCache(maxsize=len(BuildSystemType.__members__)*2, ttl=3550))
 def get_buildsys(which, force_login=False):
     """Get a koji build system session for either the source or the
     destination.  Caches the sessions so future calls are cheap.
@@ -23,63 +34,55 @@ def get_buildsys(which, force_login=False):
     if not config.main:
         logger.critical("DistroBuildSync is not configured, aborting.")
         return None
-    if which not in ("source", "destination"):
-        logger.error('Cannot get "%s" build system.', which)
-        return None
 
-    session_timed_out = False
-    if hasattr(get_buildsys, which):
-        session_age = datetime.datetime.now() - getattr(
-            get_buildsys, which + "_session_start_time"
-        )
-        # slightly less than an hour, to be safe
-        if session_age.seconds > 3550 or session_age.days > 0:
-            session_timed_out = True
-
-    if session_timed_out or not hasattr(get_buildsys, which) or force_login:
-        logger.debug(
-            'Initializing the %s koji instance with the "%s" profile.',
-            which,
-            config.main[which]["profile"],
-        )
+    try:
+        bsys_type = BuildSystemType(which)
+    except ValueError as e:
+        # If we were not passed an integer/BuildSystemType for `which`,
+        # See if we recognize it as a string. This is mostly to avoid
+        # needing to replace all the places this is called, but still
+        # Guarantee that it must be a known value.
         try:
-            bsys = koji.read_config(profile_name=config.main[which]["profile"])
-            bsys = koji.ClientSession(bsys["server"], opts=bsys)
+            bsys_type = BuildSystemType[which]
+        except KeyError as e:
+            logger.error('Cannot get {} build system.'.format(which))
+            return None
+
+    logger.debug(
+        'Initializing the %s koji instance with the "%s" profile.',
+        bsys_type.name,
+        config.main[bsys_type.name]["profile"],
+    )
+
+    try:
+        bsys = koji.read_config(profile_name=config.main[bsys_type.name]["profile"])
+        bsys = koji.ClientSession(bsys["server"], opts=bsys)
+    except Exception:
+        logger.exception(
+            'Failed initializing the %s koji instance with the "%s" profile, skipping.',
+            bsys_type.name,
+            config.main[bsys_type.name]["profile"],
+        )
+        return None
+    logger.debug("The %s koji instance initialized.", bsys_type.name)
+    if bsys_type is BuildSystemType.destination or force_login:
+        logger.debug("Authenticating with the %s koji instance." % bsys_type.name)
+        try:
+            # It's safe to always log out. It's a no-op if not currently logged in,
+            # but we want to make sure the gssapi_login() runs.
+            bsys.logout()
+            bsys.gssapi_login()
         except Exception:
             logger.exception(
-                'Failed initializing the %s koji instance with the "%s" profile, skipping.',
-                which,
-                config.main[which]["profile"],
+                "Failed authenticating against the %s koji instance, skipping."
+                % bsys_type.name
             )
             return None
-        logger.debug("The %s koji instance initialized.", which)
-        if which == "destination" or force_login:
-            logger.debug("Authenticating with the %s koji instance." % which)
-            try:
-                if session_timed_out:
-                    bsys.logout()
-                bsys.gssapi_login()
-            except Exception:
-                logger.exception(
-                    "Failed authenticating against the %s koji instance, skipping."
-                    % which
-                )
-                return None
-            logger.debug(
-                "Successfully authenticated with the %s koji instance." % which
-            )
-        if which == "source":
-            get_buildsys.source = bsys
-            get_buildsys.source_session_start_time = datetime.datetime.now()
-        else:
-            get_buildsys.destination = bsys
-            get_buildsys.destination_session_start_time = datetime.datetime.now()
-    else:
         logger.debug(
-            "The %s koji instance is already initialized, fetching from cache.",
-            which,
+            "Successfully authenticated with the %s koji instance." % bsys_type.name
         )
-    return vars(get_buildsys)[which]
+
+    return bsys
 
 
 def get_build_info(nvr):
