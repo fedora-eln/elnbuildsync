@@ -190,7 +190,7 @@ def get_build(comp, ns="rpms"):
                 comp,
                 nvr[0]["nvr"],
             )
-            return nvr[0]["nvr"]
+            return nvr[0]
         logger.error("Did not find any builds for %s/%s.", ns, comp)
         return None
 
@@ -223,10 +223,10 @@ def get_build(comp, ns="rpms"):
                 and sname == binfo["stream"]
                 and int(binfo["module_version"]) >= latest_version
             ):
-                latest = b["nvr"]
+                latest = b
                 latest_version = int(binfo["module_version"])
         if latest:
-            logger.debug("Located the latest build for %s/%s: %s", ns, comp, latest)
+            logger.debug("Located the latest build for %s/%s: %s", ns, comp, latest["nvr"])
             return latest
         logger.error("Did not find any builds for %s/%s.", ns, comp)
         return None

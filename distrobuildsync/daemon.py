@@ -5,6 +5,8 @@ import logging
 import re
 import sys
 
+from .rebuild_data import rebuild_data_from_component
+
 from . import config
 from . import health
 from . import listener
@@ -122,52 +124,15 @@ def oneshot(compset):
         if m is None:
             logger.error("Cannot process %s; looks like garbage.", rec)
             continue
+
         m = m.groupdict()
-        logger.info("Processing %s.", rec)
-
-        if m["component"] in config.main["control"]["exclude"][m["namespace"]]:
-            logger.info(
-                "The %s/%s component is excluded from sync, skipping.",
-                m["namespace"],
-                m["component"],
-            )
+        try:
+            rd_list.append(rebuild_data_from_component(m["namespace"], m["component"]))
+        except ValueError as e:
+            logger.info(e)
             continue
 
-        if (
-            config.main["control"]["strict"]
-            and m["component"] not in config.comps[m["namespace"]]
-        ):
-            logger.info(
-                "The %s/%s component not configured while the strict mode is enabled, ignoring.",
-                m["namespace"],
-                m["component"],
-            )
-            continue
-
-        namespace = m["namespace"]
-        component = m["component"]
-        nvr = kojihelpers.get_build(component, namespace)
-        if not nvr:
-            logger.info(
-                "The {namespace}/{component} component's build not tagged in the source Koji tag."
-            )
-            continue
-
-        bi = kojihelpers.get_build_info(nvr)
-        scmurl = bi["scmurl"]
-        ref = config.split_scmurl(scmurl)["ref"]
-        if ref:
-            if namespace == "modules":
-                ref_overrides = kojihelpers.get_ref_overrides(bi["modulemd"])
-            else:
-                ref_overrides = None
-
-        rd_list.append(
-            listener.RebuildData(
-                namespace, component, None, None, scmurl, None, ref_overrides
-            )
-        )
-        logger.debug("Scheduled {namespace}/{component} for rebuild")
+        logger.debug("Scheduled {}/{} for rebuild".format(m["namespace"], m["component"]))
 
     # Fire off the builds
     listener.build_components(None, rd_list)

@@ -2,6 +2,7 @@ import logging
 
 from . import config
 from . import kojihelpers
+from .rebuild_data import RebuildData
 
 from collections import defaultdict, namedtuple
 from twisted.internet import reactor, task
@@ -9,21 +10,6 @@ from twisted.internet.defer import AlreadyCalledError, inlineCallbacks
 from queue import Empty
 
 logger = config.logger
-
-
-RebuildData = namedtuple(
-    "RebuildData",
-    [
-        "ns",
-        "comp",
-        "version",
-        "release",
-        "scmurl",
-        "downstream_target",
-        "ref_overrides",
-    ],
-    defaults=[None, None],
-)
 
 
 def process_message(msg):
