@@ -4,7 +4,7 @@ set -eo pipefail
 export KRB5CCNAME=FILE:/tmp/tgt
 
 echo "Running scheduler"
-(while true; do kinit -k -t /keytab/distrobaker.keytab distrobuildsync-eln/jenkins-continuous-infra.apps.ci.centos.org@FEDORAPROJECT.ORG; sleep 1h; done) &
+(while true; do kinit -k -t /keytab/distrobaker.keytab distrobuildsync-eln/jenkins-continuous-infra.apps.ci.centos.org@FEDORAPROJECT.ORG; sleep 55; done) &
 
 sleep 3
 
@@ -36,7 +36,7 @@ pip install -r test-requirements.txt
 
 export FEDORA_MESSAGING_CONF=/etc/fedora-messaging/config.toml
 
-python3 -c "from distrobuildsync import main; main()" -u 15 -l debug "https://gitlab.com/sturivny/test_oc.git"
+python3 -c "from distrobuildsync import main; main()" -u 15 -l debug "https://gitlab.com/redhat/centos-stream/ci-cd/distrosync/distrobuildsync-config.git"
 
 # Added for debug
 # echo "Sleep 10 hours. Debugging..."
