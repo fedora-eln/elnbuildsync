@@ -6,7 +6,7 @@ import yaml
 
 from cachetools import cached, TTLCache
 from enum import auto, Enum
-from twisted.internet import reactor, task
+from twisted.internet import reactor
 from twisted.internet.defer import Deferred, inlineCallbacks
 
 logger = config.logger

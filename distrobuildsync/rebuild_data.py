@@ -55,6 +55,4 @@ def rebuild_data_from_component(namespace, component):
         else:
             ref_overrides = None
 
-    # downstream_target here is None because it is retrieved from the configuration or calculated for a
-    # module stream.
-    return RebuildData(namespace, component, nvr["version"], nvr["release"], scmurl, None, ref_overrides)
+    return RebuildData(namespace, component, nvr["version"], nvr["release"], scmurl, config.main["build"]["target"], ref_overrides)

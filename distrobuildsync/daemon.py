@@ -5,20 +5,16 @@ import logging
 import re
 import sys
 
-from .rebuild_data import rebuild_data_from_component
-
 from . import config
 from . import health
 from . import listener
-from . import kojihelpers
+from . import oneshot
 
 from twisted.internet import reactor, task
+from twisted.internet.defer import inlineCallbacks
 
 
 logger = config.logger
-
-# Matching the namespace/component text format
-cre = re.compile(r"^(?P<namespace>rpms|modules)/(?P<component>[A-Za-z0-9:._+-]+)$")
 
 
 def parse_args():
@@ -97,51 +93,6 @@ def parse_args():
     return args
 
 
-def oneshot(compset):
-    """Processes the supplied set of components.  If the set is empty,
-    fetch all latest components from the trigger tags.
-
-    :param compset: A set of components to process in the `ns/comp` form
-    :returns: None
-    """
-    if not config.main:
-        logger.critical("DistroBuildSync is not configured, aborting.")
-        return None
-
-    if not compset:
-        logger.debug("No components selected, gathering components from triggers.")
-        compset.update(
-            "{}/{}".format("rpms", x["package_name"])
-            for x in kojihelpers.get_buildsys("source").listTagged(
-                config.main["trigger"]["rpms"], latest=True
-            )
-        )
-
-    logger.info("Processing %d component(s).", len(compset))
-    rd_list = []
-    for rec in sorted(compset, key=str.lower):
-        m = cre.match(rec)
-        if m is None:
-            logger.error("Cannot process %s; looks like garbage.", rec)
-            continue
-
-        m = m.groupdict()
-        try:
-            rd_list.append(rebuild_data_from_component(m["namespace"], m["component"]))
-        except ValueError as e:
-            logger.info(e)
-            continue
-
-        logger.debug("Scheduled {}/{} for rebuild".format(m["namespace"], m["component"]))
-
-    # Fire off the builds
-    listener.build_components(None, rd_list)
-
-    rd_list_len = len(rd_list)
-    skipped = len(compset) - rd_list_len
-    logger.info(f"Synchronized {rd_list_len} component(s), {skipped} skipped.")
-
-
 def main():
     logging.basicConfig(format="%(asctime)s : %(levelname)s : %(message)s")
     args = parse_args()
@@ -163,26 +114,26 @@ def main():
         sys.exit(128)
 
     if args.oneshot:
-        return oneshot(
-            set([i for i in args.select.split(" ") if i]) if args.select else set()
-        )
+        task.deferLater(reactor, 0, oneshot.run, set([i for i in args.select.split(" ") if i]) if args.select else set())
+        # Start listening for Fedora Messages
+        fedora_messaging.api.twisted_consume(oneshot.process_message)
+    else:
+        # Schedule configuration updates
+        updater = task.LoopingCall(config.update_config)
+        updater.start(config.config_timer, now=False)
 
-    # Schedule configuration updates
-    updater = task.LoopingCall(config.update_config)
-    updater.start(config.config_timer, now=False)
+        # Schedule batch checking
+        config.batch_processor = task.LoopingCall(listener.process_batch)
+        config.batch_processor.start(config.batch_timer, now=False)
 
-    # Schedule batch checking
-    config.batch_processor = task.LoopingCall(listener.process_batch)
-    config.batch_processor.start(config.batch_timer, now=False)
+        # Start listening for Fedora Messages
+        fedora_messaging.api.twisted_consume(listener.process_message)
 
-    # Start listening for Fedora Messages
-    fedora_messaging.api.twisted_consume(listener.process_message)
-
-    site = health.setup_health_checks()
-    reactor.listenTCP(args.port, site)
+        site = health.setup_health_checks()
+        reactor.listenTCP(args.port, site)
+        health.started = True
 
     logger.debug("Starting Twisted mainloop")
-    health.started = True
     reactor.run()
 
 
