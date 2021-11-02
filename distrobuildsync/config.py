@@ -11,7 +11,7 @@ from queue import SimpleQueue
 
 from twisted.internet.defer import inlineCallbacks
 
-from . import health
+from . import config
 
 # Global logger
 logger = logging.getLogger(__name__)
@@ -474,3 +474,16 @@ def load_config():
             logger.info("No components explicitly configured.")
     main = n
     comps = nc
+
+
+def is_eligible(ns, comp):
+    # Check whether this component is meaningful to us
+    if config.main["control"]["strict"] and comp not in config.comps[ns]:
+        logger.debug(f"{comp} is not an approved component, ignoring")
+        return False
+
+    if comp in config.main["control"]["exclude"][ns]:
+        logger.debug(f"{ns}/{comp} is on the exclude list, skipping")
+        return False
+
+    return True
