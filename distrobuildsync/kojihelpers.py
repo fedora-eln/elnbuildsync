@@ -151,7 +151,7 @@ def get_ref_overrides(modulemd):
     return ref_overrides
 
 
-def get_build(comp, ns="rpms", tag=None):
+def get_build(comp, ns="rpms", tag=None, bsys=None):
     """Get the latest build NVR for the specified component.  Searches the
     component namespace trigger tag to locate this.  Note this is not the
     highest NVR, it's the latest tagged build.
@@ -165,14 +165,15 @@ def get_build(comp, ns="rpms", tag=None):
         logger.critical("DistroBuildSync is not configured, aborting.")
         return None
 
-    bsys = get_buildsys("source")
     if bsys is None:
-        logger.error(
-            "Build system unavailable, cannot find the latest build for %s/%s.",
-            ns,
-            comp,
-        )
-        return None
+        bsys = get_buildsys("source")
+        if bsys is None:
+            logger.error(
+                "Build system unavailable, cannot find the latest build for %s/%s.",
+                ns,
+                comp,
+            )
+            return None
 
     if ns == "rpms":
         try:

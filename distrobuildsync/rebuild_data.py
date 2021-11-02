@@ -23,7 +23,7 @@ RebuildData = namedtuple(
 
 
 def rebuild_data_from_component(namespace, component):
-    logger.info("Processing {}/{}.".format(namespace, component))
+    logger.debug("Processing {}/{}.".format(namespace, component))
 
     if component in config.main["control"]["exclude"][namespace]:
         raise ValueError(
