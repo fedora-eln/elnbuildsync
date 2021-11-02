@@ -211,6 +211,8 @@ def get_distro_packages(
             for line in r.text.splitlines():
                 merged_packages.add(line)
 
+    # There may be an empty line in the file, ignore it.
+    merged_packages.discard('')
     logger.debug("Found a total of {} packages".format(len(merged_packages)))
 
     return {"rpms": dict.fromkeys(merged_packages)}
