@@ -26,8 +26,8 @@ RUN mv /tmp/stream.conf /etc/koji.conf.d/stream.conf && \
     mv /tmp/distrobaker_centos_id_rsa.pub /tmp/.ssh/
 
 RUN mv /tmp/cacert.pem /etc/fedora-messaging/ && \
-    mv /tmp/fedora-key.pem /etc/fedora-messaging/ && \
-    mv /tmp/fedora-cert.pem /etc/fedora-messaging/ && \
+    mv /tmp/distrobuildsync-eln.crt /etc/fedora-messaging/ && \
+    mv /tmp/distrobuildsync-eln.key /etc/fedora-messaging/ && \
     mv /tmp/config.toml /etc/fedora-messaging/config.toml
 
 RUN mv /tmp/RH-IT-Root-CA.crt /etc/pki/ca-trust/source/anchors && \
