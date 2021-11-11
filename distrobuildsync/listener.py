@@ -60,12 +60,7 @@ def process_message(msg):
         return
 
     # Check whether this component is meaningful to us
-    if config.main["control"]["strict"] and comp not in config.comps[ns]:
-        logger.debug(f"{comp} is not an approved component, ignoring")
-        return
-
-    if comp in config.main["control"]["exclude"][ns]:
-        logger.debug(f"{ns}/{comp} is on the exclude list, skipping")
+    if not config.is_eligible(ns, comp):
         return
 
     # Handle slower tasks after verifying component validity

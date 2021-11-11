@@ -151,31 +151,34 @@ def get_ref_overrides(modulemd):
     return ref_overrides
 
 
-def get_build(comp, ns="rpms"):
+def get_build(comp, ns="rpms", tag=None, bsys=None):
     """Get the latest build NVR for the specified component.  Searches the
     component namespace trigger tag to locate this.  Note this is not the
     highest NVR, it's the latest tagged build.
 
     :param comp: The component name
     :param ns: The component namespace
+    :param tag: If specified, overrides the default tag for the namespace
     :returns: NVR of the latest build, or None on error
     """
     if not config.main:
         logger.critical("DistroBuildSync is not configured, aborting.")
         return None
 
-    bsys = get_buildsys("source")
     if bsys is None:
-        logger.error(
-            "Build system unavailable, cannot find the latest build for %s/%s.",
-            ns,
-            comp,
-        )
-        return None
+        bsys = get_buildsys("source")
+        if bsys is None:
+            logger.error(
+                "Build system unavailable, cannot find the latest build for %s/%s.",
+                ns,
+                comp,
+            )
+            return None
 
     if ns == "rpms":
         try:
-            nvr = bsys.listTagged(config.main["trigger"][ns], package=comp, latest=True)
+            rpmtag = tag if tag else config.main["trigger"][ns]
+            nvr = bsys.listTagged(rpmtag, package=comp, latest=True)
         except Exception:
             logger.exception(
                 "An error occured while getting the latest build for %s/%s.",
@@ -199,7 +202,8 @@ def get_build(comp, ns="rpms"):
         cname = ms["name"]
         sname = ms["stream"]
         try:
-            builds = bsys.listTagged(config.main["trigger"][ns])
+            moduletag = tag if tag else config.main["trigger"][ns]
+            builds = bsys.listTagged(moduletag)
         except Exception:
             logger.exception(
                 "An error occured while getting the latest builds for %s/%s.",

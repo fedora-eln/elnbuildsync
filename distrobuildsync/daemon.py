@@ -5,10 +5,7 @@ import logging
 import re
 import sys
 
-from . import config
-from . import health
-from . import listener
-from . import oneshot
+from . import config, health, listener, oneshot, periodic
 
 from twisted.internet import reactor, task
 from twisted.internet.defer import inlineCallbacks
@@ -26,6 +23,13 @@ def parse_args():
         dest="loglevel",
         help="logging level; default: info",
         default="INFO",
+    )
+    ap.add_argument(
+        "-c",
+        "--cleanup",
+        type=int,
+        help="Periodic cleanup refresh interval in minutes; default: 1440 (24 hours)",
+        default=1440
     )
     ap.add_argument(
         "-u",
@@ -100,6 +104,7 @@ def main():
     logger.setLevel(loglevel)
 
     config.config_timer = args.update * 60
+    config.cleanup_timer = args.cleanup * 60
     config.retries = args.retry
     config.dry_run = args.dry_run
     config.distrogitsync = args.distrogitsync
@@ -125,6 +130,10 @@ def main():
         # Schedule batch checking
         config.batch_processor = task.LoopingCall(listener.process_batch)
         config.batch_processor.start(config.batch_timer, now=False)
+
+        # Schedule periodic cleanup and run it once at startup
+        config.cleanup_processor = task.LoopingCall(periodic.periodic_cleanup)
+        config.cleanup_processor.start(config.cleanup_timer, now=True)
 
         # Start listening for Fedora Messages
         fedora_messaging.api.twisted_consume(listener.process_message)

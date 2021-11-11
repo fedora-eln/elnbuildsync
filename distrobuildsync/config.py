@@ -11,7 +11,7 @@ from queue import SimpleQueue
 
 from twisted.internet.defer import inlineCallbacks
 
-from . import health
+from . import config
 
 # Global logger
 logger = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 # Configuration options
 batch_timer = 2
 config_timer = 300
+cleanup_timer = 24*60*60  # 24 hours
 koji_batch = 500
 configuration = None
 config_ref = None
@@ -33,6 +34,7 @@ waitrepo_timeout = 15 * 60
 
 # Process state
 batch_processor = None
+cleanup_processor = None
 message_queue = SimpleQueue()
 awaited_repos = defaultdict(list)
 
@@ -211,6 +213,8 @@ def get_distro_packages(
             for line in r.text.splitlines():
                 merged_packages.add(line)
 
+    # There may be an empty line in the file, ignore it.
+    merged_packages.discard('')
     logger.debug("Found a total of {} packages".format(len(merged_packages)))
 
     return {"rpms": dict.fromkeys(merged_packages)}
@@ -474,3 +478,16 @@ def load_config():
             logger.info("No components explicitly configured.")
     main = n
     comps = nc
+
+
+def is_eligible(ns, comp):
+    # Check whether this component is meaningful to us
+    if config.main["control"]["strict"] and comp not in config.comps[ns]:
+        logger.debug(f"{comp} is not an approved component, ignoring")
+        return False
+
+    if comp in config.main["control"]["exclude"][ns]:
+        logger.debug(f"{ns}/{comp} is on the exclude list, skipping")
+        return False
+
+    return True

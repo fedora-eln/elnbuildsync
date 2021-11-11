@@ -23,7 +23,7 @@ RebuildData = namedtuple(
 
 
 def rebuild_data_from_component(namespace, component):
-    logger.info("Processing {}/{}.".format(namespace, component))
+    logger.debug("Processing {}/{}.".format(namespace, component))
 
     if component in config.main["control"]["exclude"][namespace]:
         raise ValueError(
@@ -44,7 +44,7 @@ def rebuild_data_from_component(namespace, component):
 
     nvr = kojihelpers.get_build(component, namespace)
     if not nvr:
-        raise ValueError("The {namespace}/{component} component's build not tagged in the source Koji tag.")
+        raise ValueError(f"The {namespace}/{component} component's build not tagged in the source Koji tag.")
 
     bi = kojihelpers.get_build_info(nvr["nvr"])
     scmurl = bi["scmurl"]

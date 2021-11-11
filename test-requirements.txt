@@ -1,3 +1,4 @@
+cachetools>=4.2.4
 fedora_messaging>=2.0.2
 gitpython==3.1.14
 gitpython>=3.1.14
