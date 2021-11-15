@@ -17,6 +17,12 @@ export LD_PRELOAD=libnss_wrapper.so
 export NSS_WRAPPER_PASSWD=${passwd_output_dir}/passwd
 export NSS_WRAPPER_GROUP=/etc/group
 
+if [ -z $DBS_CFG_BRANCH ]; then
+export CONFIG_URL="https://gitlab.com/redhat/centos-stream/ci-cd/distrosync/distrobuildsync-config.git"
+else
+export CONFIG_URL="https://gitlab.com/redhat/centos-stream/ci-cd/distrosync/distrobuildsync-config.git#$DBS_CFG_BRANCH"
+fi
+
 echo "EXECUTING klist"
 klist
 
@@ -36,7 +42,7 @@ pip install -r test-requirements.txt
 
 export FEDORA_MESSAGING_CONF=/etc/fedora-messaging/config.toml
 
-python3 -c "from distrobuildsync import main; main()" -u 15 -l debug "https://gitlab.com/redhat/centos-stream/ci-cd/distrosync/distrobuildsync-config.git"
+python3 -c "from distrobuildsync import main; main()" -u 15 -l debug $CONFIG_URL
 
 # Added for debug
 # echo "Sleep 10 hours. Debugging..."
