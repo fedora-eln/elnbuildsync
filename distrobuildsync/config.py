@@ -239,7 +239,7 @@ def load_config():
     logger.info("Fetching configuration from %s to %s", scmurl, cdir.name)
     scm = split_scmurl(scmurl)
     if scm["ref"] is None:
-        scm["ref"] = "master"
+        scm["ref"] = "main"
     for attempt in range(retry):
         try:
             git.Repo.clone_from(scm["link"], cdir.name).git.checkout(scm["ref"])
