@@ -85,6 +85,10 @@ def process_message(msg):
 
     rd = RebuildData(ns, comp, version, release, scmurl, target_override, ref_overrides)
 
+    if config.skip_tag(ns, comp):
+        build_components(rd.downstream_target, [rd])
+        return
+
     reactor.callFromThread(config.batch_processor.reset)
     reactor.callFromThread(config.message_queue.put, rd)
 

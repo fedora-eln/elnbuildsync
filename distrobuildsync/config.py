@@ -360,6 +360,14 @@ def load_config():
             if "autopackagelist" in cnf["control"]:
                 n["control"]["autopackagelist"] = cnf["control"]["autopackagelist"]
 
+            n["control"]["skip_tag"] = {"rpms": set(), "modules": set()}
+            if "skip_tag" in cnf["control"]:
+                for cns in ("rpms", "modules"):
+                    if cns in cnf["control"]["skip_tag"]:
+                        n["control"]["skip_tag"][cns].update(
+                            cnf["control"]["skip_tag"][cns]
+                        )
+
             n["control"]["exclude"] = {"rpms": set(), "modules": set()}
             if "exclude" in cnf["control"]:
                 for cns in ("rpms", "modules"):
@@ -491,3 +499,10 @@ def is_eligible(ns, comp):
         return False
 
     return True
+
+
+def skip_tag(ns, comp):
+    if comp in config.main["control"]["skip_tag"][ns]:
+        logger.debug(f"{ns}/{comp} is on the skip_tag list, building immediately")
+        return True
+    return False
