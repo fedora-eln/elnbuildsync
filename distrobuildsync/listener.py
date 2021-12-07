@@ -154,7 +154,7 @@ def build_components(target, builds):
 
             if not config.dry_run:
                 kojihelpers.call_distrogitsync(namespace, component, rd.ref_overrides)
-                bsys.build(
+                mc.build(
                     downstream_scmurl,
                     target,
                     {"scratch": config.main["build"]["scratch"]},
