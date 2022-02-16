@@ -189,7 +189,7 @@ def get_distro_packages(
     for each of the given 'arches'.
     """
     if not arches:
-        arches = ["aarch64", "armv7hl", "ppc64le", "s390x", "x86_64"]
+        arches = ["aarch64", "ppc64le", "s390x", "x86_64"]
     if not which_source:
         which_source = ["source", "buildroot-source"]
 
