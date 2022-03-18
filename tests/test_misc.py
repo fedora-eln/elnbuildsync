@@ -12,9 +12,13 @@ except ImportError:
 class TestMiscSettings(unittest.TestCase):
     def test_loglevel(self):
         self.assertIsNotNone(distrobuildsync.config.loglevel())
-        self.assertEqual(distrobuildsync.config.loglevel(logging.INFO), logging.INFO)
+        self.assertEqual(
+            distrobuildsync.config.loglevel(logging.INFO), logging.INFO
+        )
         self.assertEqual(distrobuildsync.config.loglevel(), logging.INFO)
-        self.assertEqual(distrobuildsync.config.loglevel(logging.DEBUG), logging.DEBUG)
+        self.assertEqual(
+            distrobuildsync.config.loglevel(logging.DEBUG), logging.DEBUG
+        )
         self.assertEqual(distrobuildsync.config.loglevel(), logging.DEBUG)
 
     def test_retries(self):

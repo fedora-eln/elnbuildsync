@@ -21,7 +21,7 @@ class BuildSystemType(Enum):
 # multiplied by the possible values for force_login (2)
 #
 # Set TTL to slightly less than an hour, to be safe
-@cached(cache=TTLCache(maxsize=len(BuildSystemType.__members__)*2, ttl=3550))
+@cached(cache=TTLCache(maxsize=len(BuildSystemType.__members__) * 2, ttl=3550))
 def get_buildsys(which, force_login=False):
     """Get a koji build system session for either the source or the
     destination.  Caches the sessions so future calls are cheap.
@@ -45,7 +45,7 @@ def get_buildsys(which, force_login=False):
         try:
             bsys_type = BuildSystemType[which]
         except KeyError as e:
-            logger.error('Cannot get {} build system.'.format(which))
+            logger.error("Cannot get {} build system.".format(which))
             return None
 
     logger.debug(
@@ -55,7 +55,9 @@ def get_buildsys(which, force_login=False):
     )
 
     try:
-        bsys = koji.read_config(profile_name=config.main[bsys_type.name]["profile"])
+        bsys = koji.read_config(
+            profile_name=config.main[bsys_type.name]["profile"]
+        )
         bsys = koji.ClientSession(bsys["server"], opts=bsys)
     except Exception:
         logger.exception(
@@ -66,7 +68,9 @@ def get_buildsys(which, force_login=False):
         return None
     logger.debug("The %s koji instance initialized.", bsys_type.name)
     if bsys_type is BuildSystemType.destination or force_login:
-        logger.debug("Authenticating with the %s koji instance." % bsys_type.name)
+        logger.debug(
+            "Authenticating with the %s koji instance." % bsys_type.name
+        )
         try:
             # It's safe to always log out. It's a no-op if not currently logged in,
             # but we want to make sure the gssapi_login() runs.
@@ -79,7 +83,8 @@ def get_buildsys(which, force_login=False):
             )
             return None
         logger.debug(
-            "Successfully authenticated with the %s koji instance." % bsys_type.name
+            "Successfully authenticated with the %s koji instance."
+            % bsys_type.name
         )
 
     return bsys
@@ -220,8 +225,14 @@ def get_build(comp, ns="rpms", tag=None, bsys=None):
         latest_version = 0
         for b in builds:
             binfo = get_build_info(b["nvr"])
-            if binfo is None or binfo["name"] is None or binfo["stream"] is None:
-                logger.error("Could not get module info for %s, skipping.", b["nvr"])
+            if (
+                binfo is None
+                or binfo["name"] is None
+                or binfo["stream"] is None
+            ):
+                logger.error(
+                    "Could not get module info for %s, skipping.", b["nvr"]
+                )
             elif (
                 cname == binfo["name"]
                 and sname == binfo["stream"]
@@ -230,7 +241,12 @@ def get_build(comp, ns="rpms", tag=None, bsys=None):
                 latest = b
                 latest_version = int(binfo["module_version"])
         if latest:
-            logger.debug("Located the latest build for %s/%s: %s", ns, comp, latest["nvr"])
+            logger.debug(
+                "Located the latest build for %s/%s: %s",
+                ns,
+                comp,
+                latest["nvr"],
+            )
             return latest
         logger.error("Did not find any builds for %s/%s.", ns, comp)
         return None
@@ -283,7 +299,9 @@ def get_scmurl(build_id):
     try:
         buildinfo = bsys.getBuild(build_id, strict=True)
     except koji.GenericError as e:
-        logger.exception(f"Could not retrieve information for build {build_id}")
+        logger.exception(
+            f"Could not retrieve information for build {build_id}"
+        )
         return None
 
     return buildinfo["source"]
@@ -307,7 +325,9 @@ def call_distrogitsync(ns, comp, ref_overrides=None):
         if config.distrogitsync:
             logger.info("Calling distrogitsync for %s/%s" % (namespace, c))
             try:
-                r = requests.post("%s/%s/%s" % (config.distrogitsync, namespace, c))
+                r = requests.post(
+                    "%s/%s/%s" % (config.distrogitsync, namespace, c)
+                )
                 r.raise_for_status()
             except requests.exceptions.RequestException:
                 logger.exception("Failed to contact distrogitsync")

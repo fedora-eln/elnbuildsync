@@ -38,13 +38,15 @@ def rebuild_data_from_component(namespace, component):
     ):
         raise ValueError(
             "The {}/{} component not configured while the strict mode is enabled, ignoring.".format(
-                namespace,
-                component)
+                namespace, component
+            )
         )
 
     nvr = kojihelpers.get_build(component, namespace)
     if not nvr:
-        raise ValueError(f"The {namespace}/{component} component's build not tagged in the source Koji tag.")
+        raise ValueError(
+            f"The {namespace}/{component} component's build not tagged in the source Koji tag."
+        )
 
     bi = kojihelpers.get_build_info(nvr["nvr"])
     scmurl = bi["scmurl"]
@@ -55,4 +57,12 @@ def rebuild_data_from_component(namespace, component):
         else:
             ref_overrides = None
 
-    return RebuildData(namespace, component, nvr["version"], nvr["release"], scmurl, config.main["build"]["target"], ref_overrides)
+    return RebuildData(
+        namespace,
+        component,
+        nvr["version"],
+        nvr["release"],
+        scmurl,
+        config.main["build"]["target"],
+        ref_overrides,
+    )

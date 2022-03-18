@@ -29,7 +29,7 @@ def parse_args():
         "--cleanup",
         type=int,
         help="Periodic cleanup refresh interval in minutes; default: 1440 (24 hours)",
-        default=1440
+        default=1440,
     )
     ap.add_argument(
         "-u",
@@ -119,7 +119,14 @@ def main():
         sys.exit(128)
 
     if args.oneshot:
-        task.deferLater(reactor, 0, oneshot.run, set([i for i in args.select.split(" ") if i]) if args.select else set())
+        task.deferLater(
+            reactor,
+            0,
+            oneshot.run,
+            set([i for i in args.select.split(" ") if i])
+            if args.select
+            else set(),
+        )
         # Start listening for Fedora Messages
         fedora_messaging.api.twisted_consume(oneshot.process_message)
     else:
