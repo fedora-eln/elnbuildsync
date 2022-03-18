@@ -1,0 +1,34 @@
+image: python:3.9-alpine
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+
+stages:
+  - format
+  - push
+
+format-python:
+  stage: format
+  script:
+    - pip install black
+    - black --target-version py36 --verbose --line-length 79 $CI_PROJECT_DIR
+  artifacts:
+    paths:
+      - $CI_PROJECT_DIR/
+    exclude:
+      - $CI_PROJECT_DIR/.git
+
+push-changes:
+  stage: push
+  dependencies:
+    - format-python
+  script:
+    - apk add git
+    - git config --global user.name "DistroBuildSync CI"
+    - git config --global user.email "$GITLAB_USER_EMAIL"
+    - git remote set-url origin https://oauth2:${GIT_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git
+    - git config --list
+    - git status
+    - 'git commit -am "Code auto-formatting" ||:'
+    - 'git push -o ci.skip origin HEAD:$CI_COMMIT_BRANCH ||:'

@@ -12,7 +12,9 @@ logger = config.logger
 
 
 # Matching the namespace/component text format
-cre = re.compile(r"^(?P<namespace>rpms|modules)/(?P<component>[A-Za-z0-9:._+-]+)$")
+cre = re.compile(
+    r"^(?P<namespace>rpms|modules)/(?P<component>[A-Za-z0-9:._+-]+)$"
+)
 
 
 @inlineCallbacks
@@ -28,7 +30,9 @@ def run(compset):
         return None
 
     if not compset:
-        logger.debug("No components selected, gathering components from triggers.")
+        logger.debug(
+            "No components selected, gathering components from triggers."
+        )
         compset.update(
             "{}/{}".format("rpms", x["package_name"])
             for x in kojihelpers.get_buildsys("source").listTagged(
@@ -46,12 +50,20 @@ def run(compset):
 
         m = m.groupdict()
         try:
-            rd_list.append(rebuild_data.rebuild_data_from_component(m["namespace"], m["component"]))
+            rd_list.append(
+                rebuild_data.rebuild_data_from_component(
+                    m["namespace"], m["component"]
+                )
+            )
         except ValueError as e:
             logger.info(e)
             continue
 
-        logger.debug("Scheduled {}/{} for rebuild".format(m["namespace"], m["component"]))
+        logger.debug(
+            "Scheduled {}/{} for rebuild".format(
+                m["namespace"], m["component"]
+            )
+        )
 
     # Fire off the builds
     yield listener.rebuild_batch(config.main["build"]["target"], rd_list)

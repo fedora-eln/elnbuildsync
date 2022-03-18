@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # Configuration options
 batch_timer = 2
 config_timer = 300
-cleanup_timer = 24*60*60  # 24 hours
+cleanup_timer = 24 * 60 * 60  # 24 hours
 koji_batch = 500
 configuration = None
 config_ref = None
@@ -214,7 +214,7 @@ def get_distro_packages(
                 merged_packages.add(line)
 
     # There may be an empty line in the file, ignore it.
-    merged_packages.discard('')
+    merged_packages.discard("")
     logger.debug("Found a total of {} packages".format(len(merged_packages)))
 
     return {"rpms": dict.fromkeys(merged_packages)}
@@ -242,7 +242,9 @@ def load_config():
         scm["ref"] = "main"
     for attempt in range(retry):
         try:
-            git.Repo.clone_from(scm["link"], cdir.name).git.checkout(scm["ref"])
+            git.Repo.clone_from(scm["link"], cdir.name).git.checkout(
+                scm["ref"]
+            )
         except Exception:
             logger.warning(
                 "Failed to fetch configuration, retrying (#%d).",
@@ -268,7 +270,9 @@ def load_config():
             logger.info(e)
             raise ConfigError("Could not parse distrobaker.yaml.")
     else:
-        raise ConfigError("Configuration repository does not contain distrobaker.yaml.")
+        raise ConfigError(
+            "Configuration repository does not contain distrobaker.yaml."
+        )
 
     n = dict()
     if "configuration" in y:
@@ -358,7 +362,9 @@ def load_config():
 
             n["control"]["autopackagelist"] = None
             if "autopackagelist" in cnf["control"]:
-                n["control"]["autopackagelist"] = cnf["control"]["autopackagelist"]
+                n["control"]["autopackagelist"] = cnf["control"][
+                    "autopackagelist"
+                ]
 
             n["control"]["skip_tag"] = {"rpms": set(), "modules": set()}
             if "skip_tag" in cnf["control"]:
@@ -397,7 +403,9 @@ def load_config():
                     n["defaults"][dk] = dict()
                     for dkk in ("source", "destination"):
                         if dkk in cnf["defaults"][dk]:
-                            n["defaults"][dk][dkk] = str(cnf["defaults"][dk][dkk])
+                            n["defaults"][dk][dkk] = str(
+                                cnf["defaults"][dk][dkk]
+                            )
                         else:
                             logger.error(
                                 "Configuration error: defaults.%s.%s missing.",
@@ -423,7 +431,9 @@ def load_config():
         else:
             if "content_resolver" in n["control"]["autopackagelist"]:
                 cnf = get_distro_packages(
-                    distro_url=n["control"]["autopackagelist"]["content_resolver"],
+                    distro_url=n["control"]["autopackagelist"][
+                        "content_resolver"
+                    ],
                     distro_view=n["control"]["autopackagelist"]["view"],
                 )
             else:
@@ -445,7 +455,9 @@ def load_config():
                         "component": cname,
                         "stream": sname,
                     }
-                    nc[k][p]["destination"] = n["defaults"][k]["destination"] % {
+                    nc[k][p]["destination"] = n["defaults"][k][
+                        "destination"
+                    ] % {
                         "component": cname,
                         "stream": sname,
                     }
@@ -463,7 +475,9 @@ def load_config():
                     if "cache" in cnf[k][p]:
                         for ck in ("source", "destination"):
                             if ck in cnf[k][p]["cache"]:
-                                nc[k][p]["cache"][ck] = str(cnf[k][p]["cache"][ck])
+                                nc[k][p]["cache"][ck] = str(
+                                    cnf[k][p]["cache"][ck]
+                                )
             logger.info(
                 "Found %d configured component(s) in the %s namespace.",
                 len(nc[k]),
@@ -503,6 +517,8 @@ def is_eligible(ns, comp):
 
 def skip_tag(ns, comp):
     if comp in config.main["control"]["skip_tag"][ns]:
-        logger.debug(f"{ns}/{comp} is on the skip_tag list, building immediately")
+        logger.debug(
+            f"{ns}/{comp} is on the skip_tag list, building immediately"
+        )
         return True
     return False

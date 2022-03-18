@@ -29,9 +29,15 @@ def periodic_cleanup():
     # destination tag.
     logger.info("Looking up builds. This may take a long time.")
     bsys = kojihelpers.get_buildsys(kojihelpers.BuildSystemType.destination)
-    tagged_src_pkgs = yield deferToThread(bsys.listTagged, config.main["trigger"]["rpms"], latest=True)
-    tagged_dest_pkgs = yield deferToThread(bsys.listTagged, config.main["build"]["target"], latest=True)
-    all_tagged_dest_pkgs = yield deferToThread(bsys.listTagged, config.main["build"]["target"], latest=False)
+    tagged_src_pkgs = yield deferToThread(
+        bsys.listTagged, config.main["trigger"]["rpms"], latest=True
+    )
+    tagged_dest_pkgs = yield deferToThread(
+        bsys.listTagged, config.main["build"]["target"], latest=True
+    )
+    all_tagged_dest_pkgs = yield deferToThread(
+        bsys.listTagged, config.main["build"]["target"], latest=False
+    )
     tagged_dest_pkg_names = sorted([pkg["name"] for pkg in tagged_dest_pkgs])
 
     # Create a lookup table to make untagging easier later
@@ -51,12 +57,16 @@ def periodic_cleanup():
             # Check whether we're explicitly ignoring this package (because it
             # requires special handling).·
             if not config.is_eligible("rpms", pkgname):
-                logger.warning("Skipping {} because it is excluded".format(pkgname))
+                logger.warning(
+                    "Skipping {} because it is excluded".format(pkgname)
+                )
                 continue
 
             # Schedule it for building
             try:
-                rd_list.append(rebuild_data.rebuild_data_from_component("rpms", pkgname))
+                rd_list.append(
+                    rebuild_data.rebuild_data_from_component("rpms", pkgname)
+                )
             except ValueError as e:
                 logger.warning(e)
             continue
@@ -74,7 +84,11 @@ def periodic_cleanup():
         if dest_is_older(latest_src, latest_dest):
             if config.is_eligible("rpms", pkgname):
                 try:
-                    rd_list.append(rebuild_data.rebuild_data_from_component("rpms", pkgname))
+                    rd_list.append(
+                        rebuild_data.rebuild_data_from_component(
+                            "rpms", pkgname
+                        )
+                    )
                 except ValueError as e:
                     logger.critical(e)
 
@@ -103,7 +117,11 @@ def periodic_cleanup():
     # the mainloop has time.
     if len(to_untag) > 0:
         task.deferLater(
-            reactor, 0, untag_packages, config.main["build"]["target"], to_untag
+            reactor,
+            0,
+            untag_packages,
+            config.main["build"]["target"],
+            to_untag,
         )
 
     # Fire off the builds
@@ -143,7 +161,9 @@ def dest_is_older(latest_src, latest_dest):
 
 def untag_packages(target, nvrs):
     if not config.dry_run:
-        bsys = kojihelpers.get_buildsys(kojihelpers.BuildSystemType.destination)
+        bsys = kojihelpers.get_buildsys(
+            kojihelpers.BuildSystemType.destination
+        )
         with bsys.multicall(batch=config.koji_batch) as mc:
             for nvr in nvrs:
                 logger.info(f"Untagging {nvr} from {target}")
