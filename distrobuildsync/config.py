@@ -16,6 +16,9 @@ from . import config
 # Global logger
 logger = logging.getLogger(__name__)
 
+DEFAULT_CONTENT_RESOLVER = "https://tiny.distro.builders"
+DEFAULT_DISTRO_VIEWS = ["eln"]
+
 # Configuration options
 batch_timer = 2
 config_timer = 300
@@ -179,8 +182,8 @@ def update_config():
 
 
 def get_distro_packages(
-    distro_url="https://tiny.distro.builders",
-    distro_view="eln",
+    distro_url,
+    distro_view=DEFAULT_DISTRO_VIEWS,
     arches=None,
     which_source=None,
 ):
@@ -195,16 +198,15 @@ def get_distro_packages(
 
     merged_packages = set()
 
-    for arch in arches:
+    for view in distro_view:
         for this_source in which_source:
             url = (
                 "{distro_url}"
-                "/view-{this_source}-package-name-list--view-{distro_view}--{arch}.txt"
+                "/view-{this_source}-package-name-list--view-{view}.txt"
             ).format(
                 distro_url=distro_url,
                 this_source=this_source,
-                distro_view=distro_view,
-                arch=arch,
+                view=view,
             )
 
             logger.debug("downloading {url}".format(url=url))
@@ -429,17 +431,24 @@ def load_config():
         if "components" in y:
             cnf = y["components"]
         else:
+            resolver = DEFAULT_CONTENT_RESOLVER
+            views = list()
+
             if "content_resolver" in n["control"]["autopackagelist"]:
-                cnf = get_distro_packages(
-                    distro_url=n["control"]["autopackagelist"][
-                        "content_resolver"
-                    ],
-                    distro_view=n["control"]["autopackagelist"]["view"],
-                )
+                resolver = n["control"]["autopackagelist"]["content_resolver"]
+
+            if type(n["control"]["autopackagelist"]["view"]) == list:
+                views = n["control"]["autopackagelist"]["view"]
             else:
-                cnf = get_distro_packages(
-                    distro_view=n["control"]["autopackagelist"]["view"]
-                )
+                views = [
+                    n["control"]["autopackagelist"]["view"],
+                ]
+
+            cnf = get_distro_packages(
+                distro_url=resolver,
+                distro_view=views,
+            )
+
         for k in ("rpms", "modules"):
             if k in cnf:
                 for p in cnf[k].keys():
