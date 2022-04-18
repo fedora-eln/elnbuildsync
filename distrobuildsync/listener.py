@@ -175,4 +175,5 @@ def build_components(target, builds):
                     downstream_scmurl,
                     target,
                     {"scratch": config.main["build"]["scratch"]},
+                    priority=kojihelpers.KOJI_BACKGROUND_PRIORITY,
                 )
