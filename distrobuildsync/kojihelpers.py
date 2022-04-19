@@ -12,6 +12,10 @@ from twisted.internet.defer import Deferred, inlineCallbacks
 logger = config.logger
 
 
+# Koji magic number
+KOJI_BACKGROUND_PRIORITY = 5
+
+
 class BuildSystemType(Enum):
     source = auto()
     destination = auto()
