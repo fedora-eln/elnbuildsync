@@ -1,3 +1,4 @@
+import logging
 import re
 import rpm
 
@@ -12,6 +13,7 @@ from . import listener
 from . import rebuild_data
 
 logger = config.logger
+status_data = None
 
 
 @inlineCallbacks
@@ -24,6 +26,9 @@ def periodic_cleanup():
     desired_pkgs = [
         component for component in sorted(config.comps["rpms"], key=str.lower)
     ]
+
+    # Generate a static view of the latest build state
+    create_status_page(desired_pkgs)
 
     # Get the list of the latest packages currently tagged into the
     # destination tag.
@@ -168,3 +173,30 @@ def untag_packages(target, nvrs):
             for nvr in nvrs:
                 logger.info(f"Untagging {nvr} from {target}")
                 mc.untagBuild(target, nvr)
+
+def create_status_page(packages):
+    global status_data
+
+    bsys = kojihelpers.get_buildsys(kojihelpers.BuildSystemType.destination)
+
+    # Self-identify
+    username = bsys.getLoggedInUser()["name"]
+
+    status_data = defaultdict(lambda: None)
+
+    # Get the list of packages that DBS has built.
+    for build in bsys.listBuilds(userID=username, queryOpts={"order":'start_ts'}):
+        if build["package_name"] in packages:
+            # The sort order goes from oldest to newest, so if we see the same
+            # package, just overwrite the build data.
+            status_data[build["package_name"]] = build
+
+
+    # Now double-check that we didn't miss any expected packages
+    # This will use the defaultdict to set the value to None for
+    # any packages not in the list
+    [ status_data[pkg] for pkg in packages ]
+
+    if logger.isEnabledFor(logging.DEBUG):
+        for pkg in sorted(status_data.keys()):
+            logger.debug("{}: {}".format(pkg, status_data[pkg]["start_time"] if status_data[pkg] else "UNKNOWN"))

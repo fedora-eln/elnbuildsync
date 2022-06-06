@@ -5,7 +5,7 @@ import logging
 import re
 import sys
 
-from . import config, health, listener, oneshot, periodic
+from . import config, listener, oneshot, periodic, web
 
 from twisted.internet import reactor, task
 from twisted.internet.defer import inlineCallbacks
@@ -145,9 +145,9 @@ def main():
         # Start listening for Fedora Messages
         fedora_messaging.api.twisted_consume(listener.process_message)
 
-        site = health.setup_health_checks()
+        site = web.setup_web_resources()
         reactor.listenTCP(args.port, site)
-        health.started = True
+        web.started = True
 
     logger.debug("Starting Twisted mainloop")
     reactor.run()
