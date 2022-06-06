@@ -6,7 +6,11 @@ from .rebuild_data import RebuildData
 
 from collections import defaultdict, namedtuple
 from twisted.internet import reactor, task
-from twisted.internet.defer import AlreadyCalledError, inlineCallbacks
+from twisted.internet.defer import (
+    AlreadyCalledError,
+    inlineCallbacks,
+    TimeoutError,
+)
 from queue import Empty
 
 logger = config.logger
@@ -143,7 +147,7 @@ def rebuild_batch(target, builds):
         except TimeoutError:
             # If we timed out, it's likely that the repo regenerated before we had time to
             # start waiting for it, so just proceed and hope.
-            pass
+            logger.warning(f"Timed out waiting for {buildroot} to regenerate.")
 
     build_components(target, builds)
 
