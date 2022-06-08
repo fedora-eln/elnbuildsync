@@ -1,6 +1,7 @@
 import logging
 import re
 import rpm
+from datetime import datetime, timezone
 
 from collections import defaultdict
 from twisted.internet import reactor, task
@@ -27,9 +28,6 @@ def periodic_cleanup():
         component for component in sorted(config.comps["rpms"], key=str.lower)
     ]
 
-    # Generate a static view of the latest build state
-    create_status_page(desired_pkgs)
-
     # Get the list of the latest packages currently tagged into the
     # destination tag.
     logger.info("Looking up builds. This may take a long time.")
@@ -54,6 +52,9 @@ def periodic_cleanup():
 
     src_builds = {build["name"]: build for build in tagged_src_pkgs}
     dest_builds = {build["name"]: build for build in tagged_dest_pkgs}
+
+    # Generate a static view of the latest build state
+    create_status_page(desired_pkgs, dest_builds)
 
     # Make sure we have all the desired packages built
     for pkgname in desired_pkgs:
@@ -174,7 +175,7 @@ def untag_packages(target, nvrs):
                 logger.info(f"Untagging {nvr} from {target}")
                 mc.untagBuild(target, nvr)
 
-def create_status_page(packages):
+def create_status_page(packages, tagged_packages):
     global status_data
 
     bsys = kojihelpers.get_buildsys(kojihelpers.BuildSystemType.destination)
@@ -183,14 +184,24 @@ def create_status_page(packages):
     username = bsys.getLoggedInUser()["name"]
 
     status_data = defaultdict(lambda: None)
+    status_data["__updated"] = datetime.now(timezone.utc)
 
     # Get the list of packages that DBS has built.
     for build in bsys.listBuilds(userID=username, queryOpts={"order":'start_ts'}):
-        if build["package_name"] in packages:
+        pname = build["package_name"]
+        if pname in packages:
             # The sort order goes from oldest to newest, so if we see the same
             # package, just overwrite the build data.
-            status_data[build["package_name"]] = build
+            status_data[pname] = build
+            status_data[pname]["tagged"] = None
 
+            if pname in tagged_packages and build["nvr"] == tagged_packages[pname]["nvr"]:
+                status_data[pname]["tagged"] = True
+            elif pname in tagged_packages:
+                status_data[pname]["tagged"] = tagged_packages[pname]["nvr"]
+
+            if status_data[pname]["tagged"] != True:
+                logger.debug(f'{build["nvr"]} is not tagged!')
 
     # Now double-check that we didn't miss any expected packages
     # This will use the defaultdict to set the value to None for
@@ -199,4 +210,7 @@ def create_status_page(packages):
 
     if logger.isEnabledFor(logging.DEBUG):
         for pkg in sorted(status_data.keys()):
+            # Ignore reserved entries
+            if pkg.startswith("__"):
+                continue
             logger.debug("{}: {}".format(pkg, status_data[pkg]["start_time"] if status_data[pkg] else "UNKNOWN"))
