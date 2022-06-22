@@ -84,6 +84,15 @@ def parse_args():
         default=8080,
     )
 
+    ap.add_argument(
+        "-t",
+        "--untagging",
+        dest="do_untagging",
+        action="store_true",
+        help="Untag all but the most recent builds in the destination target",
+        default=False
+    )
+
     args = ap.parse_args()
     if args.select and not args.oneshot:
         print("Selecting components only works with oneshot mode.")
@@ -107,6 +116,7 @@ def main():
     config.cleanup_timer = args.cleanup * 60
     config.retries = args.retry
     config.dry_run = args.dry_run
+    config.do_untagging = args.do_untagging
     config.distrogitsync = args.distrogitsync
     config.scmurl = args.config
 
