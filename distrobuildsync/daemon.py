@@ -15,20 +15,20 @@ logger = config.logger
 
 
 def parse_args():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     ap.add_argument("config", help="configuration repository SCMURL")
     ap.add_argument(
         "-l",
         "--loglevel",
         dest="loglevel",
-        help="logging level; default: info",
+        help="logging level",
         default="INFO",
     )
     ap.add_argument(
         "-c",
         "--cleanup",
         type=int,
-        help="Periodic cleanup refresh interval in minutes; default: 1440 (24 hours)",
+        help="Periodic cleanup refresh interval in minutes",
         default=1440,
     )
     ap.add_argument(
@@ -36,7 +36,7 @@ def parse_args():
         "--update",
         dest="update",
         type=int,
-        help="configuration refresh interval in minutes; default: 5",
+        help="configuration refresh interval in minutes",
         default=5,
     )
     ap.add_argument(
@@ -44,7 +44,7 @@ def parse_args():
         "--retry",
         dest="retry",
         type=int,
-        help="number of retries on network failures; default: 3",
+        help="number of retries on network failures",
         default=3,
     )
     ap.add_argument(
@@ -84,6 +84,15 @@ def parse_args():
         default=8080,
     )
 
+    ap.add_argument(
+        "-t",
+        "--untagging",
+        dest="do_untagging",
+        action="store_true",
+        help="Untag all but the most recent builds in the destination target",
+        default=False
+    )
+
     args = ap.parse_args()
     if args.select and not args.oneshot:
         print("Selecting components only works with oneshot mode.")
@@ -107,6 +116,7 @@ def main():
     config.cleanup_timer = args.cleanup * 60
     config.retries = args.retry
     config.dry_run = args.dry_run
+    config.do_untagging = args.do_untagging
     config.distrogitsync = args.distrogitsync
     config.scmurl = args.config
 

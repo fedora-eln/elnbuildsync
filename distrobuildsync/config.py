@@ -28,6 +28,7 @@ configuration = None
 config_ref = None
 distrogitsync = None
 dry_run = False
+do_untagging = False
 retry = 3
 scmurl = None
 main = None
