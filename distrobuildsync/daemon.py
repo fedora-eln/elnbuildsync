@@ -15,20 +15,20 @@ logger = config.logger
 
 
 def parse_args():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     ap.add_argument("config", help="configuration repository SCMURL")
     ap.add_argument(
         "-l",
         "--loglevel",
         dest="loglevel",
-        help="logging level; default: info",
+        help="logging level",
         default="INFO",
     )
     ap.add_argument(
         "-c",
         "--cleanup",
         type=int,
-        help="Periodic cleanup refresh interval in minutes; default: 1440 (24 hours)",
+        help="Periodic cleanup refresh interval in minutes",
         default=1440,
     )
     ap.add_argument(
@@ -36,7 +36,7 @@ def parse_args():
         "--update",
         dest="update",
         type=int,
-        help="configuration refresh interval in minutes; default: 5",
+        help="configuration refresh interval in minutes",
         default=5,
     )
     ap.add_argument(
@@ -44,7 +44,7 @@ def parse_args():
         "--retry",
         dest="retry",
         type=int,
-        help="number of retries on network failures; default: 3",
+        help="number of retries on network failures",
         default=3,
     )
     ap.add_argument(
