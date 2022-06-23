@@ -168,6 +168,7 @@ def untag_packages(target, nvrs):
                 mc.untagBuild(target, nvr)
 
 
+@inlineCallbacks
 def create_status_page():
     global status_data
 
@@ -215,7 +216,7 @@ def create_status_page():
     # Now double-check that we didn't miss any expected packages
     # This will use the defaultdict to set the value to None for
     # any packages not in the list
-    [_status_data[pkg] for pkg in packages]
+    [_status_data[pkg] for pkg in desired_pkgs]
 
     if logger.isEnabledFor(logging.DEBUG):
         for pkg in sorted(_status_data.keys()):
@@ -232,3 +233,4 @@ def create_status_page():
             )
 
     status_data = _status_data
+    logger.debug("Status page updated")
