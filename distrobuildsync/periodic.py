@@ -19,9 +19,7 @@ status_data = None
 
 @inlineCallbacks
 def periodic_cleanup():
-    components = {}
     to_untag = set()
-    to_build = set()
 
     # Get the list of desired package names
     desired_pkgs = [
@@ -38,23 +36,17 @@ def periodic_cleanup():
     tagged_dest_pkgs = yield deferToThread(
         bsys.listTagged, config.main["build"]["target"], latest=True
     )
-    all_tagged_dest_pkgs = yield deferToThread(
-        bsys.listTagged, config.main["build"]["target"], latest=False
-    )
     tagged_dest_pkg_names = sorted([pkg["name"] for pkg in tagged_dest_pkgs])
 
     # Create a lookup table to make untagging easier later
     all_dest_nvrs = defaultdict(list)
-    for pkg in all_tagged_dest_pkgs:
+    for pkg in tagged_dest_pkgs:
         all_dest_nvrs[pkg["name"]].append(pkg["nvr"])
 
     rd_list = list()
 
     src_builds = {build["name"]: build for build in tagged_src_pkgs}
     dest_builds = {build["name"]: build for build in tagged_dest_pkgs}
-
-    # Generate a static view of the latest build state
-    create_status_page(desired_pkgs, dest_builds)
 
     # Make sure we have all the desired packages built
     for pkgname in desired_pkgs:
@@ -121,7 +113,7 @@ def periodic_cleanup():
     # Untag the packages we no longer have in ELN
     # This doesn't need to be blocking, so we defer it to run whenever
     # the mainloop has time.
-    if len(to_untag) > 0:
+    if config.do_untagging and len(to_untag) > 0:
         task.deferLater(
             reactor,
             0,
@@ -175,42 +167,53 @@ def untag_packages(target, nvrs):
                 logger.info(f"Untagging {nvr} from {target}")
                 mc.untagBuild(target, nvr)
 
-def create_status_page(packages, tagged_packages):
+def create_status_page():
     global status_data
 
+    # Get the list of desired package names
+    desired_pkgs = [
+        component for component in sorted(config.comps["rpms"], key=str.lower)
+    ]
+
     bsys = kojihelpers.get_buildsys(kojihelpers.BuildSystemType.destination)
+
+    tagged_pkgs = yield deferToThread(
+        bsys.listTagged, config.main["build"]["target"], latest=True
+    )
 
     # Self-identify
     username = bsys.getLoggedInUser()["name"]
 
-    status_data = defaultdict(lambda: None)
-    status_data["__updated"] = datetime.now(timezone.utc)
+    _status_data = defaultdict(lambda: None)
+    _status_data["__updated"] = datetime.now(timezone.utc)
 
     # Get the list of packages that DBS has built.
     for build in bsys.listBuilds(userID=username, queryOpts={"order":'start_ts'}):
         pname = build["package_name"]
-        if pname in packages:
+        if pname in desired_pkgs:
             # The sort order goes from oldest to newest, so if we see the same
             # package, just overwrite the build data.
-            status_data[pname] = build
-            status_data[pname]["tagged"] = None
+            _status_data[pname] = build
+            _status_data[pname]["tagged"] = None
 
-            if pname in tagged_packages and build["nvr"] == tagged_packages[pname]["nvr"]:
-                status_data[pname]["tagged"] = True
-            elif pname in tagged_packages:
-                status_data[pname]["tagged"] = tagged_packages[pname]["nvr"]
+            if pname in tagged_pkgs and build["nvr"] == tagged_pkgs[pname]["nvr"]:
+                _status_data[pname]["tagged"] = True
+            elif pname in tagged_pkgs:
+                _status_data[pname]["tagged"] = tagged_pkgs[pname]["nvr"]
 
-            if status_data[pname]["tagged"] != True:
+            if _status_data[pname]["tagged"] != True:
                 logger.debug(f'{build["nvr"]} is not tagged!')
 
     # Now double-check that we didn't miss any expected packages
     # This will use the defaultdict to set the value to None for
     # any packages not in the list
-    [ status_data[pkg] for pkg in packages ]
+    [ _status_data[pkg] for pkg in packages ]
 
     if logger.isEnabledFor(logging.DEBUG):
-        for pkg in sorted(status_data.keys()):
+        for pkg in sorted(_status_data.keys()):
             # Ignore reserved entries
             if pkg.startswith("__"):
                 continue
-            logger.debug("{}: {}".format(pkg, status_data[pkg]["start_time"] if status_data[pkg] else "UNKNOWN"))
+            logger.debug("{}: {}".format(pkg, _status_data[pkg]["start_time"] if _status_data[pkg] else "UNKNOWN"))
+
+    status_data = _status_data
