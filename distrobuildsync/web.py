@@ -174,8 +174,8 @@ class UntaggedResource(Resource):
             build = periodic.status_data[pkg]
 
             if (
-                build
-                and not build["tagged"] == True
+                build is None
+                or (build and not build["tagged"] == True)
                 and config.is_eligible("rpms", build["name"])
             ):
                 page += f"{pkg}\n"
