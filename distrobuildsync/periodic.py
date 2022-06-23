@@ -171,6 +171,8 @@ def untag_packages(target, nvrs):
 def create_status_page():
     global status_data
 
+    logger.info("Refreshing status page")
+
     # Get the list of desired package names
     desired_pkgs = [
         component for component in sorted(config.comps["rpms"], key=str.lower)
