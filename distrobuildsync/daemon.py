@@ -161,7 +161,7 @@ def main():
         config.cleanup_processor.start(config.cleanup_timer * 60, now=True)
 
         # Schedule periodic status page and run it once at startup
-        config.status_processor = task.LoopingCall(periodic.periodic_cleanup)
+        config.status_processor = task.LoopingCall(periodic.create_status_page)
         config.status_processor.start(config.status_timer * 60, now=True)
 
         # Start listening for Fedora Messages
