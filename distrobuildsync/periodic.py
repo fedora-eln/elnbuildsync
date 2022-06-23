@@ -36,11 +36,14 @@ def periodic_cleanup():
     tagged_dest_pkgs = yield deferToThread(
         bsys.listTagged, config.main["build"]["target"], latest=True
     )
+    all_tagged_dest_pkgs = yield deferToThread(
+       bsys.listTagged, config.main["build"]["target"], latest=False
+    )
     tagged_dest_pkg_names = sorted([pkg["name"] for pkg in tagged_dest_pkgs])
 
     # Create a lookup table to make untagging easier later
     all_dest_nvrs = defaultdict(list)
-    for pkg in tagged_dest_pkgs:
+    for pkg in all_tagged_dest_pkgs:
         all_dest_nvrs[pkg["name"]].append(pkg["nvr"])
 
     rd_list = list()
@@ -184,6 +187,7 @@ def create_status_page():
     tagged_pkgs = yield deferToThread(
         bsys.listTagged, config.main["build"]["target"], latest=True
     )
+    tagged_builds = {build["name"]: build for build in tagged_pkgs}
 
     # Self-identify
     username = bsys.getLoggedInUser()["name"]
@@ -195,23 +199,24 @@ def create_status_page():
     for build in bsys.listBuilds(
         userID=username, queryOpts={"order": "start_ts"}
     ):
-        pname = build["package_name"]
+        pname = build["name"]
         if pname in desired_pkgs:
             # The sort order goes from oldest to newest, so if we see the same
             # package, just overwrite the build data.
             _status_data[pname] = build
-            _status_data[pname]["tagged"] = None
+            if "tagged" not in _status_data[pname]:
+                _status_data[pname]["tagged"] = None
 
             if (
-                pname in tagged_pkgs
-                and build["nvr"] == tagged_pkgs[pname]["nvr"]
+                pname in tagged_builds
+                and build["nvr"] == tagged_builds[pname]["nvr"]
             ):
                 _status_data[pname]["tagged"] = True
-            elif pname in tagged_pkgs:
-                _status_data[pname]["tagged"] = tagged_pkgs[pname]["nvr"]
+            elif pname in tagged_builds:
+                _status_data[pname]["tagged"] = tagged_builds[pname]["nvr"]
 
-            if _status_data[pname]["tagged"] != True:
-                logger.debug(f'{build["nvr"]} is not tagged!')
+            if _status_data[pname]["tagged"] is None:
+                logger.debug(f'{pname} is not tagged!')
 
     # Now double-check that we didn't miss any expected packages
     # This will use the defaultdict to set the value to None for
