@@ -37,7 +37,7 @@ def periodic_cleanup():
         bsys.listTagged, config.main["build"]["target"], latest=True
     )
     all_tagged_dest_pkgs = yield deferToThread(
-       bsys.listTagged, config.main["build"]["target"], latest=False
+        bsys.listTagged, config.main["build"]["target"], latest=False
     )
     tagged_dest_pkg_names = sorted([pkg["name"] for pkg in tagged_dest_pkgs])
 
@@ -216,7 +216,7 @@ def create_status_page():
                 _status_data[pname]["tagged"] = tagged_builds[pname]["nvr"]
 
             if _status_data[pname]["tagged"] is None:
-                logger.debug(f'{pname} is not tagged!')
+                logger.debug(f"{pname} is not tagged!")
 
     # Now double-check that we didn't miss any expected packages
     # This will use the defaultdict to set the value to None for
