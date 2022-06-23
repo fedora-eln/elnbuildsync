@@ -167,6 +167,7 @@ def untag_packages(target, nvrs):
                 logger.info(f"Untagging {nvr} from {target}")
                 mc.untagBuild(target, nvr)
 
+
 def create_status_page():
     global status_data
 
@@ -188,7 +189,9 @@ def create_status_page():
     _status_data["__updated"] = datetime.now(timezone.utc)
 
     # Get the list of packages that DBS has built.
-    for build in bsys.listBuilds(userID=username, queryOpts={"order":'start_ts'}):
+    for build in bsys.listBuilds(
+        userID=username, queryOpts={"order": "start_ts"}
+    ):
         pname = build["package_name"]
         if pname in desired_pkgs:
             # The sort order goes from oldest to newest, so if we see the same
@@ -196,7 +199,10 @@ def create_status_page():
             _status_data[pname] = build
             _status_data[pname]["tagged"] = None
 
-            if pname in tagged_pkgs and build["nvr"] == tagged_pkgs[pname]["nvr"]:
+            if (
+                pname in tagged_pkgs
+                and build["nvr"] == tagged_pkgs[pname]["nvr"]
+            ):
                 _status_data[pname]["tagged"] = True
             elif pname in tagged_pkgs:
                 _status_data[pname]["tagged"] = tagged_pkgs[pname]["nvr"]
@@ -207,13 +213,20 @@ def create_status_page():
     # Now double-check that we didn't miss any expected packages
     # This will use the defaultdict to set the value to None for
     # any packages not in the list
-    [ _status_data[pkg] for pkg in packages ]
+    [_status_data[pkg] for pkg in packages]
 
     if logger.isEnabledFor(logging.DEBUG):
         for pkg in sorted(_status_data.keys()):
             # Ignore reserved entries
             if pkg.startswith("__"):
                 continue
-            logger.debug("{}: {}".format(pkg, _status_data[pkg]["start_time"] if _status_data[pkg] else "UNKNOWN"))
+            logger.debug(
+                "{}: {}".format(
+                    pkg,
+                    _status_data[pkg]["start_time"]
+                    if _status_data[pkg]
+                    else "UNKNOWN",
+                )
+            )
 
     status_data = _status_data

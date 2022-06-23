@@ -15,7 +15,9 @@ logger = config.logger
 
 
 def parse_args():
-    ap = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    ap = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     ap.add_argument("config", help="configuration repository SCMURL")
     ap.add_argument(
         "-l",
@@ -96,7 +98,7 @@ def parse_args():
         dest="do_untagging",
         action="store_true",
         help="Untag all but the most recent builds in the destination target",
-        default=False
+        default=False,
     )
 
     args = ap.parse_args()
