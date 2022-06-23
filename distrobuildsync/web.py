@@ -69,6 +69,7 @@ class LivenessResource(Resource):
             request.setResponseCode(503)
         return b""
 
+
 class StatusPageResource(Resource):
     """
     StatusPageResource
@@ -86,7 +87,7 @@ class StatusPageResource(Resource):
     def render_GET(self, request):
         if not periodic.status_data:
             request.setResponseCode(503)
-            return b'Server not ready, please try again in a few minutes'
+            return b"Server not ready, please try again in a few minutes"
 
         page = f"""
 
@@ -106,29 +107,29 @@ class StatusPageResource(Resource):
             build = periodic.status_data[pkg]
 
             # Name
-            page += f'<tr><td>{pkg}</td>'
+            page += f"<tr><td>{pkg}</td>"
 
             # Status
             if build is not None:
                 if build["state"] == BUILD_STATES["COMPLETE"]:
-                    page += "<td bgcolor=\"#00FF00\">COMPLETE</td>"
+                    page += '<td bgcolor="#00FF00">COMPLETE</td>'
                 elif build["state"] == BUILD_STATES["BUILDING"]:
-                    page += "<td bgcolor=\"#00FFFF\">BUILDING</td>"
+                    page += '<td bgcolor="#00FFFF">BUILDING</td>'
                 elif build["state"] == BUILD_STATES["FAILED"]:
-                    page += "<td bgcolor=\"#FF0000\">FAILED</td>"
+                    page += '<td bgcolor="#FF0000">FAILED</td>'
                 else:
-                    page += "<td bgcolor=\"#FF00FF\">UNKNOWN</td>"
+                    page += '<td bgcolor="#FF00FF">UNKNOWN</td>'
 
                 # NVR
                 page += f'<td>{build["nvr"]}</td>'
 
                 # Tagged into 'eln'
                 if build["tagged"] == True:
-                    page += f'<td bgcolor=\"#00FF00\">{build["nvr"]}</td>'
+                    page += f'<td bgcolor="#00FF00">{build["nvr"]}</td>'
                 elif build["tagged"]:
-                    page += f'<td bgcolor=\"#FF0000\">{build["tagged"]}</td>'
+                    page += f'<td bgcolor="#FF0000">{build["tagged"]}</td>'
                 else:
-                    page += f'<td bgcolor=\"#FF00FF\">UNKNOWN</td>'
+                    page += f'<td bgcolor="#FF00FF">UNKNOWN</td>'
 
                 # Build Time
                 page += f'<td>{datetime.utcfromtimestamp(build["start_ts"]) if build["start_ts"] else "UNKNOWN"}</td></tr>'
@@ -142,6 +143,7 @@ class StatusPageResource(Resource):
 """
 
         return page.encode("UTF-8")
+
 
 class UntaggedResource(Resource):
     """
@@ -160,7 +162,7 @@ class UntaggedResource(Resource):
     def render_GET(self, request):
         if not periodic.status_data:
             request.setResponseCode(503)
-            return b'Server not ready, please try again in a few minutes'
+            return b"Server not ready, please try again in a few minutes"
 
         page = ""
 
@@ -171,8 +173,12 @@ class UntaggedResource(Resource):
 
             build = periodic.status_data[pkg]
 
-            if build and not build["tagged"] == True and config.is_eligible("rpms", build["name"]):
-                page += f'{pkg}\n'
+            if (
+                build
+                and not build["tagged"] == True
+                and config.is_eligible("rpms", build["name"])
+            ):
+                page += f"{pkg}\n"
 
         return page.encode("UTF-8")
 

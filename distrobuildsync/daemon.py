@@ -15,7 +15,9 @@ logger = config.logger
 
 
 def parse_args():
-    ap = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    ap = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     ap.add_argument("config", help="configuration repository SCMURL")
     ap.add_argument(
         "-l",
@@ -29,7 +31,13 @@ def parse_args():
         "--cleanup",
         type=int,
         help="Periodic cleanup refresh interval in minutes",
-        default=1440,
+        default=config.cleanup_timer,
+    )
+    ap.add_argument(
+        "--status",
+        type=int,
+        help="Periodic refresh interval of rebuild status page in minutes",
+        default=config.status_timer,
     )
     ap.add_argument(
         "-u",
@@ -90,7 +98,7 @@ def parse_args():
         dest="do_untagging",
         action="store_true",
         help="Untag all but the most recent builds in the destination target",
-        default=False
+        default=False,
     )
 
     args = ap.parse_args()
@@ -150,7 +158,11 @@ def main():
 
         # Schedule periodic cleanup and run it once at startup
         config.cleanup_processor = task.LoopingCall(periodic.periodic_cleanup)
-        config.cleanup_processor.start(config.cleanup_timer, now=True)
+        config.cleanup_processor.start(config.cleanup_timer * 60, now=True)
+
+        # Schedule periodic status page and run it once at startup
+        config.status_processor = task.LoopingCall(periodic.periodic_cleanup)
+        config.status_processor.start(config.status_timer * 60, now=True)
 
         # Start listening for Fedora Messages
         fedora_messaging.api.twisted_consume(listener.process_message)

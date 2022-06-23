@@ -22,7 +22,8 @@ DEFAULT_DISTRO_VIEWS = ["eln"]
 # Configuration options
 batch_timer = 2
 config_timer = 300
-cleanup_timer = 24 * 60 * 60  # 24 hours
+cleanup_timer = 24 * 60  # 24 hours
+status_timer = 10  # 10 minutes
 koji_batch = 500
 configuration = None
 config_ref = None
@@ -39,6 +40,7 @@ waitrepo_timeout = 15 * 60
 # Process state
 batch_processor = None
 cleanup_processor = None
+status_processor = None
 message_queue = SimpleQueue()
 awaited_repos = defaultdict(list)
 
