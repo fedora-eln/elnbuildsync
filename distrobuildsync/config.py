@@ -428,12 +428,10 @@ def load_config():
 
     components = 0
     nc = {"rpms": dict(), "modules": dict()}
-    if "components" in y:
-        cnf = y["components"]
     if "components" in y or "autopackagelist" in n["control"]:
-        if "components" in y:
-            cnf = y["components"]
-        else:
+        cnf = {}
+
+        if "autopackagelist" in n["control"]:
             resolver = DEFAULT_CONTENT_RESOLVER
             views = list()
 
@@ -451,6 +449,12 @@ def load_config():
                 distro_url=resolver,
                 distro_view=views,
             )
+
+        if "components" in y:
+            if "rpms" in cnf:
+                cnf["rpms"].update(y["components"]["rpms"])
+            if "modules" in cnf:
+                cnf["rpms"].update(y["components"]["modules"])
 
         for k in ("rpms", "modules"):
             if k in cnf:
