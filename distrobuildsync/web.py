@@ -127,7 +127,7 @@ class StatusPageResource(Resource):
 
                 # Tagged into 'eln'
                 if not config.is_eligible("rpms", build["name"]):
-                    page += f'<td>IGNORE</td>'
+                    page += f"<td>IGNORE</td>"
                 elif build["tagged"] == True:
                     page += f'<td bgcolor="#00FF00">{build["nvr"]}</td>'
                 elif build["tagged"]:
