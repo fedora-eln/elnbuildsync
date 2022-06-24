@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import json
+
 from twisted.internet import reactor
 from twisted.web.resource import Resource
 from twisted.web.server import Site
@@ -145,6 +147,28 @@ class StatusPageResource(Resource):
         return page.encode("UTF-8")
 
 
+class StatusJSONResource(Resource):
+    """
+    StatusJSONResource
+
+    Outputs the full status data as a JSON document.
+    """
+
+    isLeaf = True
+
+    def getChild(self, name, request):
+        if name == "":
+            return self
+        return Resource.getChild(self, name, request)
+
+    def render_GET(self, request):
+        if not periodic.status_data:
+            request.setResponseCode(503)
+            return b"Server not ready, please try again in a few minutes"
+
+        return json.dumps(periodic.status_data, default=str).encode("UTF-8")
+
+
 class UntaggedResource(Resource):
     """
     UntaggedResource
@@ -189,6 +213,7 @@ def setup_web_resources():
     root.putChild(b"startup", StartupResource())
     root.putChild(b"alive", LivenessResource())
     root.putChild(b"status", StatusPageResource())
+    root.putChild(b"status.json", StatusJSONResource())
     root.putChild(b"untagged", UntaggedResource())
 
     return Site(root)
