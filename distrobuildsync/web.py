@@ -126,7 +126,9 @@ class StatusPageResource(Resource):
                 page += f'<td>{build["nvr"]}</td>'
 
                 # Tagged into 'eln'
-                if build["tagged"] == True:
+                if not config.is_eligible("rpms", build["name"]):
+                    page += f'<td>IGNORE</td>'
+                elif build["tagged"] == True:
                     page += f'<td bgcolor="#00FF00">{build["nvr"]}</td>'
                 elif build["tagged"]:
                     page += f'<td bgcolor="#FF0000">{build["tagged"]}</td>'
@@ -136,7 +138,8 @@ class StatusPageResource(Resource):
                 # Build Time
                 page += f'<td>{datetime.utcfromtimestamp(build["start_ts"]) if build["start_ts"] else "UNKNOWN"}</td></tr>'
             else:
-                page += "<td>UNKNOWN</td><td>UNKNOWN</td><td>UNKNOWN</td>"
+                if config.is_eligible("rpms", periodic.status_data[pkg]):
+                    page += "<td>UNKNOWN</td><td>UNKNOWN</td><td>UNKNOWN</td>"
 
         page += """
 </table>
