@@ -168,6 +168,7 @@ def get_build(comp, ns="rpms", tag=None, bsys=None):
     :param comp: The component name
     :param ns: The component namespace
     :param tag: If specified, overrides the default tag for the namespace
+    :param bsys: If not specified, defaults to the "source" buildsystem
     :returns: NVR of the latest build, or None on error
     """
     if not config.main:
