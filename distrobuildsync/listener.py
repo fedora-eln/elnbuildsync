@@ -160,10 +160,11 @@ def build_components(target, builds):
 
     with bsys.multicall(batch=config.koji_batch) as mc:
         for rd in builds:
-            component = rd.comp
             namespace = rd.ns
-            ref = config.split_scmurl(rd.scmurl)["ref"]
-            downstream_scmurl = f"{prefix}/{namespace}/{component}#{ref}"
+            scmurl = config.split_scmurl(rd.scmurl)
+            gitcomponent = scmurl["comp"]
+            ref = scmurl["ref"]
+            downstream_scmurl = f"{prefix}/{namespace}/{gitcomponent}#{ref}"
 
             dry = "DRY-RUN: " if config.dry_run else ""
             scratch = "Scratch-b" if config.main["build"]["scratch"] else "B"
@@ -173,7 +174,7 @@ def build_components(target, builds):
 
             if not config.dry_run:
                 kojihelpers.call_distrogitsync(
-                    namespace, component, rd.ref_overrides
+                    namespace, gitcomponent, rd.ref_overrides
                 )
                 mc.build(
                     downstream_scmurl,
