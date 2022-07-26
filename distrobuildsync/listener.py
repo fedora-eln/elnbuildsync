@@ -124,11 +124,11 @@ def process_batch():
 
 
 @inlineCallbacks
-def rebuild_batch(target, builds):
+def rebuild_batch(target, builds, do_tag=True):
     bsys = kojihelpers.get_buildsys("destination")
 
     # skip tagging and waiting for the repo if source and destination build systems differ
-    if (
+    if do_tag and (
         not config.dry_run
         and config.main["source"]["profile"]
         == config.main["destination"]["profile"]

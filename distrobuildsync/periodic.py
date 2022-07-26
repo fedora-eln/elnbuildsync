@@ -47,6 +47,7 @@ def periodic_cleanup():
         all_dest_nvrs[pkg["name"]].append(pkg["nvr"])
 
     rd_list = list()
+    notag_list = list()
 
     src_builds = {build["name"]: build for build in tagged_src_pkgs}
     dest_builds = {build["name"]: build for build in tagged_dest_pkgs}
@@ -85,13 +86,16 @@ def periodic_cleanup():
         if dest_is_older(latest_src, latest_dest):
             if config.is_eligible("rpms", pkgname):
                 try:
-                    rd_list.append(
-                        rebuild_data.rebuild_data_from_component(
-                            "rpms", pkgname
-                        )
+                    rd = rebuild_data.rebuild_data_from_component(
+                        "rpms", pkgname
                     )
                 except ValueError as e:
                     logger.critical(e)
+
+                if config.skip_tag("rpms", pkgname):
+                    notag_list.append(rd)
+                else:
+                    rd_list.append(rd)
 
                 logger.warning(
                     "Package {} will be rebuilt for {}".format(
@@ -126,8 +130,15 @@ def periodic_cleanup():
         )
 
     # Fire off the builds
+    if len(notag_list) > 0:
+        yield listener.rebuild_batch(
+            config.main["build"]["target"], notag_list, do_tag=False
+        )
+
     if len(rd_list) > 0:
-        yield listener.rebuild_batch(config.main["build"]["target"], rd_list)
+        yield listener.rebuild_batch(
+            config.main["build"]["target"], rd_list, do_tag=True
+        )
 
 
 def evr(build):
