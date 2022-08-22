@@ -485,7 +485,7 @@ def load_config():
                     }
                     if cnf[k][p] is None:
                         cnf[k][p] = dict()
-                    for ck in ("source", "destination"):
+                    for ck in ("source", "destination", "target"):
                         if ck in cnf[k][p]:
                             nc[k][p][ck] = str(cnf[k][p][ck])
                     if "cache" in cnf[k][p]:
