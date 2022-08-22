@@ -154,7 +154,7 @@ def get_ref_overrides(modulemd):
     """
     ref_overrides = {}
     data = yaml.safe_load(modulemd)
-    for name, rpm_data in data["data"]["xmd"]["mbs"]["rpms"].items():
+    for name, rpm_data in data["data"]["xmd"]["mbs"].get("rpms", {}).items():
         ref_overrides[name] = rpm_data["ref"]
     logger.info(f"RPM ref overrides {ref_overrides}")
     return ref_overrides
