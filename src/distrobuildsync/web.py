@@ -1,12 +1,23 @@
 #!/usr/bin/env python3
 
 import json
+import os
+import re
 
+from twisted.python.filepath import FilePath
 from twisted.internet import reactor
 from twisted.web.resource import Resource
 from twisted.web.server import Site
+from twisted.web.static import File as WebFile
+from twisted.web.template import (
+    Element,
+    renderElement,
+    renderer,
+    TagLoader,
+    XMLFile,
+)
 
-from datetime import datetime
+from datetime import datetime, timezone
 from koji import BUILD_STATES
 
 from . import config
@@ -14,6 +25,8 @@ from . import periodic
 
 started = False
 alive = True
+
+logger = config.logger
 
 
 class RootResource(Resource):
@@ -72,6 +85,100 @@ class LivenessResource(Resource):
         return b""
 
 
+class StatusTableElement(Element):
+
+    loader = XMLFile(
+        os.path.join(os.path.dirname(__file__), "templates", "status.xml")
+    )
+
+    @renderer
+    def header(self, request, tag):
+        update_time = periodic.status_data["__updated"].isoformat()
+        yield tag.clone().fillSlots(update_time=update_time)
+
+    @renderer
+    def builds(self, request, tag):
+        for pkg in sorted(periodic.status_data.keys()):
+            if pkg.startswith("__"):
+                continue
+
+            build = periodic.status_data[pkg]
+
+            # Default colors
+            build_color = "#FFFFFF"
+            tag_color = "#FFFFFF"
+            nvr_color = "#FFFFFF"
+
+            if build is None:
+                build_color = "#99A3A4"
+                tag_color = "#99A3A4"
+                nvr_color = "#99A3A4"
+
+                yield tag.clone().fillSlots(
+                    name=pkg,
+                    nvr="UNKNOWN",
+                    nvr_bgcolor=nvr_color,
+                    build_bgcolor=build_color,
+                    state="UNKNOWN",
+                    tag_bgcolor=tag_color,
+                    tagged_build="UNKNOWN",
+                    build_time="UNKNOWN",
+                )
+
+            else:
+                if build["status"] == periodic.BuildStatus.MATCHED:
+                    build_color = "#00FF00"
+                    tag_color = "#00FF00"
+                    state = "SUCCESS"
+                elif build["status"] == periodic.BuildStatus.FAILED:
+                    build_color = "#FF0000"
+                    state = "FAILED"
+                elif build["status"] == periodic.BuildStatus.BUILDING:
+                    build_color = "#B4EEB4"
+                    state = "Building"
+                else:
+                    build_color = "#00FFFF"
+                    if build["status"] == periodic.BuildStatus.OLDER_THAN_TAG:
+                        build_color = "#FFFF00"
+                        state = "Newer build in tag"
+                        if re.search("\.fc\d\d$", build["tagged"]):
+                            tag_color = "#FF0000"
+                        else:
+                            tag_color = "#00FFFF"
+                    elif (
+                        build["status"] == periodic.BuildStatus.NEWER_THAN_TAG
+                    ):
+                        tag_color = "#FF0000"
+                        state = "Succeeded but not tagged"
+                    else:
+                        build_color = "#FF0000"
+                        tag_color = "#FF0000"
+                        nvr_color = "#FF0000"
+                        state = "Something went wrong"
+
+                if "tagged" in build:
+                    tagged_build = build["tagged"]
+                else:
+                    tagged_build = "UNKNOWN"
+
+                build_time = "UNKNOWN"
+                if "start_ts" in build and build["start_ts"]:
+                    build_time = datetime.fromtimestamp(
+                        build["start_ts"], tz=timezone.utc
+                    ).isoformat()
+
+                yield tag.clone().fillSlots(
+                    name=pkg,
+                    nvr=build["nvr"],
+                    nvr_bgcolor=nvr_color,
+                    build_bgcolor=build_color,
+                    state=state,
+                    tag_bgcolor=tag_color,
+                    tagged_build=tagged_build,
+                    build_time=build_time,
+                )
+
+
 class StatusPageResource(Resource):
     """
     StatusPageResource
@@ -91,63 +198,7 @@ class StatusPageResource(Resource):
             request.setResponseCode(503)
             return b"Server not ready, please try again in a few minutes"
 
-        page = f"""
-
-<html>
-<head><title>ELN Rebuild Status</title></head>
-<body>
-<h1>ELN Rebuild Status</h1>
-<p>Updated at {periodic.status_data['__updated']}</p>
-<table border=1 style=\"width:100%\">
-<tr><th>Name</th><th>Status</th><th>NVR</th><th>Current in ELN</th><th>Build Time</th></tr>
-"""
-        for pkg in sorted(periodic.status_data.keys()):
-            # Ignore reserved entries
-            if pkg.startswith("__"):
-                continue
-
-            build = periodic.status_data[pkg]
-
-            # Name
-            page += f"<tr><td>{pkg}</td>"
-
-            # Status
-            if build is not None:
-                if build["state"] == BUILD_STATES["COMPLETE"]:
-                    page += '<td bgcolor="#00FF00">COMPLETE</td>'
-                elif build["state"] == BUILD_STATES["BUILDING"]:
-                    page += '<td bgcolor="#00FFFF">BUILDING</td>'
-                elif build["state"] == BUILD_STATES["FAILED"]:
-                    page += '<td bgcolor="#FF0000">FAILED</td>'
-                else:
-                    page += '<td bgcolor="#FF00FF">UNKNOWN</td>'
-
-                # NVR
-                page += f'<td>{build["nvr"]}</td>'
-
-                # Tagged into 'eln'
-                if not config.is_eligible("rpms", build["name"]):
-                    page += f"<td>IGNORE</td>"
-                elif build["tagged"] == True:
-                    page += f'<td bgcolor="#00FF00">{build["nvr"]}</td>'
-                elif build["tagged"]:
-                    page += f'<td bgcolor="#FF0000">{build["tagged"]}</td>'
-                else:
-                    page += f'<td bgcolor="#FF00FF">UNKNOWN</td>'
-
-                # Build Time
-                page += f'<td>{datetime.utcfromtimestamp(build["start_ts"]) if build["start_ts"] else "UNKNOWN"}</td></tr>'
-            else:
-                if config.is_eligible("rpms", periodic.status_data[pkg]):
-                    page += "<td>UNKNOWN</td><td>UNKNOWN</td><td>UNKNOWN</td>"
-
-        page += """
-</table>
-</body>
-</html>
-"""
-
-        return page.encode("UTF-8")
+        return renderElement(request, StatusTableElement())
 
 
 class StatusJSONResource(Resource):
@@ -218,6 +269,10 @@ def setup_web_resources():
     root.putChild(b"status", StatusPageResource())
     root.putChild(b"status.json", StatusJSONResource())
     root.putChild(b"untagged", UntaggedResource())
+    root.putChild(
+        b"static", WebFile(os.path.join(os.path.dirname(__file__), "static"))
+    )
+    root.putChild(b"favicon.ico", LivenessResource())
 
     return Site(root)
 

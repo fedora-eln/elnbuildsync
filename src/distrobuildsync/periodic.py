@@ -4,6 +4,8 @@ import rpm
 from datetime import datetime, timezone
 
 from collections import defaultdict
+from enum import Enum, auto
+from koji import BUILD_STATES
 from twisted.internet import reactor, task
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.threads import deferToThread
@@ -15,6 +17,15 @@ from . import rebuild_data
 
 logger = config.logger
 status_data = None
+
+
+class BuildStatus(Enum):
+    UNKNOWN = auto()
+    FAILED = auto()
+    BUILDING = auto()
+    MATCHED = auto()
+    OLDER_THAN_TAG = auto()
+    NEWER_THAN_TAG = auto()
 
 
 @inlineCallbacks
@@ -215,19 +226,32 @@ def create_status_page():
             # The sort order goes from oldest to newest, so if we see the same
             # package, just overwrite the build data.
             _status_data[pname] = build
-            if "tagged" not in _status_data[pname]:
-                _status_data[pname]["tagged"] = None
+            if _status_data[pname]["state"] == BUILD_STATES["BUILDING"]:
+                _status_data[pname]["status"] = BuildStatus.BUILDING
+            elif _status_data[pname]["state"] == BUILD_STATES["COMPLETE"]:
+                # Unknown for now until we get down further
+                _status_data[pname]["status"] = BuildStatus.UNKNOWN
+            else:
+                # Any value other than "Building" or "Complete"
+                _status_data[pname]["status"] = BuildStatus.FAILED
+                continue
 
-            if (
-                pname in tagged_builds
-                and build["nvr"] == tagged_builds[pname]["nvr"]
-            ):
-                _status_data[pname]["tagged"] = True
-            elif pname in tagged_builds:
+            if "tagged" not in _status_data[pname]:
+                # Set a default of "Unknown"
+                _status_data[pname]["tagged"] = "Unknown"
+
+            if pname in tagged_builds and "nvr" in tagged_builds[pname]:
                 _status_data[pname]["tagged"] = tagged_builds[pname]["nvr"]
 
-            if _status_data[pname]["tagged"] is None:
-                logger.debug(f"{pname} is not tagged!")
+            if build["nvr"] == _status_data[pname]["tagged"]:
+                _status_data[pname]["status"] = BuildStatus.MATCHED
+            elif pname in tagged_builds:
+                if dest_is_older(build, tagged_builds[pname]):
+                    _status_data[pname]["status"] = BuildStatus.NEWER_THAN_TAG
+                else:
+                    _status_data[pname]["status"] = BuildStatus.OLDER_THAN_TAG
+            else:
+                logger.warn(f"{pname} is not tagged!")
 
     # Now double-check that we didn't miss any expected packages
     # This will use the defaultdict to set the value to None for
