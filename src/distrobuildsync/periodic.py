@@ -172,8 +172,6 @@ def is_higher(evr1, evr2):
 
 
 def dest_is_older(latest_src, latest_dest):
-    logger.debug("Comparing {} and {}".format(latest_src, latest_dest))
-
     # If there is no latest build in the destination tag, treat it as older.
     if not latest_dest:
         return True
