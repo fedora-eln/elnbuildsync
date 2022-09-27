@@ -40,10 +40,11 @@ ln -sf /etc/pki/tls/certs/ca-bundle.crt $(python3 -c 'import requests; print(req
 
 pip install -r test-requirements.txt
 
+pushd src
 export FEDORA_MESSAGING_CONF=/etc/fedora-messaging/config.toml
 
 python3 -c "from distrobuildsync import main; main()" --update 15 --cleanup 720 -l info $CONFIG_URL
-
+popd src
 # Added for debug
 # echo "Sleep 10 hours. Debugging..."
 # sleep 10h
