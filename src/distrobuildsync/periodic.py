@@ -226,6 +226,7 @@ def create_status_page():
             _status_data[pname] = build
             if _status_data[pname]["state"] == BUILD_STATES["BUILDING"]:
                 _status_data[pname]["status"] = BuildStatus.BUILDING
+                continue
             elif _status_data[pname]["state"] == BUILD_STATES["COMPLETE"]:
                 # Unknown for now until we get down further
                 _status_data[pname]["status"] = BuildStatus.UNKNOWN
