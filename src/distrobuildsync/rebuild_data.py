@@ -57,12 +57,16 @@ def rebuild_data_from_component(namespace, component):
         else:
             ref_overrides = None
 
+    target = config.comps[namespace].get(component, {}).get("target")
+    if not target:
+        target = config.main["build"]["target"]
+
     return RebuildData(
         namespace,
         component,
         nvr["version"],
         nvr["release"],
         scmurl,
-        config.main["build"]["target"],
+        target,
         ref_overrides,
     )
