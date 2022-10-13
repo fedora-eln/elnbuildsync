@@ -113,7 +113,7 @@ class StatusTableElement(Element):
                     nvr="UNKNOWN",
                     state="UNKNOWN",
                     detail="UNKNOWN",
-                    detail_url = detail_url,
+                    detail_url=detail_url,
                     tagged_build="UNKNOWN",
                     build_time="UNKNOWN",
                 )
@@ -123,7 +123,10 @@ class StatusTableElement(Element):
 
                 if "task_id" in build:
                     cfg = kojihelpers.get_koji_config("destination")
-                    detail_url = os.path.join(cfg["weburl"], "taskinfo?taskID={}".format(build["task_id"]))
+                    detail_url = os.path.join(
+                        cfg["weburl"],
+                        "taskinfo?taskID={}".format(build["task_id"]),
+                    )
                     detail = "Task ID: {}".format(build["task_id"])
 
                 if build["status"] == periodic.BuildStatus.MATCHED:

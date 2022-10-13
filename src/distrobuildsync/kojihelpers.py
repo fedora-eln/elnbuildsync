@@ -93,6 +93,7 @@ def get_buildsys(which, force_login=False):
 
     return bsys
 
+
 def get_koji_config(which):
     bsys_type = BuildSystemType[which]
     return koji.read_config(

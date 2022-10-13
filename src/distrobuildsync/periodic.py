@@ -243,7 +243,10 @@ def create_status_page():
 
             if build["nvr"] == _status_data[pname]["tagged"]:
                 _status_data[pname]["status"] = BuildStatus.MATCHED
-            elif pname in tagged_builds and _status_data[pname]["status"] == BuildStatus.UNKNOWN:
+            elif (
+                pname in tagged_builds
+                and _status_data[pname]["status"] == BuildStatus.UNKNOWN
+            ):
                 if dest_is_older(build, tagged_builds[pname]):
                     _status_data[pname]["status"] = BuildStatus.NEWER_THAN_TAG
                 else:
