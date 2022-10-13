@@ -74,6 +74,7 @@
                     <tr>
                         <th>Name</th>
                         <th>Status</th>
+                        <th>Detail</th>
                         <th>NVR</th>
                         <th>Current in ELN</th>
                         <th>Build Time</th>
@@ -83,6 +84,14 @@
                     <tr t:render="builds">
                         <td><t:slot name="name"/></td>
                         <td><t:slot name="state"/></td>
+                        <td>
+                            <a>
+                                <t:attr name="href">
+                                    <t:slot name="detail_url"/>
+                                </t:attr>
+                                <t:slot name="detail"/>
+                            </a>
+                        </td>
                         <td><t:slot name="nvr"/></td>
                         <td><t:slot name="tagged_build"/></td>
                         <td><t:slot name="build_time"/></td>

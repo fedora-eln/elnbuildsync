@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from koji import BUILD_STATES
 
 from . import config
+from . import kojihelpers
 from . import periodic
 
 started = False
@@ -104,57 +105,49 @@ class StatusTableElement(Element):
 
             build = periodic.status_data[pkg]
 
-            # Default colors
-            build_color = "#FFFFFF"
-            tag_color = "#FFFFFF"
-            nvr_color = "#FFFFFF"
+            detail_url = ""
 
             if build is None:
-                build_color = "#99A3A4"
-                tag_color = "#99A3A4"
-                nvr_color = "#99A3A4"
-
                 yield tag.clone().fillSlots(
                     name=pkg,
                     nvr="UNKNOWN",
-                    nvr_bgcolor=nvr_color,
-                    build_bgcolor=build_color,
                     state="UNKNOWN",
-                    tag_bgcolor=tag_color,
+                    detail="UNKNOWN",
+                    detail_url=detail_url,
                     tagged_build="UNKNOWN",
                     build_time="UNKNOWN",
                 )
 
             else:
+                detail = ""
+
+                if "task_id" in build:
+                    cfg = kojihelpers.get_koji_config("destination")
+                    detail_url = os.path.join(
+                        cfg["weburl"],
+                        "taskinfo?taskID={}".format(build["task_id"]),
+                    )
+                    detail = "Task ID: {}".format(build["task_id"])
+
                 if build["status"] == periodic.BuildStatus.MATCHED:
-                    build_color = "#00FF00"
-                    tag_color = "#00FF00"
-                    state = "SUCCESS"
-                elif build["status"] == periodic.BuildStatus.FAILED:
-                    build_color = "#FF0000"
-                    state = "FAILED"
+                    state = "SUCCEEDED"
                 elif build["status"] == periodic.BuildStatus.BUILDING:
-                    build_color = "#B4EEB4"
                     state = "Building"
                 else:
-                    build_color = "#00FFFF"
                     if build["status"] == periodic.BuildStatus.OLDER_THAN_TAG:
-                        build_color = "#FFFF00"
-                        state = "Newer build in tag"
                         if re.search("\.fc\d\d$", build["tagged"]):
-                            tag_color = "#FF0000"
+                            state = "FAILED"
+                            detail = "Fedora build in tag"
                         else:
-                            tag_color = "#00FFFF"
+                            state = "SUCCESS"
+                            detail = "Newer ELN build in tag"
                     elif (
                         build["status"] == periodic.BuildStatus.NEWER_THAN_TAG
                     ):
-                        tag_color = "#FF0000"
-                        state = "Succeeded but not tagged"
+                        state = "FAILED"
+                        detail = "Succeeded but not tagged: " + detail
                     else:
-                        build_color = "#FF0000"
-                        tag_color = "#FF0000"
-                        nvr_color = "#FF0000"
-                        state = "Something went wrong"
+                        state = "FAILED"
 
                 if "tagged" in build:
                     tagged_build = build["tagged"]
@@ -170,10 +163,9 @@ class StatusTableElement(Element):
                 yield tag.clone().fillSlots(
                     name=pkg,
                     nvr=build["nvr"],
-                    nvr_bgcolor=nvr_color,
-                    build_bgcolor=build_color,
                     state=state,
-                    tag_bgcolor=tag_color,
+                    detail=detail,
+                    detail_url=detail_url,
                     tagged_build=tagged_build,
                     build_time=build_time,
                 )
