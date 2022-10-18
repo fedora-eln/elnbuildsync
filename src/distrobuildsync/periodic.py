@@ -30,126 +30,75 @@ class BuildStatus(Enum):
 
 @inlineCallbacks
 def periodic_cleanup():
-    to_untag = set()
-
-    # Get the list of desired package names
-    desired_pkgs = [
-        component for component in sorted(config.comps["rpms"], key=str.lower)
-    ]
-
-    # Get the list of the latest packages currently tagged into the
-    # destination tag.
-    logger.info("Looking up builds. This may take a long time.")
     bsys = kojihelpers.get_buildsys(kojihelpers.BuildSystemType.destination)
-    tagged_src_pkgs = yield deferToThread(
-        bsys.listTagged, config.main["trigger"]["rpms"], latest=True
-    )
-    tagged_dest_pkgs = yield deferToThread(
+
+    # We have the set of desired packages from Content Resolver
+    desired_pkg_names = set(config.comps["rpms"].keys())
+
+    # Get the list of packages currently tagged into the destination tag
+    latest_tagged_dest_pkgs = yield deferToThread(
         bsys.listTagged, config.main["build"]["target"], latest=True
     )
+
+    # Get the list of up-to-date packages in the destination tag
+    # Exclude those not in the desired list, so they will be cleaned up below
+    latest_tagged_dest_nvrs = set(
+        [
+            pkg["nvr"]
+            for pkg in latest_tagged_dest_pkgs
+            if pkg["name"] in desired_pkg_names
+        ]
+    )
+
+    # Get the complete list of builds tagged into the destination tag
     all_tagged_dest_pkgs = yield deferToThread(
         bsys.listTagged, config.main["build"]["target"], latest=False
     )
-    tagged_dest_pkg_names = sorted([pkg["name"] for pkg in tagged_dest_pkgs])
+    all_tagged_dest_nvrs = set([pkg["nvr"] for pkg in all_tagged_dest_pkgs])
 
-    # Create a lookup table to make untagging easier later
-    all_dest_nvrs = defaultdict(list)
-    for pkg in all_tagged_dest_pkgs:
-        all_dest_nvrs[pkg["name"]].append(pkg["nvr"])
+    # Queue up the set of old builds to untag
+    nvrs_to_untag = all_tagged_dest_nvrs - latest_tagged_dest_nvrs
+    if len(nvrs_to_untag) > 0:
+        logger.debug("Preparing to untag {} builds".format(len(nvrs_to_untag)))
+        for nvr in nvrs_to_untag:
+            logger.debug("Will untag {}".format(nvr))
+    else:
+        logger.debug("No builds to untag")
 
-    rd_list = list()
-    notag_list = list()
-
-    src_builds = {build["name"]: build for build in tagged_src_pkgs}
-    dest_builds = {build["name"]: build for build in tagged_dest_pkgs}
-
-    # Make sure we have all the desired packages built
-    for pkgname in desired_pkgs:
-        if pkgname not in tagged_dest_pkg_names:
-            # No build for this package exists.
-            # Check whether we're explicitly ignoring this package (because it
-            # requires special handling).·
-            if not config.is_eligible("rpms", pkgname):
-                logger.warning(
-                    "Skipping {} because it is excluded".format(pkgname)
-                )
-                continue
-
-            # Schedule it for building
-            try:
-                rd_list.append(
-                    rebuild_data.rebuild_data_from_component("rpms", pkgname)
-                )
-            except ValueError as e:
-                logger.warning(e)
-            continue
-
-        # Get the latest build from the source and dest tags for comparison
-        latest_src = src_builds[pkgname] if pkgname in src_builds else None
-        if not latest_src:
-            logger.critical(
-                "Requested package {} does not exist in the {} tag. Ignoring.".format(
-                    pkgname, config.main["trigger"]["rpms"]
-                )
-            )
-            continue
-        latest_dest = dest_builds[pkgname] if pkgname in dest_builds else None
-        if dest_is_older(latest_src, latest_dest):
-            if config.is_eligible("rpms", pkgname):
-                try:
-                    rd = rebuild_data.rebuild_data_from_component(
-                        "rpms", pkgname
-                    )
-                except ValueError as e:
-                    logger.critical(e)
-
-                if config.skip_tag("rpms", pkgname):
-                    notag_list.append(rd)
-                else:
-                    rd_list.append(rd)
-
-                logger.warning(
-                    "Package {} will be rebuilt for {}".format(
-                        pkgname, config.main["build"]["target"]
-                    )
-                )
-            continue
-
-    # Check whether any of the packages we currently have in the tag
-    # are no longer needed.
-    for pkgname in tagged_dest_pkg_names:
-        # Check whether it's no longer needed
-        if pkgname not in desired_pkgs:
-            try:
-                for nvr in all_dest_nvrs[pkgname]:
-                    logger.warning("Adding {} to the untag list.".format(nvr))
-                    to_untag.add(nvr)
-            except ValueError as e:
-                logger.critical(e)
-            continue
-
-    # Untag the packages we no longer have in ELN
-    # This doesn't need to be blocking, so we defer it to run whenever
-    # the mainloop has time.
-    if config.do_untagging and len(to_untag) > 0:
+    if config.do_untagging and len(nvrs_to_untag) > 0:
         task.deferLater(
             reactor,
             0,
             untag_packages,
             config.main["build"]["target"],
-            to_untag,
+            nvrs_to_untag,
         )
 
-    # Fire off the builds
-    if len(notag_list) > 0:
-        yield listener.rebuild_batch(
-            config.main["build"]["target"], notag_list, do_tag=False
-        )
+    # Packages in the desired list but not in the tag should be built
+    latest_tagged_dest_pkg_names = {
+        pkg["name"] for pkg in latest_tagged_dest_pkgs
+    }
+    pkgs_to_build = desired_pkg_names - latest_tagged_dest_pkg_names
 
-    if len(rd_list) > 0:
-        yield listener.rebuild_batch(
-            config.main["build"]["target"], rd_list, do_tag=True
-        )
+    # Queue up the set of new builds to attempt
+    rd_list = []
+    for component in pkgs_to_build:
+        if config.is_eligible("rpms", component):
+            try:
+                rd = rebuild_data.rebuild_data_from_component(
+                    "rpms", component
+                )
+            except ValueError as e:
+                logger.warn(
+                    "{0} has never been built in {1}".format(
+                        component, config.main["trigger"]["rpms"]
+                    )
+                )
+                continue
+
+            rd_list.append(rd)
+
+    # The remaining packages belong in the tag
 
 
 def evr(build):

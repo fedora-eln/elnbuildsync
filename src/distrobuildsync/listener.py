@@ -135,9 +135,10 @@ def rebuild_batch(target, builds, do_tag=True):
     ):
         with bsys.multicall(batch=config.koji_batch) as mc:
             for build in builds:
-                nvr = f"{build.comp}-{build.version}-{build.release}"
-                logger.info(f"Tagging {nvr} into {target}")
-                mc.tagBuild(target, nvr)
+                if config.is_eligible("rpms", build.comp):
+                    nvr = f"{build.comp}-{build.version}-{build.release}"
+                    logger.info(f"Tagging {nvr} into {target}")
+                    mc.tagBuild(target, nvr)
 
         buildroot = kojihelpers.get_target_info(target)["build_tag_name"]
 
@@ -160,25 +161,30 @@ def build_components(target, builds):
 
     with bsys.multicall(batch=config.koji_batch) as mc:
         for rd in builds:
-            namespace = rd.ns
-            scmurl = config.split_scmurl(rd.scmurl)
-            gitcomponent = scmurl["comp"]
-            ref = scmurl["ref"]
-            downstream_scmurl = f"{prefix}/{namespace}/{gitcomponent}#{ref}"
-
-            dry = "DRY-RUN: " if config.dry_run else ""
-            scratch = "Scratch-b" if config.main["build"]["scratch"] else "B"
-            logger.info(
-                f"{dry}{scratch}uilding {downstream_scmurl} for {target}"
-            )
-
-            if not config.dry_run:
-                kojihelpers.call_distrogitsync(
-                    namespace, gitcomponent, rd.ref_overrides
+            if config.is_eligible(rd.comp):
+                namespace = rd.ns
+                scmurl = config.split_scmurl(rd.scmurl)
+                gitcomponent = scmurl["comp"]
+                ref = scmurl["ref"]
+                downstream_scmurl = (
+                    f"{prefix}/{namespace}/{gitcomponent}#{ref}"
                 )
-                mc.build(
-                    downstream_scmurl,
-                    target,
-                    {"scratch": config.main["build"]["scratch"]},
-                    priority=kojihelpers.KOJI_BACKGROUND_PRIORITY,
+
+                dry = "DRY-RUN: " if config.dry_run else ""
+                scratch = (
+                    "Scratch-b" if config.main["build"]["scratch"] else "B"
                 )
+                logger.info(
+                    f"{dry}{scratch}uilding {downstream_scmurl} for {target}"
+                )
+
+                if not config.dry_run:
+                    kojihelpers.call_distrogitsync(
+                        namespace, gitcomponent, rd.ref_overrides
+                    )
+                    mc.build(
+                        downstream_scmurl,
+                        target,
+                        {"scratch": config.main["build"]["scratch"]},
+                        priority=kojihelpers.KOJI_BACKGROUND_PRIORITY,
+                    )

@@ -211,7 +211,7 @@ def get_build(comp, ns="rpms", tag=None, bsys=None):
                 nvr[0]["nvr"],
             )
             return nvr[0]
-        logger.error("Did not find any builds for %s/%s.", ns, comp)
+        logger.debug("Did not find any builds for %s/%s.", ns, comp)
         return None
 
     if ns == "modules":
