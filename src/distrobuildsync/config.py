@@ -454,7 +454,7 @@ def load_config():
             if "rpms" in cnf:
                 cnf["rpms"].update(y["components"]["rpms"])
             if "modules" in cnf:
-                cnf["rpms"].update(y["components"]["modules"])
+                cnf["modules"].update(y["components"]["modules"])
 
         for k in ("rpms", "modules"):
             if k in cnf:
