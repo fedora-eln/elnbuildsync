@@ -73,6 +73,7 @@
                 <thead>
                     <tr>
                         <th>Name</th>
+                        <th>View</th>
                         <th>Status</th>
                         <th>Detail</th>
                         <th>NVR</th>
@@ -83,6 +84,7 @@
                 <tbody>
                     <tr t:render="builds">
                         <td><t:slot name="name"/></td>
+                        <td><t:slot name="view"/></td>
                         <td><t:slot name="state"/></td>
                         <td>
                             <a>

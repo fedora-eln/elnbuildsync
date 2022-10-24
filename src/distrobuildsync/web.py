@@ -162,6 +162,9 @@ class StatusTableElement(Element):
 
                 yield tag.clone().fillSlots(
                     name=pkg,
+                    view=config.comps["rpms"][pkg]["view"]
+                    if "view" in config.comps["rpms"][pkg]
+                    else "Unknown",
                     nvr=build["nvr"],
                     state=state,
                     detail=detail,

@@ -199,7 +199,7 @@ def get_distro_packages(
     if not which_source:
         which_source = ["source", "buildroot-source"]
 
-    merged_packages = set()
+    merged_packages = dict()
 
     for view in distro_view:
         for this_source in which_source:
@@ -216,13 +216,18 @@ def get_distro_packages(
 
             r = requests.get(url, allow_redirects=True)
             for line in r.text.splitlines():
-                merged_packages.add(line)
+                merged_packages[line] = {
+                    "view": view,
+                    "content_type": this_source,
+                }
 
     # There may be an empty line in the file, ignore it.
-    merged_packages.discard("")
+    if "" in merged_packages:
+        del merged_packages[""]
+
     logger.debug("Found a total of {} packages".format(len(merged_packages)))
 
-    return {"rpms": dict.fromkeys(merged_packages)}
+    return {"rpms": merged_packages}
 
 
 # FIXME: This needs even more error checking, e.g.
@@ -460,7 +465,10 @@ def load_config():
             if k in cnf:
                 for p in cnf[k].keys():
                     components += 1
-                    nc[k][p] = dict()
+                    if k in cnf and p in cnf[k]:
+                        nc[k][p] = cnf[k][p]
+                    else:
+                        nc[k][p] = dict()
                     cname = p
                     sname = ""
                     if k == "modules":
