@@ -11,6 +11,7 @@ from twisted.internet.defer import (
     inlineCallbacks,
     TimeoutError,
 )
+from twisted.internet.threads import deferToThread
 from queue import Empty
 
 logger = config.logger
@@ -20,7 +21,20 @@ def process_message(msg):
     logger.debug("Received a message with topic %s.", msg.topic)
 
     # Listen for repositories we are waiting on.
-    if msg.topic.endswith("buildsys.repo.done"):
+    if msg.topic.endswith("buildsys.repo.init"):
+        tag = msg.body["tag"]
+        if tag in config.awaiting_repo_init:
+            logger.inf(f"repo {tag} has started regenerating")
+            for deferred in config.awaiting_repo_init[tag]:
+                kojihelpers._wait_repo_done(tag, deferred)
+            # Clear the awaited list
+            del config.awaited_repos[tag]
+        else:
+            logger.debug(
+                "Unknown repository tag %s, ignoring.", msg.body["tag"]
+            )
+            return
+    elif msg.topic.endswith("buildsys.repo.done"):
         tag = msg.body["tag"]
         if tag in config.awaited_repos:
             logger.info(f"Repo {tag} has regenerated")

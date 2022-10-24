@@ -24,6 +24,7 @@ batch_timer = 2
 config_timer = 15 * 60  # 15 minutes
 cleanup_timer = 12 * 60  # 12 hours
 status_timer = 10  # 10 minutes
+repo_delay = 60  # One minute
 koji_batch = 500
 configuration = None
 config_ref = None
@@ -34,14 +35,15 @@ retry = 3
 scmurl = None
 main = None
 comps = None
-# If we haven't gotten the message within 15 minutes, assume we missed it
-waitrepo_timeout = 15 * 60
+# If we haven't gotten the repoInit message within 10 minutes, assume we missed it
+waitrepo_timeout = 10 * 60
 
 # Process state
 batch_processor = None
 cleanup_processor = None
 status_processor = None
 message_queue = SimpleQueue()
+awaiting_repo_init = defaultdict(list)
 awaited_repos = defaultdict(list)
 
 

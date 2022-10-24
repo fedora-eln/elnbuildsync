@@ -319,12 +319,21 @@ def get_scmurl(build_id):
     return buildinfo["source"]
 
 
+
 def wait_repo(tag):
     deferred = Deferred()
     deferred.addTimeout(config.waitrepo_timeout, reactor)
+    config.awaiting_repo_init[tag].append(deferred)
+
+    logger.debug(f"Waiting for {tag} to begin regenerating")
+    return deferred
+
+
+def _wait_repo_done(tag, deferred=Deferred()):
+    deferred.addTimeout(config.waitrepo_timeout, reactor)
     config.awaited_repos[tag].append(deferred)
 
-    logger.info(f"Waiting for {tag} to regenerate")
+    logger.debug(f"Waiting for {tag} to finish regenerating")
     return deferred
 
 
