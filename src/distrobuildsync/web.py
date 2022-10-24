@@ -130,7 +130,7 @@ class StatusTableElement(Element):
                     detail = "Task ID: {}".format(build["task_id"])
 
                 if build["status"] == periodic.BuildStatus.MATCHED:
-                    state = "SUCCEEDED"
+                    state = "SUCCESS"
                 elif build["status"] == periodic.BuildStatus.BUILDING:
                     state = "Building"
                 else:
