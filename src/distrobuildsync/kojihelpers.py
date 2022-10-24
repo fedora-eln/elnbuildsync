@@ -319,7 +319,6 @@ def get_scmurl(build_id):
     return buildinfo["source"]
 
 
-
 def wait_repo(tag):
     deferred = Deferred()
     deferred.addTimeout(config.waitrepo_timeout, reactor)
