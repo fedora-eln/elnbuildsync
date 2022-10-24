@@ -105,15 +105,16 @@ class StatusTableElement(Element):
 
             build = periodic.status_data[pkg]
 
-            detail_url = ""
+            task_url = ""
 
             if build is None:
                 yield tag.clone().fillSlots(
                     name=pkg,
                     nvr="UNKNOWN",
                     state="UNKNOWN",
-                    detail="UNKNOWN",
-                    detail_url=detail_url,
+                    detail="Not known to Koji",
+                    task="",
+                    task_url=task_url,
                     tagged_build="UNKNOWN",
                     build_time="UNKNOWN",
                 )
@@ -123,11 +124,11 @@ class StatusTableElement(Element):
 
                 if "task_id" in build:
                     cfg = kojihelpers.get_koji_config("destination")
-                    detail_url = os.path.join(
+                    task_url = os.path.join(
                         cfg["weburl"],
                         "taskinfo?taskID={}".format(build["task_id"]),
                     )
-                    detail = "Task ID: {}".format(build["task_id"])
+                    task = "{}".format(build["task_id"])
 
                 if build["status"] == periodic.BuildStatus.MATCHED:
                     state = "SUCCESS"
@@ -145,9 +146,10 @@ class StatusTableElement(Element):
                         build["status"] == periodic.BuildStatus.NEWER_THAN_TAG
                     ):
                         state = "FAILED"
-                        detail = "Succeeded but not tagged: " + detail
+                        detail = "Succeeded but not tagged"
                     else:
                         state = "FAILED"
+                        detail = "Build failed"
 
                 if "tagged" in build:
                     tagged_build = build["tagged"]
@@ -167,8 +169,9 @@ class StatusTableElement(Element):
                     else "Unknown",
                     nvr=build["nvr"],
                     state=state,
+                    task=task,
+                    task_url=task_url,
                     detail=detail,
-                    detail_url=detail_url,
                     tagged_build=tagged_build,
                     build_time=build_time,
                 )

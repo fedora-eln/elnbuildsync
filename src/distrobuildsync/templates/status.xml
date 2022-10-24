@@ -56,6 +56,7 @@
                         <th>Name</th>
                         <th>View</th>
                         <th>Status</th>
+                        <th>Koji Task</th>
                         <th>Detail</th>
                         <th>NVR</th>
                         <th>Current in ELN</th>
@@ -70,11 +71,12 @@
                         <td>
                             <a>
                                 <t:attr name="href">
-                                    <t:slot name="detail_url"/>
+                                    <t:slot name="task_url"/>
                                 </t:attr>
-                                <t:slot name="detail"/>
+                                <t:slot name="task"/>
                             </a>
                         </td>
+                        <td><t:slot name="detail"/></td>
                         <td><t:slot name="nvr"/></td>
                         <td><t:slot name="tagged_build"/></td>
                         <td><t:slot name="build_time"/></td>
@@ -85,6 +87,7 @@
                         <th>Name</th>
                         <th>View</th>
                         <th>Status</th>
+                        <th>Koji Task</th>
                         <th>Detail</th>
                         <th>NVR</th>
                         <th>Current in ELN</th>
