@@ -59,10 +59,10 @@ def get_buildsys(which, force_login=False):
     )
 
     try:
-        bsys = koji.read_config(
+        cfg = koji.read_config(
             profile_name=config.main[bsys_type.name]["profile"]
         )
-        bsys = koji.ClientSession(bsys["server"], opts=bsys)
+        bsys = koji.ClientSession(bsys["server"], opts=cfg)
     except Exception:
         logger.exception(
             'Failed initializing the %s koji instance with the "%s" profile, skipping.',
