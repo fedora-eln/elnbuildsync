@@ -175,12 +175,7 @@ def build_components(target, builds):
 
     with bsys.multicall(batch=config.koji_batch) as mc:
         for rd in builds:
-            # We occasionally crash here for unknown reasons,
-            # so we'll report it and continue instead.
-            if not hasattr(rd, "comp"):
-                logger.critical("BUG: crashed on rd={}".format(rd))
-                continue
-            if config.is_eligible(rd.comp):
+            if config.is_eligible(rd.ns, rd.comp):
                 namespace = rd.ns
                 scmurl = config.split_scmurl(rd.scmurl)
                 gitcomponent = scmurl["comp"]
