@@ -2,6 +2,7 @@ from . import config
 
 import koji
 import requests
+import time
 import yaml
 
 from cachetools import cached, TTLCache
@@ -58,38 +59,43 @@ def get_buildsys(which, force_login=False):
         config.main[bsys_type.name]["profile"],
     )
 
-    try:
-        cfg = koji.read_config(
-            profile_name=config.main[bsys_type.name]["profile"]
-        )
-        bsys = koji.ClientSession(cfg["server"], opts=cfg)
-    except Exception:
-        logger.exception(
-            'Failed initializing the %s koji instance with the "%s" profile, skipping.',
-            bsys_type.name,
-            config.main[bsys_type.name]["profile"],
-        )
-        return None
+    bsys = None
+    while not bsys:
+        try:
+            cfg = koji.read_config(
+                profile_name=config.main[bsys_type.name]["profile"]
+            )
+            bsys = koji.ClientSession(cfg["server"], opts=cfg)
+        except Exception:
+            logger.exception(
+                'Failed initializing the %s koji instance with the "%s" profile, skipping.',
+                bsys_type.name,
+                config.main[bsys_type.name]["profile"],
+            )
+            bsys = None
+            time.sleep(1)
     logger.debug("The %s koji instance initialized.", bsys_type.name)
     if bsys_type is BuildSystemType.destination or force_login:
         logger.debug(
             "Authenticating with the %s koji instance." % bsys_type.name
         )
-        try:
-            # It's safe to always log out. It's a no-op if not currently logged in,
-            # but we want to make sure the gssapi_login() runs.
-            bsys.logout()
-            bsys.gssapi_login()
-        except Exception:
-            logger.exception(
-                "Failed authenticating against the %s koji instance, skipping."
+
+        while not bsys.logged_in:
+            try:
+                # It's safe to always log out. It's a no-op if not currently logged in,
+                # but we want to make sure the gssapi_login() runs.
+                bsys.logout()
+                bsys.gssapi_login()
+            except koji.GSSAPIAuthError as e:
+                logger.exception(
+                    "Failed authenticating against the %s koji instance, retrying."
+                    % bsys_type.name
+                )
+                time.sleep(1)
+            logger.debug(
+                "Successfully authenticated with the %s koji instance."
                 % bsys_type.name
             )
-            return None
-        logger.debug(
-            "Successfully authenticated with the %s koji instance."
-            % bsys_type.name
-        )
 
     return bsys
 
