@@ -110,6 +110,7 @@ class StatusTableElement(Element):
             if build is None:
                 yield tag.clone().fillSlots(
                     name=pkg,
+                    view="UNKNOWN",
                     nvr="UNKNOWN",
                     state="UNKNOWN",
                     detail="Not known to Koji",
@@ -164,9 +165,7 @@ class StatusTableElement(Element):
 
                 yield tag.clone().fillSlots(
                     name=pkg,
-                    view=config.comps["rpms"][pkg]["view"]
-                    if "view" in config.comps["rpms"][pkg]
-                    else "Unknown",
+                    view=build["view"],
                     nvr=build["nvr"],
                     state=state,
                     task=task,

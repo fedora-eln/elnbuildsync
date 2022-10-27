@@ -173,6 +173,11 @@ def create_status_page():
             # The sort order goes from oldest to newest, so if we see the same
             # package, just overwrite the build data.
             _status_data[pname] = build
+            _status_data[pname]["view"] = (
+                config.comps["rpms"][pname]["view"]
+                if "view" in config.comps["rpms"][pname]
+                else "Unknown"
+            )
             if _status_data[pname]["state"] == BUILD_STATES["BUILDING"]:
                 _status_data[pname]["status"] = BuildStatus.BUILDING
                 continue
