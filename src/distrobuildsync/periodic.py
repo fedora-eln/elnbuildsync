@@ -176,7 +176,7 @@ def create_status_page():
             _status_data[pname]["view"] = (
                 config.comps["rpms"][pname]["view"]
                 if "view" in config.comps["rpms"][pname]
-                else "Unknown"
+                else "UNKNOWN"
             )
             if _status_data[pname]["state"] == BUILD_STATES["BUILDING"]:
                 _status_data[pname]["status"] = BuildStatus.BUILDING
