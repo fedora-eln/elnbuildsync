@@ -206,7 +206,7 @@ def create_status_page():
                 else:
                     _status_data[pname]["status"] = BuildStatus.OLDER_THAN_TAG
             else:
-                logger.warn(f"{pname} is not tagged!")
+                logger.debug(f"{build['nvr']} is not tagged!")
 
     # Now double-check that we didn't miss any expected packages
     # This will use the defaultdict to set the value to None for
