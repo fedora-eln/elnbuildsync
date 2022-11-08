@@ -1,6 +1,8 @@
 import logging
 import re
 import rpm
+import os
+import pprint
 from datetime import datetime, timezone
 
 from collections import defaultdict
@@ -21,11 +23,10 @@ status_data = None
 
 class BuildStatus(Enum):
     UNKNOWN = auto()
+    ERRORED = auto()
+    SUCCEEDED = auto()
     FAILED = auto()
     BUILDING = auto()
-    MATCHED = auto()
-    OLDER_THAN_TAG = auto()
-    NEWER_THAN_TAG = auto()
 
 
 @inlineCallbacks
@@ -112,21 +113,27 @@ def evr(build):
     epoch = "0"
     version = build["version"]
     p = re.compile(".(fc|eln)[0-9]*")
-    release = re.sub(p, "", build["release"])
+    # release = re.sub(p, "", build["release"])
+    release = build["release"]
     return epoch, version, release
 
 
 def is_higher(evr1, evr2):
-    return rpm.labelCompare(evr1, evr2) > 0
+    # Returns True if they are the same or evr1 is higher than evr2
+    # Returns False if evr1 is lower
+    res = rpm.labelCompare(evr1, evr2) >= 0
+    logger.debug(f"Comparing {evr1} to {evr2}: {res}")
+
+    return res
 
 
-def dest_is_older(latest_src, latest_dest):
+def dest_is_newer(latest_src, latest_dest):
     # If there is no latest build in the destination tag, treat it as older.
     if not latest_dest:
-        return True
+        return False
 
-    # Otherwise, return whether latest_src is newr than latest_dest
-    return is_higher(evr(latest_src), evr(latest_dest))
+    # Otherwise, return whether latest_dest is newer than latest_src
+    return is_higher(evr(latest_dest), evr(latest_src))
 
 
 def untag_packages(target, nvrs):
@@ -164,6 +171,8 @@ def create_status_page():
     _status_data = defaultdict(lambda: None)
     _status_data["__updated"] = datetime.now(timezone.utc)
 
+    dest_url_base = kojihelpers.get_koji_config("destination")["weburl"]
+
     # Get the list of packages that DBS has built.
     for build in bsys.listBuilds(
         userID=username, queryOpts={"order": "start_ts"}
@@ -178,35 +187,58 @@ def create_status_page():
                 if "view" in config.comps["rpms"][pname]
                 else "UNKNOWN"
             )
+            _status_data[pname]["status_detail"] = ""
+            _status_data[pname]["build_url"] = os.path.join(
+                dest_url_base, "taskinfo?taskID={}".format(build["task_id"])
+            )
+
             if _status_data[pname]["state"] == BUILD_STATES["BUILDING"]:
                 _status_data[pname]["status"] = BuildStatus.BUILDING
                 continue
-            elif _status_data[pname]["state"] == BUILD_STATES["COMPLETE"]:
+
+            elif (
+                _status_data[pname]["state"] == BUILD_STATES["COMPLETE"]
+                or _status_data[pname]["state"] == BUILD_STATES["FAILED"]
+            ):
                 # Unknown for now until we get down further
                 _status_data[pname]["status"] = BuildStatus.UNKNOWN
+
             else:
-                # Any value other than "Building" or "Complete"
-                _status_data[pname]["status"] = BuildStatus.FAILED
+                # Any value other than "Building", "Complete" or FAILED
+                _status_data[pname]["status"] = BuildStatus.ERRORED
+                _status_data[pname]["status_detail"] = "Canceled or Deleted"
 
             if "tagged" not in _status_data[pname]:
                 # Set a default of "Unknown"
-                _status_data[pname]["tagged"] = "Unknown"
+                _status_data[pname]["tagged"] = "UNKNOWN"
 
             if pname in tagged_builds and "nvr" in tagged_builds[pname]:
                 _status_data[pname]["tagged"] = tagged_builds[pname]["nvr"]
 
             if build["nvr"] == _status_data[pname]["tagged"]:
-                _status_data[pname]["status"] = BuildStatus.MATCHED
+                _status_data[pname]["status"] = BuildStatus.SUCCEEDED
             elif (
                 pname in tagged_builds
                 and _status_data[pname]["status"] == BuildStatus.UNKNOWN
             ):
-                if dest_is_older(build, tagged_builds[pname]):
-                    _status_data[pname]["status"] = BuildStatus.NEWER_THAN_TAG
+                # Check whether the latest tagged package is ELN or Fedora
+                if re.search("\.fc\d\d$", build["tagged"]):
+                    _status_data[pname]["status"] = BuildStatus.FAILED
+                    _status_data[pname][
+                        "status_detail"
+                    ] = "Fedora build in tag"
+
+                elif dest_is_newer(build, tagged_builds[pname]):
+                    _status_data[pname]["status"] = BuildStatus.SUCCEEDED
+                    _status_data[pname][
+                        "status_detail"
+                    ] = "Built by another user"
                 else:
-                    _status_data[pname]["status"] = BuildStatus.OLDER_THAN_TAG
+                    _status_data[pname]["status"] = BuildStatus.FAILED
+                    _status_data[pname]["status_detail"] = "Build failed"
             else:
-                logger.debug(f"{build['nvr']} is not tagged!")
+                _status_data[pname]["status"] = BuildStatus.FAILED
+                _status_data[pname]["status_detail"] = "Build is not tagged"
 
     # Now double-check that we didn't miss any expected packages
     # This will use the defaultdict to set the value to None for

@@ -92,8 +92,10 @@ def get_buildsys(which, force_login=False):
                     % bsys_type.name
                 )
                 time.sleep(1)
+
+            username = bsys.getLoggedInUser()["name"]
             logger.debug(
-                "Successfully authenticated with the %s koji instance."
+                f"Successfully authenticated with the %s koji instance as user {username}"
                 % bsys_type.name
             )
 
