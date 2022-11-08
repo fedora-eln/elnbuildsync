@@ -121,41 +121,23 @@ class StatusTableElement(Element):
                 )
 
             else:
-                detail = ""
-
                 if "task_id" in build:
-                    cfg = kojihelpers.get_koji_config("destination")
-                    task_url = os.path.join(
-                        cfg["weburl"],
-                        "taskinfo?taskID={}".format(build["task_id"]),
-                    )
-                    task = "{}".format(build["task_id"])
+                    task = build["build_url"]
 
-                if build["status"] == periodic.BuildStatus.MATCHED:
+                if build["status"] == periodic.BuildStatus.SUCCEEDED:
                     state = "SUCCESS"
                 elif build["status"] == periodic.BuildStatus.BUILDING:
                     state = "Building"
+                elif build["status"] == periodic.BuildStatus.FAILED:
+                    state = "FAILED"
                 else:
-                    if build["status"] == periodic.BuildStatus.OLDER_THAN_TAG:
-                        if re.search("\.fc\d\d$", build["tagged"]):
-                            state = "FAILED"
-                            detail = "Fedora build in tag"
-                        else:
-                            state = "SUCCESS"
-                            detail = "Newer ELN build in tag"
-                    elif (
-                        build["status"] == periodic.BuildStatus.NEWER_THAN_TAG
-                    ):
-                        state = "FAILED"
-                        detail = "Succeeded but not tagged"
-                    else:
-                        state = "FAILED"
-                        detail = "Build failed"
+                    state = "Error"
 
-                if "tagged" in build:
-                    tagged_build = build["tagged"]
-                else:
-                    tagged_build = "UNKNOWN"
+                detail = (
+                    build["status_detail"] if build["status_detail"] else ""
+                )
+
+                tagged_build = build.get("tagged", "UNKNOWN")
 
                 build_time = "UNKNOWN"
                 if "start_ts" in build and build["start_ts"]:
