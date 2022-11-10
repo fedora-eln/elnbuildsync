@@ -122,7 +122,8 @@ class StatusTableElement(Element):
 
             else:
                 if "task_id" in build:
-                    task = build["build_url"]
+                    task = str(build["task_id"])
+                    task_url = build.get("build_url", "")
 
                 if build["status"] == periodic.BuildStatus.SUCCEEDED:
                     state = "SUCCESS"
