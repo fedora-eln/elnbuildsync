@@ -92,6 +92,7 @@ def get_buildsys(which, force_login=False):
                     % bsys_type.name
                 )
                 time.sleep(1)
+                continue
 
             username = bsys.getLoggedInUser()["name"]
             logger.debug(
