@@ -1,6 +1,7 @@
 import git
 import logging
 import os
+import re
 import requests
 import tempfile
 import twisted.internet.utils
@@ -534,17 +535,19 @@ def is_eligible(ns, comp):
         logger.debug(f"{comp} is not an approved component, ignoring")
         return False
 
-    if comp in config.main["control"]["exclude"][ns]:
-        logger.debug(f"{ns}/{comp} is on the exclude list, skipping")
-        return False
+    for pattern in config.main["control"]["exclude"][ns]:
+        if re.search(pattern, comp):
+            logger.debug(f"{ns}/{comp} is on the exclude list, skipping")
+            return False
 
     return True
 
 
 def skip_tag(ns, comp):
-    if comp in config.main["control"]["skip_tag"][ns]:
-        logger.debug(
-            f"{ns}/{comp} is on the skip_tag list, building immediately"
-        )
-        return True
+    for pattern in config.main["control"]["skip_tag"][ns]:
+        if re.search(pattern, comp):
+            logger.debug(
+                f"{ns}/{comp} is on the skip_tag list, building immediately"
+            )
+            return True
     return False
