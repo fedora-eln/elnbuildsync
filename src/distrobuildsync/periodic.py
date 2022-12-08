@@ -98,6 +98,7 @@ def periodic_cleanup():
                 continue
 
             rd_list.append(rd)
+    rebuild_data.build_components(config.main["build"]["target"], rd_list)
 
     # The remaining packages belong in the tag
 

@@ -2,7 +2,7 @@ import logging
 
 from . import config
 from . import kojihelpers
-from .rebuild_data import RebuildData
+from .rebuild_data import RebuildData, build_components
 
 from collections import defaultdict, namedtuple
 from twisted.internet import reactor, task
@@ -165,40 +165,3 @@ def rebuild_batch(target, builds, do_tag=True):
             logger.warning(f"Timed out waiting for {buildroot} to regenerate.")
 
     build_components(target, builds)
-
-
-def build_components(target, builds):
-    bsys = kojihelpers.get_buildsys("destination")
-    prefix = config.main["build"]["prefix"]
-    if not target:
-        target = config.main["build"]["target"]
-
-    with bsys.multicall(batch=config.koji_batch) as mc:
-        for rd in builds:
-            if config.is_eligible(rd.ns, rd.comp):
-                namespace = rd.ns
-                scmurl = config.split_scmurl(rd.scmurl)
-                gitcomponent = scmurl["comp"]
-                ref = scmurl["ref"]
-                downstream_scmurl = (
-                    f"{prefix}/{namespace}/{gitcomponent}#{ref}"
-                )
-
-                dry = "DRY-RUN: " if config.dry_run else ""
-                scratch = (
-                    "Scratch-b" if config.main["build"]["scratch"] else "B"
-                )
-                logger.info(
-                    f"{dry}{scratch}uilding {downstream_scmurl} for {target}"
-                )
-
-                if not config.dry_run:
-                    kojihelpers.call_distrogitsync(
-                        namespace, gitcomponent, rd.ref_overrides
-                    )
-                    mc.build(
-                        downstream_scmurl,
-                        target,
-                        {"scratch": config.main["build"]["scratch"]},
-                        priority=kojihelpers.KOJI_BACKGROUND_PRIORITY,
-                    )
