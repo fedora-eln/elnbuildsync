@@ -71,6 +71,7 @@ def rebuild_data_from_component(namespace, component):
         ref_overrides,
     )
 
+
 def build_components(target, builds):
     bsys = kojihelpers.get_buildsys("destination")
     prefix = config.main["build"]["prefix"]
