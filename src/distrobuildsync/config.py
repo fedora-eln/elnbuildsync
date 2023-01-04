@@ -204,8 +204,8 @@ def get_distro_packages(
 
     merged_packages = dict()
 
-    for view in distro_view:
-        for this_source in which_source:
+    for view in reversed(distro_view):
+        for this_source in reversed(which_source):
             url = (
                 "{distro_url}"
                 "/view-{this_source}-package-name-list--view-{view}.txt"
