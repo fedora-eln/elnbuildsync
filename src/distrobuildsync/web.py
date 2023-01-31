@@ -203,9 +203,9 @@ class StatusJSONResource(Resource):
         return json.dumps(periodic.status_data, default=str).encode("UTF-8")
 
 
-class UntaggedResource(Resource):
+class FailedResource(Resource):
     """
-    UntaggedResource
+    FailedResource
 
     Returns a list of packages whose NVRs aren't the latest in the destination tag
     """
@@ -233,7 +233,7 @@ class UntaggedResource(Resource):
 
             if (
                 build is None
-                or (build and not build["tagged"] == True)
+                or (build and build["status"] == periodic.BuildStatus.FAILED)
                 and config.is_eligible("rpms", build["name"])
             ):
                 page += f"{pkg}\n"
@@ -248,7 +248,7 @@ def setup_web_resources():
     root.putChild(b"alive", LivenessResource())
     root.putChild(b"status", StatusPageResource())
     root.putChild(b"status.json", StatusJSONResource())
-    root.putChild(b"untagged", UntaggedResource())
+    root.putChild(b"failed", FailedResource())
     root.putChild(
         b"static", WebFile(os.path.join(os.path.dirname(__file__), "static"))
     )
