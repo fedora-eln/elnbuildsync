@@ -110,7 +110,7 @@ def get_koji_config(which):
     )
 
 
-def get_build_info(nvr):
+def get_build_info(nvr, which="source"):
     """Get SCMURL, plus extra attributes for modules, for a source build system
     build NVR.  NVRs are unique.
 
@@ -122,7 +122,7 @@ def get_build_info(nvr):
         logger.critical("DistroBuildSync is not configured, aborting.")
         return None
 
-    bsys = get_buildsys("source")
+    bsys = get_buildsys(which)
     if bsys is None:
         logger.error(
             "Build system unavailable, cannot retrieve the build info of %s.",
