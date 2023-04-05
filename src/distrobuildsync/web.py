@@ -87,7 +87,6 @@ class LivenessResource(Resource):
 
 
 class StatusTableElement(Element):
-
     loader = XMLFile(
         os.path.join(os.path.dirname(__file__), "templates", "status.xml")
     )
