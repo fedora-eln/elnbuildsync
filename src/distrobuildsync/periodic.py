@@ -2,12 +2,12 @@ import logging
 import re
 import rpm
 import os
-import pprint
 from datetime import datetime, timezone
 
 from collections import defaultdict
 from enum import Enum, auto
 from koji import BUILD_STATES
+from pprint import pprint
 from twisted.internet import reactor, task
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.threads import deferToThread
@@ -119,11 +119,14 @@ def evr(build):
     return epoch, version, release
 
 
-def is_higher(evr1, evr2):
+def is_higher(pkg1, pkg2):
     # Returns True if they are the same or evr1 is higher than evr2
     # Returns False if evr1 is lower
-    res = rpm.labelCompare(evr1, evr2) >= 0
-    logger.debug(f"Comparing {evr1} to {evr2}: {res}")
+    res = rpm.labelCompare(evr(pkg1), evr(pkg2)) >= 0
+    if res:
+        logger.debug(f"{pkg1['nvr']} is higher than {pkg2['nvr']}")
+    else:
+        logger.debug(f"{pkg1['nvr']} is not higher than {pkg2['nvr']}")
 
     return res
 
@@ -134,7 +137,7 @@ def dest_is_newer(latest_src, latest_dest):
         return False
 
     # Otherwise, return whether latest_dest is newer than latest_src
-    return is_higher(evr(latest_dest), evr(latest_src))
+    return is_higher(latest_dest, latest_src)
 
 
 def untag_packages(target, nvrs):
