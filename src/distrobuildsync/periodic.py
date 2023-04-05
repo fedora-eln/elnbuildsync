@@ -185,7 +185,10 @@ def create_status_page():
         if pname in desired_pkgs:
             # The sort order goes from oldest to newest, so if we see the same
             # package, just overwrite the build data.
-            _status_data[pname] = build
+            if pname in _status_data:
+                _status_data[pname].update(build)
+            else:
+                _status_data[pname] = build
             _status_data[pname]["view"] = (
                 config.comps["rpms"][pname]["view"]
                 if "view" in config.comps["rpms"][pname]
@@ -200,17 +203,9 @@ def create_status_page():
                 _status_data[pname]["status"] = BuildStatus.BUILDING
                 continue
 
-            elif (
-                _status_data[pname]["state"] == BUILD_STATES["COMPLETE"]
-                or _status_data[pname]["state"] == BUILD_STATES["FAILED"]
-            ):
+            else:
                 # Unknown for now until we get down further
                 _status_data[pname]["status"] = BuildStatus.UNKNOWN
-
-            else:
-                # Any value other than "Building", "Complete" or FAILED
-                _status_data[pname]["status"] = BuildStatus.ERRORED
-                _status_data[pname]["status_detail"] = "Canceled or Deleted"
 
             if "tagged" not in _status_data[pname]:
                 # Set a default of "Unknown"
@@ -226,7 +221,7 @@ def create_status_page():
                 and _status_data[pname]["status"] == BuildStatus.UNKNOWN
             ):
                 # Check whether the latest tagged package is ELN or Fedora
-                if re.search("\.fc\d\d$", build["tagged"]):
+                if re.search("\.fc\d\d$", _status_data[pname]["tagged"]):
                     _status_data[pname]["status"] = BuildStatus.FAILED
                     _status_data[pname][
                         "status_detail"
