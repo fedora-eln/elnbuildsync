@@ -105,7 +105,22 @@ def process_message(msg):
     if not target_override:
         target_override = config.main["build"]["target"]
 
+    # Check whether the latest-tagged build in the tag was built from the same
+    # SCMURL
+    latest_nvr = kojihelpers.get_build(
+        ns=ns,
+        comp=comp,
+        tag=target_override,
+        bsys=kojihelpers.get_buildsys("destination"),
+    )
+    latest_buildinfo = kojihelpers.get_build_info(latest_nvr, "destination")
+
     scmurl = kojihelpers.get_scmurl(msg.body["build_id"])
+    if latest_buildinfo is not None and scmurl == latest_buildinfo["scmurl"]:
+        logger.warning(
+            "{} has already been built in {}".format(scmurl, target_override)
+        )
+        return
 
     rd = RebuildData(
         ns, comp, version, release, scmurl, target_override, ref_overrides

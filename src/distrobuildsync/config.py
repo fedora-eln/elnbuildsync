@@ -105,7 +105,7 @@ def split_scmurl(url):
     return {
         "link": scm[0],
         "ref": scm[1] if len(scm) >= 2 else None,
-        "ns": nscomp[-2] if len(nscomp) >= 2 else None,
+        "ns": nscomp[-2] if nscomp and len(nscomp) >= 2 else None,
         "comp": nscomp[-1] if nscomp else None,
     }
 
