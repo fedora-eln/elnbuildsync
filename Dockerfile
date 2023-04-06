@@ -9,14 +9,14 @@ RUN INSTALL_PKGS="python3 python3-devel python3-setuptools python3-pip python3-v
         gettext rpm wget tar which openssl krb5-devel redhat-rpm-config libcurl-devel rpm-devel \
         httpd httpd-devel atlas-devel gcc-gfortran libffi-devel gcc libffi-devel libtool-ltdl enchant \
         git wget krb5-workstation krb5-libs openssl-devel nss_wrapper koji git fedora-messaging \
-        /tmp/redhat-internal-cert-install-0.1-23.el7.csb.noarch.rpm" && \
+        /tmp/redhat-internal-cert-install-*.noarch.rpm" && \
     dnf -y --setopt=tsflags=nodocs install $INSTALL_PKGS && \
     dnf -y clean all --enablerepo='*' && \
-    rpm -i /tmp/python3-brewkoji-1.27-1.fc34eng.noarch.rpm \
-           /tmp/brewkoji-1.27-1.fc34eng.noarch.rpm && \
-    rm -fr /tmp/python3-brewkoji-1.27-1.fc34eng.noarch.rpm \
-           /tmp/brewkoji-1.27-1.fc34eng.noarch.rpm \
-           /tmp/redhat-internal-cert-install-0.1-23.el7.csb.noarch.rpm
+    rpm -i /tmp/python3-brewkoji-*.noarch.rpm \
+           /tmp/brewkoji-*.noarch.rpm && \
+    rm -fr /tmp/python3-brewkoji-*.noarch.rpm \
+           /tmp/brewkoji-*.noarch.rpm \
+           /tmp/redhat-internal-cert-install-*.noarch.rpm
 
 RUN mkdir /tmp/.ssh /centos_rsa /keytab /.cache && \
     touch /.gitconfig .gitconfig distrobaker_centos_id_rsa.pub
