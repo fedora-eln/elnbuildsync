@@ -234,7 +234,11 @@ class FailedResource(Resource):
                 logger.debug(f"Args: {request.args}")
 
                 try:
-                    if build and build["view"].encode("utf-8") not in request.args[b"view"]:
+                    if (
+                        build
+                        and build["view"].encode("utf-8")
+                        not in request.args[b"view"]
+                    ):
                         continue
                 except KeyError:
                     pass
