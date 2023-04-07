@@ -230,12 +230,20 @@ class FailedResource(Resource):
 
             build = periodic.status_data[pkg]
 
-            if (
-                build is None
-                or (build and build["status"] == periodic.BuildStatus.FAILED)
-                and config.is_eligible("rpms", build["name"])
-            ):
-                page += f"{pkg}\n"
+            if config.is_eligible("rpms", pkg):
+                logger.debug(f"Args: {request.args}")
+
+                try:
+                    if build and build["view"].encode("utf-8") not in request.args[b"view"]:
+                        continue
+                except KeyError:
+                    pass
+
+                if build and build["status"] == periodic.BuildStatus.FAILED:
+                    page += f"{pkg}\n"
+
+                if not build and b"include_unknown" in request.args:
+                    page += f"{pkg}\n"
 
         return page.encode("UTF-8")
 
