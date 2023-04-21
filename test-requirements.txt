@@ -8,4 +8,3 @@ parameterized
 pyyaml>=5.3.1
 regex>=2020.10.11
 rpkg>=1.61
-rpm-py-installer

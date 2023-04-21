@@ -32,7 +32,7 @@ klist
 python3 --version
 
 echo "Activation virtualenv"
-virtualenv .venv 
+virtualenv --system-site-packages .venv
 . .venv/bin/activate
 pip install --upgrade pip
 pip install requests
