@@ -36,7 +36,6 @@ virtualenv --system-site-packages .venv
 . .venv/bin/activate
 pip install --upgrade pip
 pip install requests
-ln -sf /etc/pki/tls/certs/ca-bundle.crt $(python3 -c 'import requests; print(requests.certs.where())')
 
 pip install -r test-requirements.txt
 
