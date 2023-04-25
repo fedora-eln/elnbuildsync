@@ -173,11 +173,11 @@ class StatusPageResource(Resource):
         return Resource.getChild(self, name, request)
 
     def render_GET(self, request):
-        if not periodic.status_data:
+        if not periodic.status_page:
             request.setResponseCode(503)
             return b"Server not ready, please try again in a few minutes"
 
-        return renderElement(request, StatusTableElement())
+        return periodic.status_page
 
 
 class StatusJSONResource(Resource):

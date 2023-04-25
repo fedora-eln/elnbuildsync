@@ -11,14 +11,17 @@ from pprint import pprint
 from twisted.internet import reactor, task
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.threads import deferToThread
+from twisted.web.template import flattenString
 
 from . import config
 from . import kojihelpers
 from . import listener
 from . import rebuild_data
+from .web import StatusTableElement
 
 logger = config.logger
 status_data = None
+status_page = None
 
 
 class BuildStatus(Enum):
@@ -154,6 +157,7 @@ def untag_packages(target, nvrs):
 @inlineCallbacks
 def create_status_page():
     global status_data
+    global status_page
 
     logger.info("Refreshing status page")
 
@@ -259,4 +263,6 @@ def create_status_page():
             )
 
     status_data = _status_data
+    status_page = yield flattenString(None, StatusTableElement())
+
     logger.debug("Status page updated")
