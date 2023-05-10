@@ -3,3 +3,4 @@ lib/__pycache__
 /.tox/
 .idea/
 docker_files/
+*.egg-info/
