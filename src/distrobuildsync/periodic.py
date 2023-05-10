@@ -1,4 +1,5 @@
 import logging
+import htmlmin
 import re
 import rpm
 import os
@@ -263,6 +264,10 @@ def create_status_page():
             )
 
     status_data = _status_data
-    status_page = yield flattenString(None, StatusTableElement())
 
+    raw_page = yield flattenString(None, StatusTableElement())
+    logger.debug(f"Uncompressed page: {len(raw_page)}")
+
+    status_page = htmlmin.minify(raw_page.decode("utf-8")).encode()
+    logger.debug(f"Compressed page: {len(status_page)}")
     logger.debug("Status page updated")

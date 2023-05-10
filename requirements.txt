@@ -1,8 +1,9 @@
 cachetools>=4.2.4
 fedora_messaging>=2.0.2
-koji-fedoramessaging-messages
 gitpython==3.1.14
 gunicorn>=20.0.4
+htmlmin
 koji>=1.22.1
+koji-fedoramessaging-messages
 pyyaml>=5.3.1
 requests-kerberos>=0.12.0
