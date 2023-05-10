@@ -2,26 +2,20 @@
 
 import json
 import os
-import re
 
-from twisted.python.filepath import FilePath
 from twisted.internet import reactor
 from twisted.web.resource import Resource
 from twisted.web.server import Site
 from twisted.web.static import File as WebFile
 from twisted.web.template import (
     Element,
-    renderElement,
     renderer,
-    TagLoader,
     XMLFile,
 )
 
 from datetime import datetime, timezone
-from koji import BUILD_STATES
 
 from . import config
-from . import kojihelpers
 from . import periodic
 
 started = False
