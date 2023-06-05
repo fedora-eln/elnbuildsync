@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from collections import defaultdict
 from enum import Enum, auto
-from koji import BUILD_STATES
+from koji import BUILD_STATES, GenericError
 from pprint import pprint
 from twisted.internet import reactor, task
 from twisted.internet.defer import inlineCallbacks
@@ -169,9 +169,16 @@ def create_status_page():
 
     bsys = kojihelpers.get_buildsys(kojihelpers.BuildSystemType.destination)
 
-    tagged_pkgs = yield deferToThread(
-        bsys.listTagged, config.main["build"]["target"], latest=True
-    )
+    try:
+        tagged_pkgs = yield deferToThread(
+            bsys.listTagged, config.main["build"]["target"], latest=True
+        )
+    except GenericError as e:
+        logger.exception(
+            "Could not communicate with Koji. Will retry in a few minutes."
+        )
+        return
+
     tagged_builds = {build["name"]: build for build in tagged_pkgs}
 
     # Self-identify
