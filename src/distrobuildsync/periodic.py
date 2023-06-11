@@ -160,121 +160,132 @@ def create_status_page():
     global status_data
     global status_page
 
-    logger.info("Refreshing status page")
-
-    # Get the list of desired package names
-    desired_pkgs = [
-        component for component in sorted(config.comps["rpms"], key=str.lower)
-    ]
-
-    bsys = kojihelpers.get_buildsys(kojihelpers.BuildSystemType.destination)
-
     try:
-        tagged_pkgs = yield deferToThread(
-            bsys.listTagged, config.main["build"]["target"], latest=True
+        logger.info("Refreshing status page")
+
+        # Get the list of desired package names
+        desired_pkgs = [
+            component
+            for component in sorted(config.comps["rpms"], key=str.lower)
+        ]
+
+        bsys = kojihelpers.get_buildsys(
+            kojihelpers.BuildSystemType.destination
         )
-    except GenericError as e:
-        logger.exception(
-            "Could not communicate with Koji. Will retry in a few minutes."
-        )
-        return
 
-    tagged_builds = {build["name"]: build for build in tagged_pkgs}
-
-    # Self-identify
-    username = bsys.getLoggedInUser()["name"]
-
-    _status_data = defaultdict(lambda: None)
-    _status_data["__updated"] = datetime.now(timezone.utc)
-
-    dest_url_base = kojihelpers.get_koji_config("destination")["weburl"]
-
-    # Get the list of packages that DBS has built.
-    for build in bsys.listBuilds(
-        userID=username, queryOpts={"order": "start_ts"}
-    ):
-        pname = build["name"]
-        if pname in desired_pkgs:
-            # The sort order goes from oldest to newest, so if we see the same
-            # package, just overwrite the build data.
-            if pname in _status_data:
-                _status_data[pname].update(build)
-            else:
-                _status_data[pname] = build
-            _status_data[pname]["view"] = (
-                config.comps["rpms"][pname]["view"]
-                if "view" in config.comps["rpms"][pname]
-                else "UNKNOWN"
+        try:
+            tagged_pkgs = yield deferToThread(
+                bsys.listTagged, config.main["build"]["target"], latest=True
             )
-            _status_data[pname]["status_detail"] = ""
-            _status_data[pname]["build_url"] = os.path.join(
-                dest_url_base, "taskinfo?taskID={}".format(build["task_id"])
+        except GenericError as e:
+            logger.exception(
+                "Could not communicate with Koji. Will retry in a few minutes."
             )
+            return
 
-            if _status_data[pname]["state"] == BUILD_STATES["BUILDING"]:
-                _status_data[pname]["status"] = BuildStatus.BUILDING
-                continue
+        tagged_builds = {build["name"]: build for build in tagged_pkgs}
 
-            else:
-                # Unknown for now until we get down further
-                _status_data[pname]["status"] = BuildStatus.UNKNOWN
+        # Self-identify
+        username = bsys.getLoggedInUser()["name"]
 
-            if "tagged" not in _status_data[pname]:
-                # Set a default of "Unknown"
-                _status_data[pname]["tagged"] = "UNKNOWN"
+        _status_data = defaultdict(lambda: None)
+        _status_data["__updated"] = datetime.now(timezone.utc)
 
-            if pname in tagged_builds and "nvr" in tagged_builds[pname]:
-                _status_data[pname]["tagged"] = tagged_builds[pname]["nvr"]
+        dest_url_base = kojihelpers.get_koji_config("destination")["weburl"]
 
-            if build["nvr"] == _status_data[pname]["tagged"]:
-                _status_data[pname]["status"] = BuildStatus.SUCCEEDED
-            elif (
-                pname in tagged_builds
-                and _status_data[pname]["status"] == BuildStatus.UNKNOWN
-            ):
-                # Check whether the latest tagged package is ELN or Fedora
-                if re.search("\.fc\d\d$", _status_data[pname]["tagged"]):
-                    _status_data[pname]["status"] = BuildStatus.FAILED
-                    _status_data[pname][
-                        "status_detail"
-                    ] = "Fedora build in tag"
+        # Get the list of packages that DBS has built.
+        for build in bsys.listBuilds(
+            userID=username, queryOpts={"order": "start_ts"}
+        ):
+            pname = build["name"]
+            if pname in desired_pkgs:
+                # The sort order goes from oldest to newest, so if we see the same
+                # package, just overwrite the build data.
+                if pname in _status_data:
+                    _status_data[pname].update(build)
+                else:
+                    _status_data[pname] = build
+                _status_data[pname]["view"] = (
+                    config.comps["rpms"][pname]["view"]
+                    if "view" in config.comps["rpms"][pname]
+                    else "UNKNOWN"
+                )
+                _status_data[pname]["status_detail"] = ""
+                _status_data[pname]["build_url"] = os.path.join(
+                    dest_url_base,
+                    "taskinfo?taskID={}".format(build["task_id"]),
+                )
 
-                elif dest_is_newer(build, tagged_builds[pname]):
+                if _status_data[pname]["state"] == BUILD_STATES["BUILDING"]:
+                    _status_data[pname]["status"] = BuildStatus.BUILDING
+                    continue
+
+                else:
+                    # Unknown for now until we get down further
+                    _status_data[pname]["status"] = BuildStatus.UNKNOWN
+
+                if "tagged" not in _status_data[pname]:
+                    # Set a default of "Unknown"
+                    _status_data[pname]["tagged"] = "UNKNOWN"
+
+                if pname in tagged_builds and "nvr" in tagged_builds[pname]:
+                    _status_data[pname]["tagged"] = tagged_builds[pname]["nvr"]
+
+                if build["nvr"] == _status_data[pname]["tagged"]:
                     _status_data[pname]["status"] = BuildStatus.SUCCEEDED
-                    _status_data[pname][
-                        "status_detail"
-                    ] = "Built by another user"
+                elif (
+                    pname in tagged_builds
+                    and _status_data[pname]["status"] == BuildStatus.UNKNOWN
+                ):
+                    # Check whether the latest tagged package is ELN or Fedora
+                    if re.search("\.fc\d\d$", _status_data[pname]["tagged"]):
+                        _status_data[pname]["status"] = BuildStatus.FAILED
+                        _status_data[pname][
+                            "status_detail"
+                        ] = "Fedora build in tag"
+
+                    elif dest_is_newer(build, tagged_builds[pname]):
+                        _status_data[pname]["status"] = BuildStatus.SUCCEEDED
+                        _status_data[pname][
+                            "status_detail"
+                        ] = "Built by another user"
+                    else:
+                        _status_data[pname]["status"] = BuildStatus.FAILED
+                        _status_data[pname]["status_detail"] = "Build failed"
                 else:
                     _status_data[pname]["status"] = BuildStatus.FAILED
-                    _status_data[pname]["status_detail"] = "Build failed"
-            else:
-                _status_data[pname]["status"] = BuildStatus.FAILED
-                _status_data[pname]["status_detail"] = "Build is not tagged"
+                    _status_data[pname][
+                        "status_detail"
+                    ] = "Build is not tagged"
 
-    # Now double-check that we didn't miss any expected packages
-    # This will use the defaultdict to set the value to None for
-    # any packages not in the list
-    [_status_data[pkg] for pkg in desired_pkgs]
+        # Now double-check that we didn't miss any expected packages
+        # This will use the defaultdict to set the value to None for
+        # any packages not in the list
+        [_status_data[pkg] for pkg in desired_pkgs]
 
-    if logger.isEnabledFor(logging.DEBUG):
-        for pkg in sorted(_status_data.keys()):
-            # Ignore reserved entries
-            if pkg.startswith("__"):
-                continue
-            logger.debug(
-                "{}: {}".format(
-                    pkg,
-                    _status_data[pkg]["start_time"]
-                    if _status_data[pkg]
-                    else "UNKNOWN",
+        if logger.isEnabledFor(logging.DEBUG):
+            for pkg in sorted(_status_data.keys()):
+                # Ignore reserved entries
+                if pkg.startswith("__"):
+                    continue
+                logger.debug(
+                    "{}: {}".format(
+                        pkg,
+                        _status_data[pkg]["start_time"]
+                        if _status_data[pkg]
+                        else "UNKNOWN",
+                    )
                 )
-            )
 
-    status_data = _status_data
+        status_data = _status_data
 
-    raw_page = yield flattenString(None, StatusTableElement())
-    logger.debug(f"Uncompressed page: {len(raw_page)}")
+        raw_page = yield flattenString(None, StatusTableElement())
+        logger.debug(f"Uncompressed page: {len(raw_page)}")
 
-    status_page = htmlmin.minify(raw_page.decode("utf-8")).encode()
-    logger.debug(f"Compressed page: {len(status_page)}")
-    logger.debug("Status page updated")
+        status_page = htmlmin.minify(raw_page.decode("utf-8")).encode()
+        logger.debug(f"Compressed page: {len(status_page)}")
+        logger.debug("Status page updated")
+    except:  # pylint: disable=broad-except
+        # Normally it's bad to catch all exceptions, but in this case the
+        # status page is purely cosmetic and will retry in a few minutes.
+        logger.exception("Unexpected error while refreshing status page.")
