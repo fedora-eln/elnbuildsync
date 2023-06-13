@@ -25,7 +25,6 @@ batch_timer = 2
 config_timer = 15 * 60  # 15 minutes
 cleanup_timer = 12 * 60  # 12 hours
 status_timer = 10  # 10 minutes
-repo_delay = 60  # One minute
 koji_batch = 500
 configuration = None
 config_ref = None
