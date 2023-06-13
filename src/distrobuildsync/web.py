@@ -47,11 +47,11 @@ class StartupResource(Resource):
         return Resource.getChild(self, name, request)
 
     def render_GET(self, request):
-        global alive
+        global started
 
         request.setHeader("Cache-Control", "no-cache")
-        if not alive:
-            request.setResponseCode(500)
+        if not started:
+            request.setResponseCode(503)
         return b""
 
 
@@ -72,11 +72,11 @@ class LivenessResource(Resource):
         return Resource.getChild(self, name, request)
 
     def render_GET(self, request):
-        global started
+        global alive
 
         request.setHeader("Cache-Control", "no-cache")
-        if not started:
-            request.setResponseCode(503)
+        if not alive:
+            request.setResponseCode(500)
         return b""
 
 

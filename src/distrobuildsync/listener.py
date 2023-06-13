@@ -28,7 +28,7 @@ def process_message(msg):
             for deferred in config.awaiting_repo_init[tag]:
                 kojihelpers._wait_repo_done(tag, deferred)
             # Clear the awaited list
-            del config.awaited_repos[tag]
+            del config.awaiting_repo_init[tag]
         else:
             logger.debug(
                 "Unknown repository tag %s, ignoring.", msg.body["tag"]
