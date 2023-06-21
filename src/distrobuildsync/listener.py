@@ -24,7 +24,7 @@ def process_message(msg):
     if msg.topic.endswith("buildsys.repo.init"):
         tag = msg.body["tag"]
         if tag in config.awaiting_repo_init:
-            logger.inf(f"repo {tag} has started regenerating")
+            logger.info(f"repo {tag} has started regenerating")
             for deferred in config.awaiting_repo_init[tag]:
                 kojihelpers._wait_repo_done(tag, deferred)
             # Clear the awaited list
