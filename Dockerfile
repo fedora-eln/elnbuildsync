@@ -5,6 +5,8 @@ WORKDIR /tmp
 COPY . .
 COPY docker_files/ /tmp
 
+RUN cat /tmp/config.toml
+
 RUN INSTALL_PKGS="python3 python3-devel python3-setuptools python3-pip python3-virtualenv nss_wrapper \
         gettext rpm wget tar which openssl krb5-devel redhat-rpm-config libcurl-devel rpm-devel \
         httpd httpd-devel atlas-devel gcc-gfortran libffi-devel gcc libffi-devel libtool-ltdl enchant \
