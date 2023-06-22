@@ -64,11 +64,11 @@ def periodic_cleanup():
     # Queue up the set of old builds to untag
     nvrs_to_untag = all_tagged_dest_nvrs - latest_tagged_dest_nvrs
     if len(nvrs_to_untag) > 0:
-        logger.debug("Preparing to untag {} builds".format(len(nvrs_to_untag)))
-        for nvr in nvrs_to_untag:
-            logger.debug("Will untag {}".format(nvr))
+        logger.info("{} builds to untag:".format(len(nvrs_to_untag)))
+        for nvr in sorted(nvrs_to_untag):
+            logger.info("\t{}".format(nvr))
     else:
-        logger.debug("No builds to untag")
+        logger.info("No builds to untag")
 
     if config.do_untagging and len(nvrs_to_untag) > 0:
         task.deferLater(
