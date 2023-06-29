@@ -98,7 +98,7 @@ def parse_args():
         dest="do_untagging",
         action="store_true",
         help="Untag all but the most recent builds in the destination target",
-        default=True,
+        default=False,
     )
 
     args = ap.parse_args()

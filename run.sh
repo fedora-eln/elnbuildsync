@@ -42,7 +42,7 @@ pip install -r test-requirements.txt
 pushd src
 export FEDORA_MESSAGING_CONF=/etc/fedora-messaging/config.toml
 
-python3 -c "from distrobuildsync import main; main()" $CONFIG_URL
+python3 -c "from distrobuildsync import main; main()" $DO_UNTAGGING $CONFIG_URL
 popd src
 # Added for debug
 # echo "Sleep 10 hours. Debugging..."
