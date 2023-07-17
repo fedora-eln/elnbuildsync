@@ -18,16 +18,32 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
+
+import click
+import logging
+
 from twisted.internet import reactor, task
 
 from . import web
 
 
-def main():
+logger = logging.getLogger(__name__)
+
+
+@click.command()
+@click.option(
+    "--log-level",
+    type=click.Choice(
+        ["DEBUG", "INFO" "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
+    ),
+)
+def main(log_level):
+    logging.basicConfig(format="%(asctime)s : %(levelname)s : %(message)s")
+    logger.setLevel(log_level)
     reactor.listenTCP(8080, web.setup_web_resources())
     reactor.run()
     pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

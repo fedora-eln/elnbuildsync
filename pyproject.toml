@@ -25,6 +25,10 @@ classifiers = [
 "Bug Tracker" = "https://github.com/fedora-eln/eln/issues"
 
 
+[project.scripts]
+elnbuildsync = "elnbuildsync:main"
+
+
 [build-system]
 requires = ["setuptools >= 40.6.0", "wheel"]
 build-backend = "setuptools.build_meta"
