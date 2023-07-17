@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # This file is part of ELNBuildSync
 # Copyright (C) 2023  Stephen Gallagher <sgallagh@redhat.com>
 
@@ -16,4 +18,5 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
-from .daemon import main
+if __name__ == "__main__":
+    pass

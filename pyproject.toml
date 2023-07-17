@@ -1,0 +1,30 @@
+[project]
+name = "ELNBuildSync"
+version = "1.0.0"
+authors  = [
+    { name = "Stephen Gallagher", email = "sgallagh@redhat.com" },
+]
+
+description = "A tool to automatically rebuild Fedora Rawhide packages for Fedora ELN"
+
+readme = "README.md"
+
+requires-python = ">=3.9"
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: POSIX :: Linux",
+    "Framework :: Twisted",
+    "Topic :: System :: Software Distribution",
+]
+
+
+[project.urls]
+"Homepage" = "https://docs.fedoraproject.org/en-US/eln/"
+"Bug Tracker" = "https://github.com/fedora-eln/eln/issues"
+
+
+[build-system]
+requires = ["setuptools >= 40.6.0", "wheel"]
+build-backend = "setuptools.build_meta"
