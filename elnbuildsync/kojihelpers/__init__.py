@@ -16,4 +16,8 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
-from .daemon import main
+from collections import defaultdict
+
+# The set of repos we're waiting on to initialize
+awaited_repos = defaultdict(list)
+awaiting_repo_init = defaultdict(list)

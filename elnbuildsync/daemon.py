@@ -22,14 +22,19 @@
 import click
 import fedora_messaging.api
 import fedora_messaging.config
-import json
 import logging
+import sys
 
 from twisted.internet import reactor
+from twisted.internet.defer import inlineCallbacks
 
+from . import config
+from .kojihelpers import tags
 from . import listener
-from . import logger
 from . import web
+
+
+logger = logging.getLogger(__name__)
 
 
 @click.command()
@@ -41,23 +46,43 @@ from . import web
     default="INFO",
     show_default=True,
 )
-def main(log_level):
-    logging.basicConfig(format="%(asctime)s : %(levelname)s : %(message)s")
-    logger.setLevel(log_level)
+@click.option("--dry-run", is_flag=True, help="Simulate actions only")
+@click.argument("config_url")
+def main(log_level, dry_run, config_url):
+    logging.basicConfig(
+        format="%(asctime)s : %(name)s : %(levelname)s : %(message)s", level=log_level
+    )
+    for handler in logging.root.handlers:
+        handler.addFilter(logging.Filter("elnbuildsync"))
     logger.debug("Debug logging enabled")
+
+    config.dry_run = dry_run
+
+    # Read in the config file
+    try:
+        config.load_config(config_url)
+    except Exception as e:
+        logger.exception(e)
+        logger.critical("Could not load configuration.")
+        sys.exit(128)
 
     # Start listening for Fedora Messages
     fedora_messaging.api.twisted_consume(listener.message_handler)
 
-    # Fedora Messaging Config
-    logger.debug(json.dumps(fedora_messaging.config.conf, indent=2))
-
     logger.debug("Starting HTTP server")
     reactor.listenTCP(8080, web.setup_web_resources())
+
+    reactor.callLater(5, test_side_tag)
 
     logger.debug("Starting Twisted mainloop")
     reactor.run()
     pass
+
+
+@inlineCallbacks
+def test_side_tag():
+    side_tag = yield tags.prepare_side_tag("eln-build")
+    logger.info(f"Side tag {side_tag} all ready for builds")
 
 
 if __name__ == "__main__":

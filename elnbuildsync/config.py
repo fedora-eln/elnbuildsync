@@ -1,0 +1,539 @@
+import git
+import logging
+import os
+import re
+import requests
+import tempfile
+import twisted.internet.utils
+import yaml
+
+from collections import defaultdict
+from queue import SimpleQueue
+
+from twisted.internet.defer import inlineCallbacks
+
+from . import config
+
+# Global logger
+logger = logging.getLogger(__name__)
+
+DEFAULT_CONTENT_RESOLVER = "https://tiny.distro.builders"
+DEFAULT_DISTRO_VIEWS = ["eln"]
+
+# Configuration options
+batch_timer = 2
+config_timer = 15 * 60  # 15 minutes
+cleanup_timer = 12 * 60  # 12 hours
+status_timer = 10  # 10 minutes
+koji_batch = 500
+configuration = None
+config_ref = None
+distrogitsync = None
+dry_run = False
+do_untagging = False
+retry = 3
+scmurl = None
+main = None
+comps = None
+# If we haven't gotten the repoInit message within 10 minutes, assume we missed it
+waitrepo_timeout = 10 * 60
+
+# Process state
+batch_processor = None
+cleanup_processor = None
+status_processor = None
+message_queue = SimpleQueue()
+
+
+class ConfigError(Exception):
+    pass
+
+
+class UnknownRefError(ConfigError):
+    pass
+
+
+def loglevel(val=None):
+    """Gets or, optionally, sets the logging level of the module.
+    Standard numeric levels are accepted.
+
+    :param val: The logging level to use, optional
+    :returns: The current logging level
+    """
+    if val is not None:
+        try:
+            logger.setLevel(val)
+        except ValueError:
+            logger.warning(
+                "Invalid log level passed to DistroBuildSync logger: %s", val
+            )
+        except Exception:
+            logger.exception("Unable to set log level: %s", val)
+    return logger.getEffectiveLevel()
+
+
+def retries(val=None):
+    """Gets or, optionally, sets the number of retries for various
+    operational failures.  Typically used for handling dist-git requests.
+
+    :param val: The number of retries to attept, optional
+    :returns: The current value of retries
+    """
+    global retry
+    if val is not None:
+        retry = val
+    return retry
+
+
+def split_scmurl(url):
+    """Splits a `link#ref` style URLs into the link and ref parts.  While
+    generic, many code paths in DistroBuildSync expect these to be branch names.
+    `link` forms are also accepted, in which case the returned `ref` is None.
+
+    It also attempts to extract the namespace and component, where applicable.
+    These can only be detected if the link matches the standard dist-git
+    pattern; in other cases the results may be bogus or None.
+
+    :param url: A link#ref style URL, with #ref being optional
+    :returns: A dictionary with `link`, `ref`, `ns` and `comp` keys
+    """
+    scm = url.split("#", 1)
+    nscomp = scm[0].split("/")
+    return {
+        "link": scm[0],
+        "ref": scm[1] if len(scm) >= 2 else None,
+        "ns": nscomp[-2] if nscomp and len(nscomp) >= 2 else None,
+        "comp": nscomp[-1] if nscomp else None,
+    }
+
+
+def split_module(comp):
+    """Splits modules component name into name and stream pair.  Expects the
+    name to be in the `name:stream` format.  Defaults to stream=master if the
+    split fails.
+
+    :param comp: The component name
+    :returns: Dictionary with name and stream
+    """
+    ms = comp.split(":")
+    return {
+        "name": ms[0],
+        "stream": ms[1] if len(ms) > 1 and ms[1] else "master",
+    }
+
+
+@inlineCallbacks
+def get_config_ref(url):
+    """Gets the ref for the config SCMURL
+
+    Returns the actual ref for a symbolic ref possibly used in the
+    config SCMURL.  Used by the update function to check whether the
+    config should be resync'd.
+
+    :param url: Config SCMURL
+    :returns: Remote ref or None on error
+    """
+    scm = split_scmurl(url)
+    output = yield twisted.internet.utils.getProcessOutput(
+        executable="git",
+        args=("ls-remote", "--heads", scm["link"], scm["ref"]),
+        errortoo=True,
+    )
+
+    if not output:
+        scmref = scm["ref"]
+        scmlink = scm["link"]
+        raise UnknownRefError(f"{scmref} not found in {scmlink}")
+
+    return output.split(b"\t", 1)[0]
+
+
+@inlineCallbacks
+def update_config():
+    global main
+    global comps
+    global scmurl
+    global config_ref
+    logger.critical(f"Updating configuration")
+
+    try:
+        ref = yield get_config_ref(scmurl)
+    except UnknownRefError as e:
+        logger.info(e)
+        logger.critical(
+            f"The configuration repository is unavailable, skipping update.  Checking again in {config_timer} seconds."
+        )
+        return
+
+    # If we're using the automatic package list (such as with Fedora ELN), we cannot
+    # assume that it remains unchanged, so we need to reload it each interval.
+    if ref == config_ref and not main["control"]["autopackagelist"]:
+        logger.debug(
+            f"Configuration not changed, skipping update.  Checking again in {config_timer} seconds."
+        )
+        return
+
+    try:
+        yield load_config()
+        config_ref = ref
+    except ConfigError as e:
+        logger.info(e)
+        logger.critical(
+            f"The configuration is invalid, skipping update.  Checking again in {config_timer} seconds."
+        )
+        return
+
+
+def get_distro_packages(
+    distro_url,
+    distro_view=DEFAULT_DISTRO_VIEWS,
+    arches=None,
+    which_source=None,
+):
+    """
+    Fetches the list of desired sources from Content Resolver
+    for each of the given 'arches'.
+    """
+    if not arches:
+        arches = ["aarch64", "ppc64le", "s390x", "x86_64"]
+    if not which_source:
+        which_source = ["source", "buildroot-source"]
+
+    merged_packages = dict()
+
+    for view in reversed(distro_view):
+        for this_source in reversed(which_source):
+            url = (
+                "{distro_url}" "/view-{this_source}-package-name-list--view-{view}.txt"
+            ).format(
+                distro_url=distro_url,
+                this_source=this_source,
+                view=view,
+            )
+
+            logger.debug("downloading {url}".format(url=url))
+
+            r = requests.get(url, allow_redirects=True)
+            for line in r.text.splitlines():
+                merged_packages[line] = {
+                    "view": view,
+                    "content_type": this_source,
+                }
+
+    # There may be an empty line in the file, ignore it.
+    if "" in merged_packages:
+        del merged_packages[""]
+
+    logger.debug("Found a total of {} packages".format(len(merged_packages)))
+
+    return {"rpms": merged_packages}
+
+
+# FIXME: This needs even more error checking, e.g.
+#         - check if blocks are actual dictionaries
+#         - check if certain values are what we expect
+def load_config(config_url=None):
+    """Loads or updates the global configuration from the provided URL in
+    the `link#branch` format.  If no branch is provided, assumes `master`.
+
+    The operation is atomic and the function can be safely called to update
+    the configuration without the danger of clobbering the current one.
+
+    :returns: The configuration dictionary, or None on error
+    """
+    global main
+    global comps
+    global scmurl
+    cdir = tempfile.TemporaryDirectory(prefix="distrobaker-")
+
+    if config_url:
+        scmurl = config_url
+
+    logger.info("Fetching configuration from %s to %s", scmurl, cdir.name)
+    scm = split_scmurl(scmurl)
+    if scm["ref"] is None:
+        scm["ref"] = "main"
+    for attempt in range(retry):
+        try:
+            git.Repo.clone_from(scm["link"], cdir.name).git.checkout(scm["ref"])
+        except Exception:
+            logger.warning(
+                "Failed to fetch configuration, retrying (#%d).",
+                attempt + 1,
+                exc_info=True,
+            )
+            continue
+        else:
+            logger.info("Configuration fetched successfully.")
+            break
+    else:
+        raise ConfigError("Failed to fetch configuration, giving up.")
+
+    if os.path.isfile(os.path.join(cdir.name, "distrobaker.yaml")):
+        try:
+            with open(os.path.join(cdir.name, "distrobaker.yaml")) as f:
+                y = yaml.safe_load(f)
+            logger.debug(
+                "%s loaded, processing.",
+                os.path.join(cdir.name, "distrobaker.yaml"),
+            )
+        except Exception as e:
+            logger.info(e)
+            raise ConfigError("Could not parse distrobaker.yaml.")
+    else:
+        raise ConfigError("Configuration repository does not contain distrobaker.yaml.")
+
+    n = dict()
+    if "configuration" in y:
+        cnf = y["configuration"]
+        for k in ("source", "destination"):
+            if k in cnf:
+                n[k] = dict()
+                if "scm" in cnf[k]:
+                    n[k]["scm"] = str(cnf[k]["scm"])
+                else:
+                    raise ConfigError("%s.scm missing.", k)
+
+                if "cache" in cnf[k]:
+                    n[k]["cache"] = dict()
+                    for kc in ("url", "cgi", "path"):
+                        if kc in cnf[k]["cache"]:
+                            n[k]["cache"][kc] = str(cnf[k]["cache"][kc])
+                        else:
+                            raise ConfigError(
+                                "%s.cache.%s missing.",
+                                k,
+                                kc,
+                            )
+                else:
+                    raise ConfigError("%s.cache missing.", k)
+
+                if "profile" in cnf[k]:
+                    n[k]["profile"] = str(cnf[k]["profile"])
+                else:
+                    raise ConfigError("%s.profile missing.", k)
+
+                if "mbs" in cnf[k]:
+                    n[k]["mbs"] = cnf[k]["mbs"]
+                else:
+                    raise ConfigError("%s.mbs missing.", k)
+
+            else:
+                raise ConfigError("%s missing.", k)
+
+        if "trigger" in cnf:
+            n["trigger"] = dict()
+            for k in ("rpms", "modules"):
+                if k in cnf["trigger"]:
+                    n["trigger"][k] = str(cnf["trigger"][k])
+                else:
+                    raise ConfigError("trigger.%s missing.", k)
+
+        else:
+            raise ConfigError("trigger missing.")
+
+        if "build" in cnf:
+            n["build"] = dict()
+            for k in ("prefix", "target", "platform"):
+                if k in cnf["build"]:
+                    n["build"][k] = str(cnf["build"][k])
+                else:
+                    raise ConfigError("build.%s missing.", k)
+
+            if "scratch" in cnf["build"]:
+                n["build"]["scratch"] = bool(cnf["build"]["scratch"])
+            else:
+                logger.warning(
+                    "Configuration warning: build.scratch not defined, assuming false."
+                )
+                n["build"]["scratch"] = False
+        else:
+            raise ConfigError("build missing.")
+
+        if "git" in cnf:
+            n["git"] = dict()
+            for k in ("author", "email", "message"):
+                if k in cnf["git"]:
+                    n["git"][k] = str(cnf["git"][k])
+                else:
+                    raise ConfigError("git.%s missing.", k)
+
+        else:
+            raise ConfigError("git missing.")
+
+        if "control" in cnf:
+            n["control"] = dict()
+            for k in ("build", "merge", "strict"):
+                if k in cnf["control"]:
+                    n["control"][k] = bool(cnf["control"][k])
+                else:
+                    raise ConfigError("control.%s missing.", k)
+
+            n["control"]["autopackagelist"] = None
+            if "autopackagelist" in cnf["control"]:
+                n["control"]["autopackagelist"] = cnf["control"]["autopackagelist"]
+
+            n["control"]["skip_tag"] = {"rpms": set(), "modules": set()}
+            if "skip_tag" in cnf["control"]:
+                for cns in ("rpms", "modules"):
+                    if cns in cnf["control"]["skip_tag"]:
+                        n["control"]["skip_tag"][cns].update(
+                            cnf["control"]["skip_tag"][cns]
+                        )
+
+            n["control"]["exclude"] = {"rpms": set(), "modules": set()}
+            if "exclude" in cnf["control"]:
+                for cns in ("rpms", "modules"):
+                    if cns in cnf["control"]["exclude"]:
+                        n["control"]["exclude"][cns].update(
+                            cnf["control"]["exclude"][cns]
+                        )
+            for cns in ("rpms", "modules"):
+                if n["control"]["exclude"]["rpms"]:
+                    logger.info(
+                        "Excluding %d component(s) from the %s namespace.",
+                        len(n["control"]["exclude"][cns]),
+                        cns,
+                    )
+                else:
+                    logger.info(
+                        "Not excluding any components from the %s namespace.",
+                        cns,
+                    )
+        else:
+            raise ConfigError("control missing.")
+
+        if "defaults" in cnf:
+            n["defaults"] = dict()
+            for dk in ("cache", "rpms", "modules"):
+                if dk in cnf["defaults"]:
+                    n["defaults"][dk] = dict()
+                    for dkk in ("source", "destination"):
+                        if dkk in cnf["defaults"][dk]:
+                            n["defaults"][dk][dkk] = str(cnf["defaults"][dk][dkk])
+                        else:
+                            logger.error(
+                                "Configuration error: defaults.%s.%s missing.",
+                                dk,
+                                dkk,
+                            )
+                else:
+                    raise ConfigError("defaults.%s missing.", dk)
+
+        else:
+            raise ConfigError("defaults missing.")
+
+    else:
+        raise ConfigError("The required configuration block is missing.")
+
+    components = 0
+    nc = {"rpms": dict(), "modules": dict()}
+    if "components" in y or "autopackagelist" in n["control"]:
+        cnf = {}
+
+        if "autopackagelist" in n["control"]:
+            resolver = DEFAULT_CONTENT_RESOLVER
+            views = list()
+
+            if "content_resolver" in n["control"]["autopackagelist"]:
+                resolver = n["control"]["autopackagelist"]["content_resolver"]
+
+            if type(n["control"]["autopackagelist"]["view"]) == list:
+                views = n["control"]["autopackagelist"]["view"]
+            else:
+                views = [
+                    n["control"]["autopackagelist"]["view"],
+                ]
+
+            cnf = get_distro_packages(
+                distro_url=resolver,
+                distro_view=views,
+            )
+
+        if "components" in y:
+            if "rpms" in cnf:
+                cnf["rpms"].update(y["components"]["rpms"])
+            if "modules" in cnf:
+                cnf["modules"].update(y["components"]["modules"])
+
+        for k in ("rpms", "modules"):
+            if k in cnf:
+                for p in cnf[k].keys():
+                    components += 1
+                    if k in cnf and p in cnf[k]:
+                        nc[k][p] = cnf[k][p]
+                    else:
+                        nc[k][p] = dict()
+                    cname = p
+                    sname = ""
+                    if k == "modules":
+                        ms = split_module(p)
+                        cname = ms["name"]
+                        sname = ms["stream"]
+                    nc[k][p]["source"] = n["defaults"][k]["source"] % {
+                        "component": cname,
+                        "stream": sname,
+                    }
+                    nc[k][p]["destination"] = n["defaults"][k]["destination"] % {
+                        "component": cname,
+                        "stream": sname,
+                    }
+                    nc[k][p]["cache"] = {
+                        "source": n["defaults"]["cache"]["source"]
+                        % {"component": cname, "stream": sname},
+                        "destination": n["defaults"]["cache"]["destination"]
+                        % {"component": cname, "stream": sname},
+                    }
+                    if cnf[k][p] is None:
+                        cnf[k][p] = dict()
+                    for ck in ("source", "destination", "target"):
+                        if ck in cnf[k][p]:
+                            nc[k][p][ck] = str(cnf[k][p][ck])
+                    if "cache" in cnf[k][p]:
+                        for ck in ("source", "destination"):
+                            if ck in cnf[k][p]["cache"]:
+                                nc[k][p]["cache"][ck] = str(cnf[k][p]["cache"][ck])
+            logger.info(
+                "Found %d configured component(s) in the %s namespace.",
+                len(nc[k]),
+                k,
+            )
+    if n["control"]["strict"]:
+        logger.info(
+            "Running in the strict mode.  Only configured components will be processed."
+        )
+    else:
+        logger.info(
+            "Running in the non-strict mode.  All trigger components will be processed."
+        )
+    if not components:
+        if n["control"]["strict"]:
+            logger.warning(
+                "No components configured while running in the strict mode.  Nothing to do."
+            )
+        else:
+            logger.info("No components explicitly configured.")
+    main = n
+    comps = nc
+
+
+def is_eligible(ns, comp):
+    # Check whether this component is meaningful to us
+    if config.main["control"]["strict"] and comp not in config.comps[ns]:
+        logger.debug(f"{comp} is not an approved component, ignoring")
+        return False
+
+    for pattern in config.main["control"]["exclude"][ns]:
+        if re.search(pattern, comp):
+            logger.debug(f"{ns}/{comp} is on the exclude list, skipping")
+            return False
+
+    return True
+
+
+def skip_tag(ns, comp):
+    for pattern in config.main["control"]["skip_tag"][ns]:
+        if re.search(pattern, comp):
+            logger.debug(f"{ns}/{comp} is on the skip_tag list, building immediately")
+            return True
+    return False

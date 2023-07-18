@@ -24,7 +24,7 @@ from twisted.internet import reactor
 from twisted.web.resource import Resource
 from twisted.web.server import Site
 
-from . import logger
+logger = logging.getLogger(__name__)
 
 
 # Globals

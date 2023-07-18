@@ -1,4 +1,10 @@
+cachetools
 click >= 8
-twisted >= 22
-pytest >= 6.0
 fedora_messaging ~= 3.4.1
+GitPython
+koji
+pytest >= 6.0
+requests
+twisted >= 22
+txredisapi
+pyyaml
