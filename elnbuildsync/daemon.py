@@ -20,27 +20,42 @@
 
 
 import click
+import fedora_messaging.api
+import fedora_messaging.config
+import json
 import logging
 
-from twisted.internet import reactor, task
+from twisted.internet import reactor
 
+from . import listener
+from . import logger
 from . import web
-
-
-logger = logging.getLogger(__name__)
 
 
 @click.command()
 @click.option(
     "--log-level",
     type=click.Choice(
-        ["DEBUG", "INFO" "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
+        ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
     ),
+    default="INFO",
+    show_default=True,
 )
 def main(log_level):
     logging.basicConfig(format="%(asctime)s : %(levelname)s : %(message)s")
     logger.setLevel(log_level)
+    logger.debug("Debug logging enabled")
+
+    # Start listening for Fedora Messages
+    fedora_messaging.api.twisted_consume(listener.message_handler)
+
+    # Fedora Messaging Config
+    logger.debug(json.dumps(fedora_messaging.config.conf, indent=2))
+
+    logger.debug("Starting HTTP server")
     reactor.listenTCP(8080, web.setup_web_resources())
+
+    logger.debug("Starting Twisted mainloop")
     reactor.run()
     pass
 

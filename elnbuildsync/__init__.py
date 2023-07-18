@@ -16,4 +16,8 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from .daemon import main

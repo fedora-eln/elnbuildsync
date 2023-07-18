@@ -18,9 +18,13 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
+import logging
+
 from twisted.internet import reactor
 from twisted.web.resource import Resource
 from twisted.web.server import Site
+
+from . import logger
 
 
 # Globals
