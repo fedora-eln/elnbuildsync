@@ -53,21 +53,50 @@ def prepare_side_tag(base_tag):
     # We don't need to wait for the initialization, since this is a fresh
     # tag and therefore no race exists.
     # yield _wait_repo_done(side_tag_name)
-    yield _wait_repo_done(side_tag_name)
+    yield wait_repo_regen(side_tag_name)
 
     return side_tag_name
 
 
+@inlineCallbacks
 def wait_repo(tag):
+    """
+    Wait for a repo regeneration to begin and then to complete
+
+    Note: there is a possibility of a small race-condition where the repo
+    may begin regenerating slightly before this function starts listening
+    for it. In that case, it may be waiting until the next time the regen
+    begins. If the initial start is not important, use wait_repo_regen()
+    instead.
+    """
+    yield _wait_repo_init(tag)
+    yield _wait_repo_regen(tag)
+
+    return tag
+
+
+def wait_repo_regen(tag):
+    """
+    Wait for a repo to regenerate without first waiting for the regen to start.
+
+    This should be used whenever a repo is created for the first time.
+    """
+    yield _wait_repo_regen(tag)
+
+    return tag
+
+
+def _wait_repo_init(tag):
     deferred = Deferred()
-    deferred.addTimeout(config.waitrepo_timeout, reactor)
+    deferred.addTimeout(config.waitrepo_init_timeout, reactor)
     awaiting_repo_init[tag].append(deferred)
 
     logger.info(f"Waiting for {tag} to begin regenerating")
     return deferred
 
 
-def _wait_repo_done(tag, deferred=Deferred()):
+def _wait_repo_regen(tag):
+    deferred = Deferred()
     deferred.addTimeout(config.waitrepo_timeout, reactor)
     awaited_repos[tag].append(deferred)
 

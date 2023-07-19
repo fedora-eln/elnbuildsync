@@ -21,3 +21,10 @@ from collections import defaultdict
 # The set of repos we're waiting on to initialize
 awaited_repos = defaultdict(list)
 awaiting_repo_init = defaultdict(list)
+
+# Koji magic number
+KOJI_BACKGROUND_PRIORITY = 5
+
+
+class KojiHelperBaseError(Exception):
+    pass

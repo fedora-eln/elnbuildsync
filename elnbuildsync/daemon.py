@@ -29,7 +29,7 @@ from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
 
 from . import config
-from .kojihelpers import tags
+from .kojihelpers import tags, builds
 from . import listener
 from . import web
 
@@ -72,7 +72,7 @@ def main(log_level, dry_run, config_url):
     logger.debug("Starting HTTP server")
     reactor.listenTCP(8080, web.setup_web_resources())
 
-    reactor.callLater(5, test_side_tag)
+    reactor.callLater(0, test_get_buildinfo)
 
     logger.debug("Starting Twisted mainloop")
     reactor.run()
@@ -82,7 +82,21 @@ def main(log_level, dry_run, config_url):
 @inlineCallbacks
 def test_side_tag():
     side_tag = yield tags.prepare_side_tag("eln-build")
-    logger.info(f"Side tag {side_tag} all ready for builds")
+    logger.info(f"Side tag {side_tag} is ready for builds")
+
+
+@inlineCallbacks
+def test_wait_repo():
+    side_tag = yield tags.wait_repo("eln-build")
+    logger.info(f"Side tag {side_tag} is ready for builds")
+
+
+@inlineCallbacks
+def test_get_buildinfo():
+    import json
+
+    buildinfo = yield builds.get_buildinfo("source", 2234734, strict=True)
+    logger.info(f"TEST: {json.dumps(buildinfo, indent=2)}")
 
 
 if __name__ == "__main__":

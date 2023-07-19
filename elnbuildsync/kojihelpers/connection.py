@@ -26,6 +26,8 @@ from enum import auto, Enum
 
 from .. import config
 
+from . import KojiHelperBaseError
+
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,10 @@ logger = logging.getLogger(__name__)
 class BuildSystemType(Enum):
     source = auto()
     destination = auto()
+
+
+class BuildSysUnavailable(KojiHelperBaseError):
+    pass
 
 
 # Set the cache size to be equal to the number of build system types
@@ -51,7 +57,7 @@ def get_buildsys(which, force_login=False):
     """
     if not config.main:
         logger.critical("DistroBuildSync is not configured, aborting.")
-        return None
+        raise BuildSysUnavailable
 
     try:
         bsys_type = BuildSystemType(which)

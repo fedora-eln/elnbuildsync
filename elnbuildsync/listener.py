@@ -28,6 +28,7 @@ from .kojihelpers import tags
 logger = logging.getLogger(__name__)
 
 from fedora_messaging.exceptions import Nack, Drop
+from twisted.internet import reactor
 from twisted.internet.defer import (
     AlreadyCalledError,
     inlineCallbacks,
@@ -46,7 +47,9 @@ def message_handler(msg):
             if tag in kojihelpers.awaiting_repo_init:
                 logger.info(f"repo {tag} has started regenerating")
                 for deferred in kojihelpers.awaiting_repo_init[tag]:
-                    tags._wait_repo_done(tag, deferred)
+                    # Enqueue the callbacks onto the reactor so we aren't
+                    # blocking handling new messages
+                    reactor.callLater(0, fire_callback, deferred, tag)
 
                 # Clear the awaited list
                 del kojihelpers.awaiting_repo_init[tag]
@@ -60,13 +63,13 @@ def message_handler(msg):
             if tag in kojihelpers.awaited_repos:
                 logger.info(f"Repo {tag} has regenerated")
                 for deferred in kojihelpers.awaited_repos[tag]:
-                    try:
-                        deferred.callback(None)
-                    except AlreadyCalledError:
-                        # Most likely due to a timeout, so ignore it
-                        pass
+                    # Enqueue the callbacks onto the reactor so we aren't
+                    # blocking handling new messages
+                    reactor.callLater(0, fire_callback, deferred, tag)
+
                 # Clear the awaited list
                 del kojihelpers.awaited_repos[tag]
+
             else:
                 logger.debug(f"Unknown repository tag {msg.body['tag']}, ignoring.")
                 raise Drop()
@@ -76,12 +79,38 @@ def message_handler(msg):
             logger.debug(f"Unable to handle {msg.topic} topics, ignoring.")
             raise Drop()
 
+        if tag != config.main["trigger"]["rpms"]:
+            logger.debug(f"Message tag {tag} not configured as a trigger, ignoring.")
+            raise Drop()
+
+        # Check whether this component is meaningful to us
+        if not config.is_eligible("rpms", msg.body["name"]):
+            raise Drop()
+
+        # This is a component we care about, so process it in the main reactor thread
+        # to avoid blocking new messages
+        reactor.callLater(0, handle_tag_message, msg)
+
     except Drop as e:
         # Tell the AMQP server that we're ignoring this message
         raise
 
     except Exception as e:
         logger.exception(e)
-        # If anything goes wrong during the message handler, Nack the message
-        # so it will get retried.
-        raise Nack('Unexpected error, will retry') from e
+        # If anything goes wrong during the message handler, Nack() the
+        # message so it will get retried.
+        raise Nack("Unexpected error, will retry") from e
+
+
+def fire_callback(deferred, data):
+    try:
+        deferred.callback(data)
+    except AlreadyCalledError as e:
+        # Most likely due to a timeout, so ignore it
+        logger.exception(e)
+        pass
+
+
+@inlineCallbacks
+def handle_tag_message(msg):
+    pass
