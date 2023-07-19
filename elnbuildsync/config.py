@@ -225,7 +225,8 @@ def get_distro_packages(
     for view in reversed(distro_view):
         for this_source in reversed(which_source):
             url = (
-                "{distro_url}" "/view-{this_source}-package-name-list--view-{view}.txt"
+                "{distro_url}"
+                "/view-{this_source}-package-name-list--view-{view}.txt"
             ).format(
                 distro_url=distro_url,
                 this_source=this_source,
@@ -276,7 +277,9 @@ def load_config(config_url=None):
         scm["ref"] = "main"
     for attempt in range(retry):
         try:
-            git.Repo.clone_from(scm["link"], cdir.name).git.checkout(scm["ref"])
+            git.Repo.clone_from(scm["link"], cdir.name).git.checkout(
+                scm["ref"]
+            )
         except Exception:
             logger.warning(
                 "Failed to fetch configuration, retrying (#%d).",
@@ -302,7 +305,9 @@ def load_config(config_url=None):
             logger.info(e)
             raise ConfigError("Could not parse distrobaker.yaml.")
     else:
-        raise ConfigError("Configuration repository does not contain distrobaker.yaml.")
+        raise ConfigError(
+            "Configuration repository does not contain distrobaker.yaml."
+        )
 
     n = dict()
     if "configuration" in y:
@@ -392,7 +397,9 @@ def load_config(config_url=None):
 
             n["control"]["autopackagelist"] = None
             if "autopackagelist" in cnf["control"]:
-                n["control"]["autopackagelist"] = cnf["control"]["autopackagelist"]
+                n["control"]["autopackagelist"] = cnf["control"][
+                    "autopackagelist"
+                ]
 
             n["control"]["skip_tag"] = {"rpms": set(), "modules": set()}
             if "skip_tag" in cnf["control"]:
@@ -431,7 +438,9 @@ def load_config(config_url=None):
                     n["defaults"][dk] = dict()
                     for dkk in ("source", "destination"):
                         if dkk in cnf["defaults"][dk]:
-                            n["defaults"][dk][dkk] = str(cnf["defaults"][dk][dkk])
+                            n["defaults"][dk][dkk] = str(
+                                cnf["defaults"][dk][dkk]
+                            )
                         else:
                             logger.error(
                                 "Configuration error: defaults.%s.%s missing.",
@@ -495,7 +504,9 @@ def load_config(config_url=None):
                         "component": cname,
                         "stream": sname,
                     }
-                    nc[k][p]["destination"] = n["defaults"][k]["destination"] % {
+                    nc[k][p]["destination"] = n["defaults"][k][
+                        "destination"
+                    ] % {
                         "component": cname,
                         "stream": sname,
                     }
@@ -513,7 +524,9 @@ def load_config(config_url=None):
                     if "cache" in cnf[k][p]:
                         for ck in ("source", "destination"):
                             if ck in cnf[k][p]["cache"]:
-                                nc[k][p]["cache"][ck] = str(cnf[k][p]["cache"][ck])
+                                nc[k][p]["cache"][ck] = str(
+                                    cnf[k][p]["cache"][ck]
+                                )
             logger.info(
                 "Found %d configured component(s) in the %s namespace.",
                 len(nc[k]),
@@ -555,6 +568,8 @@ def is_eligible(ns, comp):
 def skip_tag(ns, comp):
     for pattern in config.main["control"]["skip_tag"][ns]:
         if re.search(pattern, comp):
-            logger.debug(f"{ns}/{comp} is on the skip_tag list, building immediately")
+            logger.debug(
+                f"{ns}/{comp} is on the skip_tag list, building immediately"
+            )
             return True
     return False

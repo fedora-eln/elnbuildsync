@@ -50,7 +50,8 @@ logger = logging.getLogger(__name__)
 @click.argument("config_url")
 def main(log_level, dry_run, config_url):
     logging.basicConfig(
-        format="%(asctime)s : %(name)s : %(levelname)s : %(message)s", level=log_level
+        format="%(asctime)s : %(name)s : %(levelname)s : %(message)s",
+        level=log_level,
     )
     for handler in logging.root.handlers:
         handler.addFilter(logging.Filter("elnbuildsync"))

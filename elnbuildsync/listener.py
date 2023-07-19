@@ -55,7 +55,9 @@ def message_handler(msg):
                 del kojihelpers.awaiting_repo_init[tag]
 
             else:
-                logger.debug(f"Unknown repository tag {msg.body['tag']}, ignoring.")
+                logger.debug(
+                    f"Unknown repository tag {msg.body['tag']}, ignoring."
+                )
                 raise Drop()
 
         elif msg.topic.endswith("buildsys.repo.done"):
@@ -71,7 +73,9 @@ def message_handler(msg):
                 del kojihelpers.awaited_repos[tag]
 
             else:
-                logger.debug(f"Unknown repository tag {msg.body['tag']}, ignoring.")
+                logger.debug(
+                    f"Unknown repository tag {msg.body['tag']}, ignoring."
+                )
                 raise Drop()
 
         if not msg.topic.endswith("buildsys.tag"):
@@ -80,7 +84,9 @@ def message_handler(msg):
             raise Drop()
 
         if tag != config.main["trigger"]["rpms"]:
-            logger.debug(f"Message tag {tag} not configured as a trigger, ignoring.")
+            logger.debug(
+                f"Message tag {tag} not configured as a trigger, ignoring."
+            )
             raise Drop()
 
         # Check whether this component is meaningful to us
