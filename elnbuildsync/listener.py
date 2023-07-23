@@ -86,17 +86,17 @@ def message_handler(msg):
                 )
                 raise Drop()
         
-        elif msg.topic.endswith("buildsys.build.state.change"):
+        elif msg.topic.endswith("buildsys.task.state.change"):
             # Are we looking for this build?
-            task_id = msg.body["task_id"]
+            task_id = msg.body["id"]
             if task_id in active_builds:
-                if msg.body["state"] == koji.BUILD_STATES["BUILDING"]:
-                    logger.info("Build {task_id} is still running. Ignoring.")
+                if msg.body["new"] in ("FREE", "OPEN", "ASSIGNED"):
+                    logger.debug(f"Build {task_id} ({msg.body['info']['request']}) is {msg.body['new']}")
                     raise Drop()
 
-                elif msg.body["state"] == koji.BUILD_STATES["completed"]:
+                elif msg.body["new"] == "CLOSED":
                     # Successful build
-                    logger.info(f"Build {task_id} ({msg.body['name']}) completed successfully")
+                    logger.info(f"Build {task_id} ({msg.body['info']['request']}) completed successfully")
                     reactor.callLater(0, fire_callback, active_builds[task_id], msg.body)
                 
                 else:

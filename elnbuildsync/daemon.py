@@ -90,7 +90,7 @@ def main(log_level, dry_run, config_url):
         perform_builds,
         "eln",
         [
-            "git+https://src.fedoraproject.org/rpms/sscg.git#f20c1143a3249580e9385404bf2ea7679b5e36db",
+            "git+https://src.fedoraproject.org/rpms/fedora-release.git#b8076dc0584f61b29bc851de67e8397184701dab",
         ],
         scratch=True,
     )
