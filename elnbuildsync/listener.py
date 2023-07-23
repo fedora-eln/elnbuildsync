@@ -17,24 +17,32 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
+import koji
 import logging
 import txredisapi as redis
 
+from . import batching
 from . import config
 
 from . import kojihelpers
-from .kojihelpers import tags
-
-logger = logging.getLogger(__name__)
+from .kojihelpers.builds import get_scmurl
+from .rebuild_data import RebuildData
 
 from fedora_messaging.exceptions import Nack, Drop
 from twisted.internet import reactor
 from twisted.internet.defer import (
     AlreadyCalledError,
+    Deferred,
     inlineCallbacks,
     TimeoutError,
 )
 
+
+logger = logging.getLogger(__name__)
+
+
+# A dictionary to keep track of builds in-progress
+active_builds = dict()
 
 def message_handler(msg):
     try:
@@ -77,12 +85,39 @@ def message_handler(msg):
                     f"Unknown repository tag {msg.body['tag']}, ignoring."
                 )
                 raise Drop()
+        
+        elif msg.topic.endswith("buildsys.build.state.change"):
+            # Are we looking for this build?
+            task_id = msg.body["task_id"]
+            if task_id in active_builds:
+                if msg.body["state"] == koji.BUILD_STATES["BUILDING"]:
+                    logger.info("Build {task_id} is still running. Ignoring.")
+                    raise Drop()
+
+                elif msg.body["state"] == koji.BUILD_STATES["completed"]:
+                    # Successful build
+                    logger.info(f"Build {task_id} ({msg.body['name']}) completed successfully")
+                    reactor.callLater(0, fire_callback, active_builds[task_id], msg.body)
+                
+                else:
+                    # It either failed or was canceled. Call the errback
+                    reactor.callLater(0, fire_errback, active_builds[task_id], msg.body)
+
+                del active_builds[task_id]
+                return
+            
+            else:
+                # Ignore messages from unrelated builds
+                logger.debug(f"Unknown task_id {task_id}. Ignoring.")
+                raise Drop()
+
 
         if not msg.topic.endswith("buildsys.tag"):
             # Ignore any non-tagging messages
             logger.debug(f"Unable to handle {msg.topic} topics, ignoring.")
             raise Drop()
 
+        tag = msg.body["tag"]
         if tag != config.main["trigger"]["rpms"]:
             logger.debug(
                 f"Message tag {tag} not configured as a trigger, ignoring."
@@ -95,7 +130,9 @@ def message_handler(msg):
 
         # This is a component we care about, so process it in the main reactor thread
         # to avoid blocking new messages
-        reactor.callLater(0, handle_tag_message, msg)
+        
+        # TODO
+        # reactor.callLater(0, rebuild_tagged_component, msg)
 
     except Drop as e:
         # Tell the AMQP server that we're ignoring this message
@@ -117,6 +154,29 @@ def fire_callback(deferred, data):
         pass
 
 
+def fire_errback(deferred, data):
+    try:
+        deferred.errback(data)
+    except AlreadyCalledError as e:
+        # Most likely due to a timeout, so ignore it
+        logger.exception(e)
+        pass
+
+
 @inlineCallbacks
-def handle_tag_message(msg):
-    pass
+def rebuild_tagged_component(msg):
+    comp = msg.body["name"]
+    version = msg.body["version"]
+    release = msg.body["release"]
+    target = config.main["build"]["target"]
+
+    scmurl = yield get_scmurl(msg.body["task_id"])
+    rd = RebuildData("rpms", comp, version, release, scmurl, target)
+
+    batching.batch_processor.reset()
+    batching.message_queue.put(rd)
+
+
+def register_build_task_id(task_id):
+    active_builds[task_id] = Deferred()
+    return active_builds[task_id]

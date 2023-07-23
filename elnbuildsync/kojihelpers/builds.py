@@ -22,13 +22,23 @@ import logging
 
 from . import KojiHelperBaseError
 from .connection import get_buildsys
-from twisted.internet.defer import inlineCallbacks
+from .. import config
+from .. import listener
+from twisted.internet.defer import gatherResults, inlineCallbacks
 from twisted.internet.threads import deferToThread
 
 logger = logging.getLogger(__name__)
 
 
-class BuildInfoUnavailable(KojiHelperBaseError):
+# Koji magic number
+KOJI_BACKGROUND_PRIORITY = 5
+
+
+class BuildInfoUnavailableError(KojiHelperBaseError):
+    pass
+
+
+class IneligibleBuildError(KojiHelperBaseError):
     pass
 
 
@@ -58,8 +68,43 @@ def get_buildinfo(which_bsys, build_id, **kwargs):
         logger.exception(
             f"Could not retrieve information for build {build_id}"
         )
-        raise BuildInfoUnavailable(
+        raise BuildInfoUnavailableError(
             f"Could not retrieve information for build {build_id}"
         ) from e
 
     return buildinfo
+
+
+@inlineCallbacks
+def perform_builds(target, scm_urls, scratch=False):
+    bsys = get_buildsys("destination")
+    build_vcalls = dict()
+    with bsys.multicall(batch=config.koji_batch) as mc:
+        for scmurl in scm_urls:
+            if not config.is_eligible:
+                raise IneligibleBuildError(
+                    f"{scmurl} is ineligible to be built for {target}"
+                )
+
+            build_vcalls[scmurl] = mc.build(
+                scmurl,
+                target,
+                {"scratch": scratch},
+                priority=KOJI_BACKGROUND_PRIORITY,
+            )
+
+    yield _wait_for_builds(build_vcalls)
+
+
+@inlineCallbacks
+def _wait_for_builds(build_vcalls):
+    deferreds = list()
+
+    for scmurl, vcall in build_vcalls.items():
+        task_id = vcall.result
+        logger.info(f"Building begun for {scmurl}. task_id: {task_id}")
+
+        # Register this build-id to watch for in messages
+        deferreds.append(listener.register_build_task_id(task_id))
+
+    yield gatherResults(deferreds, consumeErrors=True)

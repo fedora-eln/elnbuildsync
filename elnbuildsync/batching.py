@@ -16,12 +16,39 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
-from collections import defaultdict
 
-# The set of repos we're waiting on to initialize
-awaited_repos = defaultdict(list)
-awaiting_repo_init = defaultdict(list)
+from queue import SimpleQueue, Empty
+from twisted.internet import reactor, task
 
 
-class KojiHelperBaseError(Exception):
+message_queue = SimpleQueue()
+message_batch_timer = 5
+message_batch_processor = None
+
+build_batch_queue = SimpleQueue()
+build_batch_timer = 5
+build_batch_processor = None
+
+
+def process_message_batch():
+    builds = list()
+    while True:
+        try:
+            rd = message_queue.get_nowait()
+            builds.append(rd)
+        except Empty as e:
+            break
+
+    if not builds:
+        # Nothing to do here
+        return
+
+    build_batch_queue.put(builds)
+
+    # Notify that
+
+
+def process_build_batch(builds):
+    # Wait for the queue to become available
+    yield wait_for_build_batch(build_batch_queue)
     pass

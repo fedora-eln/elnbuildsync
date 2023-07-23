@@ -26,8 +26,6 @@ import tempfile
 import twisted.internet.utils
 import yaml
 
-from queue import SimpleQueue
-
 from twisted.internet.defer import inlineCallbacks
 
 from . import config
@@ -39,7 +37,6 @@ DEFAULT_CONTENT_RESOLVER = "https://tiny.distro.builders"
 DEFAULT_DISTRO_VIEWS = ["eln"]
 
 # Configuration options
-batch_timer = 2
 config_timer = 15 * 60  # 15 minutes
 cleanup_timer = 12 * 60  # 12 hours
 status_timer = 10  # 10 minutes
@@ -60,10 +57,8 @@ waitrepo_init_timeout = 10 * 60
 waitrepo_timeout = 20 * 60
 
 # Process state
-batch_processor = None
 cleanup_processor = None
 status_processor = None
-message_queue = SimpleQueue()
 
 
 class ConfigError(Exception):

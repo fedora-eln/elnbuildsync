@@ -34,29 +34,19 @@ RebuildData = namedtuple(
         "version",
         "release",
         "scmurl",
-        "downstream_target",
-        "ref_overrides",
     ],
     defaults=[None, None],
 )
 
 
-def rebuild_data_from_component(namespace, component):
+def rebuild_data_from_component(component):
+    # ELNBuildSync only processes RPMs
+    namespace = "rpms"
     logger.debug("Processing {}/{}.".format(namespace, component))
 
-    if component in config.main["control"]["exclude"][namespace]:
+    if not config.is_eligible(namespace, component):
         raise ValueError(
-            "The %s/%s component is excluded from sync, skipping.",
-            namespace,
-            component,
-        )
-
-    if (
-        config.main["control"]["strict"]
-        and component not in config.comps[namespace]
-    ):
-        raise ValueError(
-            "The {}/{} component not configured while the strict mode is enabled, ignoring.".format(
+            "The {}/{} component is not eligible for rebuilding.".format(
                 namespace, component
             )
         )

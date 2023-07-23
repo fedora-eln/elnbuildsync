@@ -25,13 +25,16 @@ import fedora_messaging.config
 import logging
 import sys
 
-from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet import reactor, task
+from twisted.internet.defer import Deferred, inlineCallbacks
 
+from . import batching
 from . import config
-from .kojihelpers import tags, builds
+from . import kojihelpers
 from . import listener
 from . import web
+
+from .kojihelpers.builds import perform_builds
 
 
 logger = logging.getLogger(__name__)
@@ -67,13 +70,30 @@ def main(log_level, dry_run, config_url):
         logger.critical("Could not load configuration.")
         sys.exit(128)
 
+    # Schedule batch checking
+    batching.message_batch_processor = task.LoopingCall(
+        batching.process_message_batch
+    )
+    batching.message_batch_processor.start(
+        batching.message_batch_timer, now=False
+    )
+
     # Start listening for Fedora Messages
     fedora_messaging.api.twisted_consume(listener.message_handler)
 
     logger.debug("Starting HTTP server")
     reactor.listenTCP(8080, web.setup_web_resources())
 
-    reactor.callLater(0, test_get_buildinfo)
+    task.deferLater(
+        reactor,
+        1,
+        perform_builds,
+        "eln",
+        [
+            "git+https://src.fedoraproject.org/rpms/sscg.git#f20c1143a3249580e9385404bf2ea7679b5e36db",
+        ],
+        scratch=True,
+    )
 
     logger.debug("Starting Twisted mainloop")
     reactor.run()
@@ -82,13 +102,13 @@ def main(log_level, dry_run, config_url):
 
 @inlineCallbacks
 def test_side_tag():
-    side_tag = yield tags.prepare_side_tag("eln-build")
+    side_tag = yield kojihelpers.tags.prepare_side_tag("eln-build")
     logger.info(f"Side tag {side_tag} is ready for builds")
 
 
 @inlineCallbacks
 def test_wait_repo():
-    side_tag = yield tags.wait_repo("eln-build")
+    side_tag = yield kojihelpers.tags.wait_repo("eln-build")
     logger.info(f"Side tag {side_tag} is ready for builds")
 
 
@@ -96,8 +116,33 @@ def test_wait_repo():
 def test_get_buildinfo():
     import json
 
-    buildinfo = yield builds.get_buildinfo("source", 2234734, strict=True)
+    buildinfo = yield kojihelpers.builds.get_buildinfo(
+        "source", 2234734, strict=True
+    )
     logger.info(f"TEST: {json.dumps(buildinfo, indent=2)}")
+
+
+@inlineCallbacks
+def test_awaiting_queue():
+    logger.info("Awaiting data")
+    yield wait_for_queue()
+    logger.info("Successfully awaited")
+
+
+testing_deferred = None
+
+
+def wait_for_queue():
+    global testing_deferred
+    testing_deferred = Deferred()
+    return testing_deferred
+
+
+def sim_put():
+    global testing_deferred
+    logger.info("Putting")
+    testing_deferred.callback(None)
+    logger.info("Putting complete")
 
 
 if __name__ == "__main__":
