@@ -41,11 +41,9 @@ from twisted.internet.defer import (
 logger = logging.getLogger(__name__)
 
 
-# A dictionary to keep track of builds in-progress
-active_builds = dict()
-
 def message_handler(msg):
     try:
+        logger.debug(f"Message type: {type(msg)}")
         logger.debug(f"Received a message with topic {msg.topic}")
 
         # Listen for repositories we are waiting on.
@@ -89,21 +87,28 @@ def message_handler(msg):
         elif msg.topic.endswith("buildsys.task.state.change"):
             # Are we looking for this build?
             task_id = msg.body["id"]
-            if task_id in active_builds:
+            if task_id in state.active_builds:
                 if msg.body["new"] in ("FREE", "OPEN", "ASSIGNED"):
                     logger.debug(f"Build {task_id} ({msg.body['info']['request']}) is {msg.body['new']}")
                     raise Drop()
 
                 elif msg.body["new"] == "CLOSED":
                     # Successful build
-                    logger.info(f"Build {task_id} ({msg.body['info']['request']}) completed successfully")
-                    reactor.callLater(0, fire_callback, active_builds[task_id], msg.body)
-                
+                    logger.info(
+                        f"Build {task_id} ({msg.body['info']['request']}) completed successfully"
+                    )
+                    reactor.callLater(
+                        0, fire_callback, state.active_builds[task_id], msg.body
+                    )
+
                 else:
                     # It either failed or was canceled. Call the errback
-                    reactor.callLater(0, fire_errback, active_builds[task_id], msg.body)
+                    logger.info(f"Build {task_id} failed.")
+                    reactor.callLater(
+                        0, fire_errback, state.active_builds[task_id], msg.body
+                    )
 
-                del active_builds[task_id]
+                del state.active_builds[task_id]
                 return
             
             else:
@@ -178,5 +183,6 @@ def rebuild_tagged_component(msg):
 
 
 def register_build_task_id(task_id):
-    active_builds[task_id] = Deferred()
-    return active_builds[task_id]
+    logger.debug(f"Registering task {task_id}")
+    state.active_builds[task_id] = Deferred()
+    return state.active_builds[task_id]
