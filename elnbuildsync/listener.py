@@ -43,7 +43,6 @@ logger = logging.getLogger(__name__)
 
 def message_handler(msg):
     try:
-        logger.debug(f"Message type: {type(msg)}")
         logger.debug(f"Received a message with topic {msg.topic}")
 
         # Listen for repositories we are waiting on.
@@ -145,18 +144,18 @@ def message_handler(msg):
         raise Nack("Unexpected error, will retry") from e
 
 
-def fire_callback(deferred, data):
+def fire_callback(deferred, *data):
     try:
-        deferred.callback(data)
+        deferred.callback(*data)
     except AlreadyCalledError as e:
         # Most likely due to a timeout, so ignore it
         logger.exception(e)
         pass
 
 
-def fire_errback(deferred, data):
+def fire_errback(deferred, *data):
     try:
-        deferred.errback(data)
+        deferred.errback(kojihelpers.errors.BuildFailedError(*data))
     except AlreadyCalledError as e:
         # Most likely due to a timeout, so ignore it
         logger.exception(e)
@@ -179,5 +178,8 @@ def rebuild_tagged_component(msg):
 
 def register_build_task_id(task_id):
     logger.debug(f"Registering task {task_id}")
+    if task_id in state.active_builds:
+        raise ValueError("Cannot register the same task ID twice")
+
     state.active_builds[task_id] = Deferred()
     return state.active_builds[task_id]

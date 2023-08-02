@@ -17,36 +17,46 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
-from fedora_messaging.message import Message
-from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.defer import inlineCallbacks
 
-from .kojihelpers.builds import get_scmurl
+from .rebuildtask import RebuildTask
 
 
-class TagMessage:
-    # Tag JSON samples:
-    # https://apps.fedoraproject.org/datagrepper/v2/search?topic=org.fedoraproject.prod.buildsys.tag
+# Temporary internal variable to store the latest attempt ID
+# Remove this once we are getting this from the DB
+_latest_attempt_id = 0
 
-    component = None
-    scmurl = None
 
-    # Database IDs
-    _tag_message_id = 0
+class RebuildAttempt:
+    tasks = list()
+
+    _unregistered_tasks = list()
+
+    # DB IDs
+    _rebuild_attempt_id = 0
     _rebuild_batch_id = 0
 
-    def __init__(self, tag_message: Message, rebuild_batch_id: int) -> None:
-        """
-        Do not call TagMessage() alone. Instantiate via
-        `yield TagMessage(msg, batch_id).async_init()` instead. This ensures
-        that the database actions will settle before the object is used.
-        """
-        self.component = tag_message.body["name"]
+    def __init__(self, tasks, rebuild_batch_id):
+        self.tasks = tasks
         self._rebuild_batch_id = rebuild_batch_id
-        self._message = tag_message
+        self._unregistered_tasks = tasks
 
     @inlineCallbacks
     def async_init(self):
-        self.scmurl = yield get_scmurl(self._message.body["build_id"])
+        global latest_attempt_id
 
-        # Create the TagMessage record in the database here
+        for task in self._unregistered_tasks:
+            yield self.add_task(task)
+
+        # TODO: Create the RebuildAttempt in the database here
+
+        # TODO: get this from the DB
+        self._rebuild_attempt_id = _latest_attempt_id
+        _latest_attempt_id += 1
+
         return self
+
+    @inlineCallbacks
+    def add_task(self, task):
+        rtask = yield RebuildTask(task, self._rebuild_attempt_id).async_init()
+        self.tasks.append(rtask)

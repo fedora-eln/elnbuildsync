@@ -17,17 +17,27 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
-class KojiHelperBaseError(Exception):
-    pass
+from twisted.internet.defer import Deferred, inlineCallbacks
+
+from .kojihelpers import builds
 
 
-class BuildInfoUnavailableError(KojiHelperBaseError):
-    pass
+class RebuildTask:
+    result = None
+    koji_task_id = 0
 
+    # DB IDs
+    _rebuild_attempt_id = 0
 
-class IneligibleBuildError(KojiHelperBaseError):
-    pass
+    def __init__(self, koji_task_id, rebuild_attempt):
+        self.koji_task_id = koji_task_id
+        self._rebuild_attempt_id = rebuild_attempt
 
+    @inlineCallbacks
+    def async_init(self):
+        # Save this to the database here
+        return self
 
-class BuildFailedError(KojiHelperBaseError):
-    pass
+    @inlineCallbacks
+    def async_await(self):
+        yield builds.wait_for_build(self.koji_task_id)

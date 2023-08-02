@@ -22,7 +22,7 @@ from twisted.internet import reactor
 from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.internet.threads import deferToThread
 
-from . import awaited_repos, awaiting_repo_init
+from .. import kojihelpers
 from .connection import get_buildsys
 
 from .. import config
@@ -46,14 +46,28 @@ def prepare_side_tag(base_tag):
     downstream_koji = get_buildsys("destination")
 
     # Trigger the creation of the side-tag
+    logger.debug(f"Creating side tag from {base_tag}")
     side_tag_info = yield deferToThread(downstream_koji.createSideTag, base_tag)
     side_tag_name = side_tag_info["name"]
+
+    logger.debug(f"Side {side_tag_name} created.")
 
     # Wait for koji to generate the buildroot repo
     # We don't need to wait for the initialization, since this is a fresh
     # tag and therefore no race exists.
     # yield _wait_repo_done(side_tag_name)
-    yield wait_repo_regen(side_tag_name)
+    logger.debug(f"Waiting for {side_tag_name} to generate.")
+    try:
+        yield wait_repo_regen(side_tag_name)
+    except TimeoutError as e:
+        logger.error(f"Timed out awaiting side-tag {side_tag_name}", exc_info=True)
+        try:
+            yield deferToThread(downstream_koji.removeSideTag, side_tag_name)
+        except Exception:
+            logger.warning(f"Unable to remove {side_tag_name}")
+
+        # Re-raise the timeout error to the caller
+        raise
 
     return side_tag_name
 
@@ -75,6 +89,7 @@ def wait_repo(tag):
     return tag
 
 
+@inlineCallbacks
 def wait_repo_regen(tag):
     """
     Wait for a repo to regenerate without first waiting for the regen to start.
@@ -89,7 +104,7 @@ def wait_repo_regen(tag):
 def _wait_repo_init(tag):
     deferred = Deferred()
     deferred.addTimeout(config.waitrepo_init_timeout, reactor)
-    awaiting_repo_init[tag].append(deferred)
+    kojihelpers.awaiting_repo_init[tag].append(deferred)
 
     logger.info(f"Waiting for {tag} to begin regenerating")
     return deferred
@@ -98,7 +113,7 @@ def _wait_repo_init(tag):
 def _wait_repo_regen(tag):
     deferred = Deferred()
     deferred.addTimeout(config.waitrepo_timeout, reactor)
-    awaited_repos[tag].append(deferred)
+    kojihelpers.awaited_repos[tag].append(deferred)
 
     logger.info(f"Waiting for {tag} to finish regenerating")
     return deferred

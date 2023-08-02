@@ -21,3 +21,4 @@ from .daemon import main
 from . import listener
 from . import config
 from . import kojihelpers
+from . import rebuildbatch

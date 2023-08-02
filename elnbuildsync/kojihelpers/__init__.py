@@ -20,6 +20,8 @@ from collections import defaultdict
 
 from . import builds
 from . import connection
+from . import errors
+from . import tags
 
 
 # The set of repos we're waiting on to initialize
