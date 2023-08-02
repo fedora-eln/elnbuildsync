@@ -80,63 +80,9 @@ def main(log_level, dry_run, config_url):
     logger.debug("Starting HTTP server")
     reactor.listenTCP(8080, web.setup_web_resources())
 
-    task.deferLater(
-        reactor,
-        1,
-        perform_builds,
-        "eln",
-        [
-            "git+https://src.fedoraproject.org/rpms/fedora-release.git#b8076dc0584f61b29bc851de67e8397184701dab",
-        ],
-        scratch=True,
-    )
-
     logger.debug("Starting Twisted mainloop")
     reactor.run()
     pass
-
-
-@inlineCallbacks
-def test_side_tag():
-    side_tag = yield kojihelpers.tags.prepare_side_tag("eln-build")
-    logger.info(f"Side tag {side_tag} is ready for builds")
-
-
-@inlineCallbacks
-def test_wait_repo():
-    side_tag = yield kojihelpers.tags.wait_repo("eln-build")
-    logger.info(f"Side tag {side_tag} is ready for builds")
-
-
-@inlineCallbacks
-def test_get_buildinfo():
-    import json
-
-    buildinfo = yield kojihelpers.builds.get_buildinfo("source", 2234734, strict=True)
-    logger.info(f"TEST: {json.dumps(buildinfo, indent=2)}")
-
-
-@inlineCallbacks
-def test_awaiting_queue():
-    logger.info("Awaiting data")
-    yield wait_for_queue()
-    logger.info("Successfully awaited")
-
-
-testing_deferred = None
-
-
-def wait_for_queue():
-    global testing_deferred
-    testing_deferred = Deferred()
-    return testing_deferred
-
-
-def sim_put():
-    global testing_deferred
-    logger.info("Putting")
-    testing_deferred.callback(None)
-    logger.info("Putting complete")
 
 
 if __name__ == "__main__":
