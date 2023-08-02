@@ -71,12 +71,8 @@ def main(log_level, dry_run, config_url):
         sys.exit(128)
 
     # Schedule batch checking
-    batching.message_batch_processor = task.LoopingCall(
-        batching.process_message_batch
-    )
-    batching.message_batch_processor.start(
-        batching.message_batch_timer, now=False
-    )
+    batching.message_batch_processor = task.LoopingCall(batching.process_message_batch)
+    batching.message_batch_processor.start(batching.message_batch_timer, now=False)
 
     # Start listening for Fedora Messages
     fedora_messaging.api.twisted_consume(listener.message_handler)
@@ -116,9 +112,7 @@ def test_wait_repo():
 def test_get_buildinfo():
     import json
 
-    buildinfo = yield kojihelpers.builds.get_buildinfo(
-        "source", 2234734, strict=True
-    )
+    buildinfo = yield kojihelpers.builds.get_buildinfo("source", 2234734, strict=True)
     logger.info(f"TEST: {json.dumps(buildinfo, indent=2)}")
 
 

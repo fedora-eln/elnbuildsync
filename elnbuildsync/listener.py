@@ -61,9 +61,7 @@ def message_handler(msg):
                 del kojihelpers.awaiting_repo_init[tag]
 
             else:
-                logger.debug(
-                    f"Unknown repository tag {msg.body['tag']}, ignoring."
-                )
+                logger.debug(f"Unknown repository tag {msg.body['tag']}, ignoring.")
                 raise Drop()
 
         elif msg.topic.endswith("buildsys.repo.done"):
@@ -79,17 +77,17 @@ def message_handler(msg):
                 del kojihelpers.awaited_repos[tag]
 
             else:
-                logger.debug(
-                    f"Unknown repository tag {msg.body['tag']}, ignoring."
-                )
+                logger.debug(f"Unknown repository tag {msg.body['tag']}, ignoring.")
                 raise Drop()
-        
+
         elif msg.topic.endswith("buildsys.task.state.change"):
             # Are we looking for this build?
             task_id = msg.body["id"]
             if task_id in state.active_builds:
                 if msg.body["new"] in ("FREE", "OPEN", "ASSIGNED"):
-                    logger.debug(f"Build {task_id} ({msg.body['info']['request']}) is {msg.body['new']}")
+                    logger.debug(
+                        f"Build {task_id} ({msg.body['info']['request']}) is {msg.body['new']}"
+                    )
                     raise Drop()
 
                 elif msg.body["new"] == "CLOSED":
@@ -110,12 +108,11 @@ def message_handler(msg):
 
                 del state.active_builds[task_id]
                 return
-            
+
             else:
                 # Ignore messages from unrelated builds
                 logger.debug(f"Unknown task_id {task_id}. Ignoring.")
                 raise Drop()
-
 
         if not msg.topic.endswith("buildsys.tag"):
             # Ignore any non-tagging messages
@@ -124,9 +121,7 @@ def message_handler(msg):
 
         tag = msg.body["tag"]
         if tag != config.main["trigger"]["rpms"]:
-            logger.debug(
-                f"Message tag {tag} not configured as a trigger, ignoring."
-            )
+            logger.debug(f"Message tag {tag} not configured as a trigger, ignoring.")
             raise Drop()
 
         # Check whether this component is meaningful to us
@@ -135,7 +130,7 @@ def message_handler(msg):
 
         # This is a component we care about, so process it in the main reactor thread
         # to avoid blocking new messages
-        
+
         # TODO
         # reactor.callLater(0, rebuild_tagged_component, msg)
 

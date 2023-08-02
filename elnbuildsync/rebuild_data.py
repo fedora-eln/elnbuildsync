@@ -94,17 +94,11 @@ def build_components(target, builds):
                 scmurl = config.split_scmurl(rd.scmurl)
                 gitcomponent = scmurl["comp"]
                 ref = scmurl["ref"]
-                downstream_scmurl = (
-                    f"{prefix}/{namespace}/{gitcomponent}#{ref}"
-                )
+                downstream_scmurl = f"{prefix}/{namespace}/{gitcomponent}#{ref}"
 
                 dry = "DRY-RUN: " if config.dry_run else ""
-                scratch = (
-                    "Scratch-b" if config.main["build"]["scratch"] else "B"
-                )
-                logger.info(
-                    f"{dry}{scratch}uilding {downstream_scmurl} for {target}"
-                )
+                scratch = "Scratch-b" if config.main["build"]["scratch"] else "B"
+                logger.info(f"{dry}{scratch}uilding {downstream_scmurl} for {target}")
 
                 if not config.dry_run:
                     kojihelpers.call_distrogitsync(

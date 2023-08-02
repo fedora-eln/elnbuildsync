@@ -57,9 +57,7 @@ def get_buildinfo(which_bsys, build_id, **kwargs):
     try:
         buildinfo = yield deferToThread(bsys.getBuild, build_id, **kwargs)
     except koji.GenericError as e:
-        logger.exception(
-            f"Could not retrieve information for build {build_id}"
-        )
+        logger.exception(f"Could not retrieve information for build {build_id}")
         raise BuildInfoUnavailableError(
             f"Could not retrieve information for build {build_id}"
         ) from e

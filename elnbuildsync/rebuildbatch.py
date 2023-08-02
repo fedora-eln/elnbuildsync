@@ -34,8 +34,9 @@ class RebuildBatch:
     # Database ID
     _rebuild_batch_id = 0
 
-
-    def __init__(self, dest_tag: str, side_tag: str, fedora_tag_messages: list[FedoraMessage]):
+    def __init__(
+        self, dest_tag: str, side_tag: str, fedora_tag_messages: list[FedoraMessage]
+    ):
         """
         Do not call RebuildBatch() alone. Instantiate via
         `yield RebuildBatch(dest_tag, side_tag, msgs).async_init()` instead.
@@ -47,7 +48,6 @@ class RebuildBatch:
 
         self._fedora_tag_messages = fedora_tag_messages
 
-
     @inlineCallbacks
     def async_init(self):
         for fedora_tag_message in fedora_tag_messages:
@@ -57,11 +57,12 @@ class RebuildBatch:
         # self._rebuild_batch_id = ID from database
         pass
 
-
     @inlineCallbacks
     def add_tag_message(self, fedora_tag_message: FedoraMessage):
         # Create the new TagMessage (which also creates the DB object)
-        message = yield TagMessage(fedora_tag_message, self._rebuild_batch_id).async_init()
-        
+        message = yield TagMessage(
+            fedora_tag_message, self._rebuild_batch_id
+        ).async_init()
+
         # Add the tag_message object to this batch
         self.tag_messages.append(message)

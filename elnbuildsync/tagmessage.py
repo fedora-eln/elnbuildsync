@@ -44,7 +44,6 @@ class TagMessage:
         self._rebuild_batch_id = rebuild_batch_id
         self._json_message = tag_message
 
-
     @inlineCallbacks
     def async_init(self):
         self.scmurl = yield get_scmurl(self._json_message.body["build_id"])

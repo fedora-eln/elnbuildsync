@@ -26,4 +26,3 @@ class ELNBuildSyncState:
 
     # A dictionary to keep track of builds in-progress
     active_builds = dict()
-    

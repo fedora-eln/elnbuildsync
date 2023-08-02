@@ -46,9 +46,7 @@ def prepare_side_tag(base_tag):
     downstream_koji = get_buildsys("destination")
 
     # Trigger the creation of the side-tag
-    side_tag_info = yield deferToThread(
-        downstream_koji.createSideTag, base_tag
-    )
+    side_tag_info = yield deferToThread(downstream_koji.createSideTag, base_tag)
     side_tag_name = side_tag_info["name"]
 
     # Wait for koji to generate the buildroot repo

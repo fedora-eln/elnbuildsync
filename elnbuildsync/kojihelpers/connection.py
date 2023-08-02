@@ -81,9 +81,7 @@ def get_buildsys(which, force_login=False):
     bsys = None
     while not bsys:
         try:
-            cfg = koji.read_config(
-                profile_name=config.main[bsys_type.name]["profile"]
-            )
+            cfg = koji.read_config(profile_name=config.main[bsys_type.name]["profile"])
             bsys = koji.ClientSession(cfg["server"], opts=cfg)
         except Exception:
             logger.exception(
@@ -95,9 +93,7 @@ def get_buildsys(which, force_login=False):
             time.sleep(1)
     logger.debug("The %s koji instance initialized.", bsys_type.name)
     if bsys_type is BuildSystemType.destination or force_login:
-        logger.debug(
-            "Authenticating with the %s koji instance." % bsys_type.name
-        )
+        logger.debug("Authenticating with the %s koji instance." % bsys_type.name)
 
         while not bsys.logged_in:
             try:
