@@ -18,10 +18,10 @@
 
 from collections import defaultdict
 
+from . import builds
+from . import connection
+
+
 # The set of repos we're waiting on to initialize
 awaited_repos = defaultdict(list)
 awaiting_repo_init = defaultdict(list)
-
-
-class KojiHelperBaseError(Exception):
-    pass

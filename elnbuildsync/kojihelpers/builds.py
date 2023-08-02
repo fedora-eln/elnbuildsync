@@ -20,7 +20,7 @@
 import koji
 import logging
 
-from . import KojiHelperBaseError
+from .errors import KojiHelperBaseError
 from .connection import get_buildsys
 from .. import config
 from .. import listener
@@ -32,14 +32,6 @@ logger = logging.getLogger(__name__)
 
 # Koji magic number
 KOJI_BACKGROUND_PRIORITY = 5
-
-
-class BuildInfoUnavailableError(KojiHelperBaseError):
-    pass
-
-
-class IneligibleBuildError(KojiHelperBaseError):
-    pass
 
 
 def get_scmurl(build_id):

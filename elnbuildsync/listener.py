@@ -25,8 +25,8 @@ from . import batching
 from . import config
 
 from . import kojihelpers
-from .kojihelpers.builds import get_scmurl
 from .rebuild_data import RebuildData
+from .state import ELNBuildSyncState as state
 
 from fedora_messaging.exceptions import Nack, Drop
 from twisted.internet import reactor
@@ -170,7 +170,7 @@ def rebuild_tagged_component(msg):
     release = msg.body["release"]
     target = config.main["build"]["target"]
 
-    scmurl = yield get_scmurl(msg.body["task_id"])
+    scmurl = yield kojihelpers.builds.get_scmurl(msg.body["task_id"])
     rd = RebuildData("rpms", comp, version, release, scmurl, target)
 
     batching.batch_processor.reset()

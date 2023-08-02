@@ -26,7 +26,7 @@ from enum import auto, Enum
 
 from .. import config
 
-from . import KojiHelperBaseError
+from .errors import KojiHelperBaseError
 
 
 logger = logging.getLogger(__name__)
