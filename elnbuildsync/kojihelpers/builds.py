@@ -20,7 +20,7 @@
 import koji
 import logging
 
-from .errors import KojiHelperBaseError
+from .errors import BuildInfoUnavailableError, IneligibleBuildError
 from .connection import get_buildsys
 from .. import config
 from .. import listener
@@ -83,7 +83,8 @@ def perform_builds(target, scm_urls, scratch=False):
                 priority=KOJI_BACKGROUND_PRIORITY,
             )
 
-    yield _wait_for_builds(build_vcalls)
+    results = yield _wait_for_builds(build_vcalls)
+    logger.info(f"Results: {results}")
 
 
 @inlineCallbacks
@@ -97,4 +98,4 @@ def _wait_for_builds(build_vcalls):
         # Register this build-id to watch for in messages
         deferreds.append(listener.register_build_task_id(task_id))
 
-    yield gatherResults(deferreds, consumeErrors=True)
+    yield gatherResults(deferreds)
