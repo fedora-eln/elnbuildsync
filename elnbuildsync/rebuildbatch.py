@@ -38,8 +38,9 @@ class RebuildBatch:
     def __init__(self, dest_tag: str, side_tag: str, fedora_tag_messages: list[FedoraMessage]):
         """
         Do not call RebuildBatch() alone. Instantiate via
-        `yield TagMessage(dest_tag, side_tag, msgs).async_init()` instead. This ensures
-        that the database actions will settle before the object is used.
+        `yield RebuildBatch(dest_tag, side_tag, msgs).async_init()` instead.
+        This ensures that the database actions will settle before the object
+        is used.
         """
         self.dest_tag = dest_tag
         self.side_tag = side_tag
