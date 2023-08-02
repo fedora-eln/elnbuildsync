@@ -24,7 +24,7 @@ from .errors import BuildInfoUnavailableError, IneligibleBuildError
 from .connection import get_buildsys
 from .. import config
 from .. import listener
-from twisted.internet.defer import gatherResults, inlineCallbacks
+from twisted.internet.defer import DeferredList, inlineCallbacks
 from twisted.internet.threads import deferToThread
 
 logger = logging.getLogger(__name__)
@@ -67,6 +67,11 @@ def get_buildinfo(which_bsys, build_id, **kwargs):
 
 @inlineCallbacks
 def perform_builds(target, scm_urls, scratch=False):
+    tasks = yield deferToThread(start_builds, target, scm_urls, scratch)
+    results = yield _wait_for_builds(tasks)
+
+
+def start_builds(target, scm_urls, scratch=False):
     bsys = get_buildsys("destination")
     build_vcalls = dict()
     with bsys.multicall(batch=config.koji_batch) as mc:
@@ -83,19 +88,30 @@ def perform_builds(target, scm_urls, scratch=False):
                 priority=KOJI_BACKGROUND_PRIORITY,
             )
 
-    results = yield _wait_for_builds(build_vcalls)
-    logger.info(f"Results: {results}")
+    tasks = dict()
+    for scmurl, vcall in build_vcalls.items():
+        task_id = vcall.result
+        tasks[scmurl] = task_id
+        logger.info(f"Building task {task_id} begun for {scmurl}.")
+
+    return tasks
 
 
 @inlineCallbacks
-def _wait_for_builds(build_vcalls):
+def wait_for_build(task_id):
+    logger.debug(f"Waiting for {task_id}.")
+
+    # Wait until this task is complete
+    yield listener.register_build_task_id(task_id)
+
+
+@inlineCallbacks
+def _wait_for_builds(tasks):
     deferreds = list()
 
-    for scmurl, vcall in build_vcalls.items():
-        task_id = vcall.result
-        logger.info(f"Building begun for {scmurl}. task_id: {task_id}")
-
-        # Register this build-id to watch for in messages
+    for scmurl, task_id in tasks.items():
+        logger.debug(f"Waiting for {task_id} of {scmurl}.")
         deferreds.append(listener.register_build_task_id(task_id))
 
-    yield gatherResults(deferreds)
+    result = yield DeferredList(deferreds, consumeErrors=True)
+    return result
