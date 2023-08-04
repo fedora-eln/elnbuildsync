@@ -17,46 +17,101 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
-from twisted.internet.defer import inlineCallbacks
+import ast
+import logging
 
+from twisted.internet.defer import inlineCallbacks
+from twisted.internet.threads import deferToThread
+
+from . import kojihelpers
 from .rebuildtask import RebuildTask
 
 
-# Temporary internal variable to store the latest attempt ID
-# Remove this once we are getting this from the DB
-_latest_attempt_id = 0
+logger = logging.getLogger(__name__)
 
 
 class RebuildAttempt:
-    tasks = list()
+    # Temporary internal class variable to store the latest attempt ID
+    # Remove this once we are getting this from the DB
+    _latest_attempt_id = 0
 
-    _unregistered_tasks = list()
+    def __init__(self, scm_urls, rebuild_batch):
+        self.tasks = dict()
+        self.scm_urls = scm_urls
+        self._rebuild_batch = rebuild_batch
 
-    # DB IDs
-    _rebuild_attempt_id = 0
-    _rebuild_batch_id = 0
-
-    def __init__(self, tasks, rebuild_batch_id):
-        self.tasks = tasks
-        self._rebuild_batch_id = rebuild_batch_id
-        self._unregistered_tasks = tasks
+        # DB ID
+        self._rebuild_attempt_id = 0
 
     @inlineCallbacks
     def async_init(self):
-        global latest_attempt_id
-
-        for task in self._unregistered_tasks:
-            yield self.add_task(task)
+        # Kick off the builds and get their task IDs
+        task_index = yield kojihelpers.builds.start_builds(
+            self._rebuild_batch.side_tag,
+            self.scm_urls,
+            scratch=self._rebuild_batch.scratch,
+        )
+        tasks = task_index.values()
 
         # TODO: Create the RebuildAttempt in the database here
 
+        # Create the associated RebuildTask objects
+        for task in tasks:
+            yield self.add_task(task)
+
         # TODO: get this from the DB
-        self._rebuild_attempt_id = _latest_attempt_id
-        _latest_attempt_id += 1
+        self._rebuild_attempt_id = self._latest_attempt_id
+        self._latest_attempt_id += 1
 
         return self
 
     @inlineCallbacks
     def add_task(self, task):
-        rtask = yield RebuildTask(task, self._rebuild_attempt_id).async_init()
-        self.tasks.append(rtask)
+        if task in self.tasks:
+            raise ValueError("You may only register the same task_id once")
+
+        try:
+            rtask = yield RebuildTask(task, self).async_init()
+        except Exception as e:
+            logger.critical(f"Failed to create RebuildTask", exc_info=True)
+            raise
+
+        self.tasks[task] = rtask
+
+    @inlineCallbacks
+    def async_await(self):
+        successes = dict()
+        failures = dict()
+
+        task_ids = [task.koji_task_id for task in self.tasks.values()]
+        results = yield kojihelpers.builds.wait_for_builds(task_ids)
+        for (success, value) in results:
+            if success:
+                successes[value["id"]] = value
+
+                # TODO: Get the build_id here by parsing the request
+                # section of a child task of type 'buildArch'
+                # It will have the form: 
+                # "request": [
+                #   "tasks/7581/104277581/fedora-release-39-0.22.eln128.src.rpm",
+                #   22493,
+                #   "noarch",
+                #   true,
+                #   {
+                #     "repo_id": 5304909
+                #   }
+                # ],
+
+                # Store the results in the DB
+                yield self.tasks[value["id"]].finish(value["new"])
+
+            else:
+                err_msg = value.getErrorMessage()
+                err_obj = ast.literal_eval(err_msg)
+
+                failures[err_obj["id"]] = err_obj
+
+                # Store the results in the DB
+                yield self.tasks[err_obj["id"]].finish(err_obj["new"])
+
+        return (successes, failures)

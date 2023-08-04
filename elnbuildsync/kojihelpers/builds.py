@@ -24,6 +24,7 @@ from .errors import BuildInfoUnavailableError, IneligibleBuildError
 from .connection import get_buildsys
 from .. import config
 from .. import listener
+from twisted.internet import reactor
 from twisted.internet.defer import DeferredList, inlineCallbacks
 from twisted.internet.threads import deferToThread
 
@@ -34,6 +35,7 @@ logger = logging.getLogger(__name__)
 KOJI_BACKGROUND_PRIORITY = 5
 
 
+@inlineCallbacks
 def get_scmurl(build_id):
     """Get the SCMURL that the build was created from
 
@@ -41,7 +43,16 @@ def get_scmurl(build_id):
     :returns: A string containing the full, dereferenced SCMURL for the build
     """
 
-    yield get_buildinfo("source", build_id)
+    logger.debug(f"Retrieving SCM URL for {build_id}")
+    try:
+        buildinfo = yield get_buildinfo("source", build_id)
+    except Exception as e:
+        logger.critical("Unexpected error retrieving SCM URL", exc_info=True)
+        reactor.stop()
+    logger.debug(f"Buildinfo: {buildinfo}")
+
+    logger.debug(f"Retrieved SCM URL: {buildinfo['source']}")
+    return buildinfo["source"]
 
 
 @inlineCallbacks
@@ -67,34 +78,47 @@ def get_buildinfo(which_bsys, build_id, **kwargs):
 
 @inlineCallbacks
 def perform_builds(target, scm_urls, scratch=False):
-    tasks = yield deferToThread(start_builds, target, scm_urls, scratch)
-    results = yield _wait_for_builds(tasks)
+    task_index = yield start_builds(target, scm_urls, scratch)
+    results = yield wait_for_builds(task_index.values())
+    return results
 
 
+@inlineCallbacks
 def start_builds(target, scm_urls, scratch=False):
+    task_index = yield deferToThread(_start_builds_thread, target, scm_urls, scratch)
+    return task_index
+
+
+def _start_builds_thread(target, scm_urls, scratch=False):
     bsys = get_buildsys("destination")
     build_vcalls = dict()
-    with bsys.multicall(batch=config.koji_batch) as mc:
-        for scmurl in scm_urls:
-            if not config.is_eligible:
-                raise IneligibleBuildError(
-                    f"{scmurl} is ineligible to be built for {target}"
+    try:
+        with bsys.multicall(batch=config.koji_batch) as mc:
+            logger.debug(f"Starting {len(scm_urls)} tasks")
+            for scmurl in scm_urls:
+                if not config.is_eligible:
+                    raise IneligibleBuildError(
+                        f"{scmurl} is ineligible to be built for {target}"
+                    )
+
+                logger.debug(f"Building {scmurl}")
+                build_vcalls[scmurl] = mc.build(
+                    scmurl,
+                    target,
+                    {"scratch": scratch},
+                    priority=KOJI_BACKGROUND_PRIORITY,
                 )
+    except Exception as e:
+        logger.exception(e)
+        raise
 
-            build_vcalls[scmurl] = mc.build(
-                scmurl,
-                target,
-                {"scratch": scratch},
-                priority=KOJI_BACKGROUND_PRIORITY,
-            )
-
-    tasks = dict()
+    task_index = dict()
     for scmurl, vcall in build_vcalls.items():
         task_id = vcall.result
-        tasks[scmurl] = task_id
+        task_index[scmurl] = task_id
         logger.info(f"Building task {task_id} begun for {scmurl}.")
 
-    return tasks
+    return task_index
 
 
 @inlineCallbacks
@@ -106,11 +130,11 @@ def wait_for_build(task_id):
 
 
 @inlineCallbacks
-def _wait_for_builds(tasks):
+def wait_for_builds(task_ids):
     deferreds = list()
 
-    for scmurl, task_id in tasks.items():
-        logger.debug(f"Waiting for {task_id} of {scmurl}.")
+    for task_id in task_ids:
+        logger.debug(f"Waiting for {task_id} to complete.")
         deferreds.append(listener.register_build_task_id(task_id))
 
     result = yield DeferredList(deferreds, consumeErrors=True)

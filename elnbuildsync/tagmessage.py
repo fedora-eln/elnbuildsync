@@ -17,22 +17,20 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
+import logging
+
 from fedora_messaging.message import Message
 from twisted.internet.defer import Deferred, inlineCallbacks
 
 from .kojihelpers.builds import get_scmurl
 
 
+logger = logging.getLogger(__name__)
+
+
 class TagMessage:
     # Tag JSON samples:
     # https://apps.fedoraproject.org/datagrepper/v2/search?topic=org.fedoraproject.prod.buildsys.tag
-
-    component = None
-    scmurl = None
-
-    # Database IDs
-    _tag_message_id = 0
-    _rebuild_batch_id = 0
 
     def __init__(self, tag_message: Message, rebuild_batch_id: int) -> None:
         """
@@ -41,12 +39,24 @@ class TagMessage:
         that the database actions will settle before the object is used.
         """
         self.component = tag_message.body["name"]
+        self.scmurl = None
         self._rebuild_batch_id = rebuild_batch_id
         self._message = tag_message
 
+        # Database IDs
+        self._tag_message_id = 0
+        self._rebuild_batch_id = 0
+
     @inlineCallbacks
     def async_init(self):
-        self.scmurl = yield get_scmurl(self._message.body["build_id"])
+        try:
+            logger.debug(f"Getting SCM URL for {self._message.body['build_id']}")
+            self.scmurl = yield get_scmurl(self._message.body["build_id"])
+        except Exception as e:
+            logger.exception(e)
+            raise
+
+        logger.debug(f"Got {self.scmurl}")
 
         # Create the TagMessage record in the database here
         return self

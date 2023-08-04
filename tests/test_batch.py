@@ -26,7 +26,7 @@ import os
 import pathlib
 import sys
 
-from fedora_messaging.message import FedoraMessage
+from fedora_messaging.message import Message as FedoraMessage
 from twisted.internet import reactor, task
 from twisted.internet.defer import inlineCallbacks
 
@@ -40,30 +40,32 @@ logger = logging.getLogger(__name__)
 @inlineCallbacks
 def test_batch():
     tag_messages = [
+        # Known good
         FedoraMessage(
             topic="org.fedoraproject.prod.buildsys.tag",
             body={
                 "name": "fedora-release",
-                "buildid": 2229572,
+                "build_id": 2229572,
+            },
+        ),
+        # Known failure
+        FedoraMessage(
+            topic="org.fedoraproject.prod.buildsys.tag",
+            body={
+                "name": "sscg",
+                "build_id": 2111531,
             },
         ),
     ]
 
     batch = yield RebuildBatch(
-        dest_tag="eln", fedora_tag_messages=tag_messages
+        target="eln",
+        fedora_tag_messages=tag_messages,
+        scratch=True,
     ).async_init()
 
-    try:
-        yield elnbuildsync.kojihelpers.builds.perform_builds(
-            "eln",
-            [
-                0,
-            ],
-            scratch=True,
-        )
-    except Exception as e:
-        logger.exception(e)
-        raise
+    # Run the batch to completion
+    yield batch.run()
 
     logger.info("Build complete")
     reactor.stop()
@@ -116,7 +118,7 @@ def main(log_level):
     fedora_messaging.api.twisted_consume(elnbuildsync.listener.message_handler)
 
     logger.debug("Queueing up the test build")
-    task.deferLater(reactor, 1, test_build)
+    task.deferLater(reactor, 1, test_batch)
 
     logger.debug("Starting Twisted mainloop")
     reactor.run()

@@ -17,27 +17,44 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
-from twisted.internet.defer import Deferred, inlineCallbacks
+import logging
 
-from .kojihelpers import builds
+from twisted.internet.defer import inlineCallbacks
+from twisted.internet.threads import deferToThread
+
+
+logger = logging.getLogger(__name__)
 
 
 class RebuildTask:
-    result = None
-    koji_task_id = 0
-
-    # DB IDs
-    _rebuild_attempt_id = 0
-
     def __init__(self, koji_task_id, rebuild_attempt):
+        self.result = None
         self.koji_task_id = koji_task_id
-        self._rebuild_attempt_id = rebuild_attempt
+        self._rebuild_attempt = rebuild_attempt
+
+        # DB IDs
+        self._rebuild_task_id = 0
+
+        logger.debug(f"Created RebuildTask for task_id {koji_task_id}")
 
     @inlineCallbacks
     def async_init(self):
+        # TODO remove this; it's just to ensure we have an async generator
+        # until the DB interaction is available.
+        yield deferToThread(RebuildTask._simple_yield)
+
         # Save this to the database here
         return self
 
     @inlineCallbacks
-    def async_await(self):
-        yield builds.wait_for_build(self.koji_task_id)
+    def finish(self, state):
+        # TODO remove this; it's just to ensure we have an async generator
+        # until the DB interaction is available.
+        yield deferToThread(RebuildTask._simple_yield)
+
+        self.result = state
+        # Save this to the database here
+
+    @staticmethod
+    def _simple_yield():
+        pass

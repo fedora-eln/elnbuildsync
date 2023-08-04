@@ -31,47 +31,59 @@ from . import kojihelpers
 logger = logging.getLogger(__name__)
 
 
-# Temporary internal variable to store the latest batch ID
-# Remove this once we are getting this from the DB
-_latest_batch_id = 0
-
-
 class RebuildBatch:
-    tag_messages = list()
-    side_tag = None
-    dest_tag = None
-    finished = False
+    # Temporary internal variable to store the latest batch ID
+    # Remove this once we are getting this from the DB
+    _latest_batch_id = 0
 
-    _active_attempt = None
-
-    # Database ID
-    _rebuild_batch_id = 0
-
-    def __init__(self, dest_tag: str, fedora_tag_messages: list[FedoraMessage]):
+    def __init__(
+        self, target: str, fedora_tag_messages: list[FedoraMessage], scratch=False
+    ):
         """
         Do not call RebuildBatch() alone. Instantiate via
-        `yield RebuildBatch(dest_tag, msgs).async_init()` instead.
+        `yield RebuildBatch(target, msgs).async_init()` instead.
         This ensures that the database actions will settle before the object
         is used.
         """
-        self.dest_tag = dest_tag
-        self._base_tag = f"{dest_tag}-build"
+        self.tag_messages = list()
+        self.target = target
+        self.scratch = scratch
+        self.side_tag = None
+        self._dest_tag = None
+        self._side_tag_base = None
         self._fedora_tag_messages = fedora_tag_messages
+
+        # Database ID
+        self._rebuild_batch_id = 0
 
     @inlineCallbacks
     def async_init(self):
-        global latest_batch_id
-
+        build_ids = list()
         for fedora_tag_message in self._fedora_tag_messages:
             yield self.add_tag_message(fedora_tag_message)
+            build_ids.append(fedora_tag_message.body["build_id"])
+
+        (
+            self._side_tag_base,
+            self._dest_tag,
+        ) = yield kojihelpers.tags.get_tags_for_target(self.target)
+
+        # TODO: Exclude skip_tag components from the initial build_ids
+        # in the side-tag.
 
         # Create the side-tag for this batch
         while True:
             try:
-                self.side_tag = yield kojihelpers.tags.prepare_side_tag(self._base_tag)
+                self.side_tag = yield kojihelpers.tags.prepare_side_tag(
+                    self._side_tag_base,
+                    build_ids,
+                )
             except TimeoutError as e:
                 # Keep retrying to create a side-tag.
                 # Any other exception will be propagated up the stack.
+                logger.warning(
+                    f"Timed out creating the side-tag from {self._side_tag_base}. Retrying."
+                )
                 continue
 
             # Side-tag is ready. Proceed.
@@ -81,8 +93,8 @@ class RebuildBatch:
         # self._rebuild_batch_id = ID from database
 
         # TODO: get this from the DB
-        self._rebuild_batch_id = _latest_batch_id
-        _latest_batch_id += 1
+        self._rebuild_batch_id = self._latest_batch_id
+        self._latest_batch_id += 1
 
         return self
 
@@ -106,12 +118,55 @@ class RebuildBatch:
         for tag_message in self.tag_messages:
             scm_urls.append(tag_message.scmurl)
 
-        # Kick off the builds and get their task IDs
-        # TODO: get scratch value from config
-        tasks = kojihelpers.builds.start_builds(
-            self.side_tag, scm_urls, scratch=True
-        ).values()
+        attempt = yield RebuildAttempt(scm_urls, self).async_init()
+        successes, failures = yield attempt.async_await()
 
-        self._active_attempt = yield RebuildAttempt(
-            tasks, self._rebuild_batch_id
-        ).async_init()
+        # Store all successful builds for later tagging
+        all_successes = successes
+
+        for success in successes.values():
+            logger.info(f"Rebuild of {success['info']['request'][0]} succeeded")
+
+        # TODO: Config option to enable/disable retry loop
+
+        # Arbitrarily pick ten million, since we will never have that many
+        # packages, let alone failures.
+        # Note: if the batch consists of a single component, it will still be
+        # retried here if it fails. This is intentional and should reduce the
+        # number of flaky-test failures.
+        prev_failures = 10000000
+        num_failures = len(failures)
+        while num_failures > 0 and num_failures < prev_failures:
+            prev_failures = num_failures
+
+            logger.info(
+                f"Retrying {num_failures} tasks that failed for {self.side_tag}"
+            )
+            retry_urls = [
+                failure["info"]["request"][0] for failure in failures.values()
+            ]
+            for url in retry_urls:
+                logger.debug(f"Retrying {url}")
+
+            attempt = yield RebuildAttempt(retry_urls, self).async_init()
+            successes, failures = yield attempt.async_await()
+            all_successes.update(successes)
+
+            num_failures = len(failures)
+
+        if num_failures:
+            logger.warning(f"{num_failures} tasks failed for {self.side_tag}")
+            for task_id, err_msg in failures.items():
+                logger.warning(f"FAILED: {task_id}: {err_msg['srpm']}")
+
+        # Only try to tag builds in if they're non-scratch builds.
+        if not self.scratch:
+            logger.info(f"Tagging successful builds into {self._dest_tag}")
+
+            # TODO: figure out how to get the build_ids
+            # Probably need to make sure that RebuildAttempt returns them
+
+            # TODO: yield kojihelpers.tags.tag_builds(self._dest_tag, build_ids)
+
+        logger.info(f"Removing side-tag {self.side_tag}")
+        yield kojihelpers.tags.remove_tag(self._dest_tag)

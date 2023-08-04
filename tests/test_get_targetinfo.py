@@ -26,33 +26,30 @@ import os
 import pathlib
 import sys
 
+from fedora_messaging.message import Message as FedoraMessage
 from twisted.internet import reactor, task
 from twisted.internet.defer import inlineCallbacks
 
 import elnbuildsync
 
+from elnbuildsync.rebuildbatch import RebuildBatch
+
 logger = logging.getLogger(__name__)
 
 
 @inlineCallbacks
-def test_build():
+def test_get_target():
     try:
-        results = yield elnbuildsync.kojihelpers.builds.perform_builds(
-            "eln",
-            [
-                # Successful build
-                # "git+https://src.fedoraproject.org/rpms/fedora-release.git#b8076dc0584f61b29bc851de67e8397184701dab",
-                # Known failure (quick, missing sources)
-                "git+https://src.fedoraproject.org/rpms/sscg.git#6c1d290dc909caa7b1f7913c2e97dd6afc0097ae",
-            ],
-            scratch=True,
+        br_tag, dest_tag = yield elnbuildsync.kojihelpers.tags.get_tags_for_target(
+            "eln"
         )
     except Exception as e:
-        logger.exception(e)
-        raise
+        logger.critical(f"SCM URL lookup failed", exc_info=True)
+        reactor.stop()
 
-    logger.info("Build complete")
-    logger.info(f"Results: {results}")
+    logger.info(f"Buildroot tag: {br_tag}")
+    logger.info(f"Destination tag: {dest_tag}")
+
     reactor.stop()
 
 
@@ -89,21 +86,7 @@ def main(log_level):
         logger.critical("Could not load configuration.")
         sys.exit(128)
 
-    # Set the current working directory to the root of the tests
-    # This is needed so that relative paths to certificates in the
-    # fedora_messaging config will work
-    script_dir = pathlib.Path(__file__).parent
-    os.chdir(script_dir)
-
-    # Read in the Fedora Messages config file
-    fedora_messaging.config.conf.load_config(f"{script_dir}/fedtest.toml")
-
-    # Start listening for Fedora Messages
-    logger.debug("Start listening for Fedora messages")
-    fedora_messaging.api.twisted_consume(elnbuildsync.listener.message_handler)
-
-    logger.debug("Queueing up the test build")
-    task.deferLater(reactor, 1, test_build)
+    task.deferLater(reactor, 1, test_get_target)
 
     logger.debug("Starting Twisted mainloop")
     reactor.run()
