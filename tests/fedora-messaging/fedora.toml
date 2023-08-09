@@ -42,7 +42,13 @@ arguments = {}
 [[bindings]]
 queue = "f5debce1-6010-4537-8d75-01d3a77e5dad"
 exchange = "amq.topic"
-routing_keys = ["#.buildsys.repo.init", "#.buildsys.repo.done", "#.buildsys.tag", "buildsys.task.state.change"]
+
+routing_keys = [
+    "org.fedoraproject.prod.buildsys.repo.init",
+    "org.fedoraproject.prod.buildsys.repo.done",
+    "org.fedoraproject.prod.buildsys.tag",
+    "org.fedoraproject.prod.buildsys.task.state.change"
+    ]
 
 [consumer_config]
 example_key = "for my consumer"

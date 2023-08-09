@@ -5,7 +5,7 @@ configuration:
       url: https://src.fedoraproject.org/repo/pkgs
       cgi: https://src.fedoraproject.org/repo/pkgs/upload.cgi
       path: "%(name)s/%(filename)s/%(hashtype)s/%(hash)s/%(filename)s"
-    profile: stg
+    profile: koji
     mbs: https://mbs.fedoraproject.org
   destination:
     scm: https://src.fedoraproject.org
@@ -13,7 +13,7 @@ configuration:
       url: https://src.fedoraproject.org/repo/pkgs
       cgi: https://src.fedoraproject.org/repo/pkgs/upload.cgi
       path: "%(name)s/%(filename)s/%(hashtype)s/%(hash)s/%(filename)s"
-    profile: stg
+    profile: koji
     mbs: https://mbs.fedoraproject.org
   trigger:
     rpms: f40
