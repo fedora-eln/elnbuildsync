@@ -6,9 +6,9 @@ amqp_url = "amqps://fedora.stg:@rabbitmq.stg.fedoraproject.org/%2Fpublic_pubsub"
 callback = "fedora_messaging.example:printer"
 
 [tls]
-ca_cert = "/etc/fedora-messaging/stg-cacert.pem"
-keyfile = "/etc/fedora-messaging/fedora.stg-key.pem"
-certfile = "/etc/fedora-messaging/fedora.stg-cert.pem"
+ca_cert = "tests/fedora-messaging/stg-cacert.pem"
+keyfile = "tests/fedora-messaging/fedora.stg-key.pem"
+certfile = "tests/fedora-messaging/fedora.stg-cert.pem"
 
 [client_properties]
 app = "Example Application"
@@ -33,16 +33,16 @@ arguments = {}
 #
 # If you require a stronger guarantee about delivery, please talk to Fedora's
 # Infrastructure team.
-[queues.00000000-0000-0000-0000-000000000000]
+[queues."ceb269ca-4f23-4583-9875-f70a5038c37e"]
 durable = false
 auto_delete = true
 exclusive = true
 arguments = {}
 
 [[bindings]]
-queue = "00000000-0000-0000-0000-000000000000"
+queue = "ceb269ca-4f23-4583-9875-f70a5038c37e"
 exchange = "amq.topic"
-routing_keys = ["#"]  # Set this to the specific topics you are interested in.
+routing_keys = ["#.buildsys.repo.init", "#.buildsys.repo.done", "#.buildsys.tag", "buildsys.task.state.change"]
 
 [consumer_config]
 example_key = "for my consumer"

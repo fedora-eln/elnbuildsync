@@ -6,9 +6,9 @@ amqp_url = "amqps://fedora:@rabbitmq.fedoraproject.org/%2Fpublic_pubsub"
 callback = "fedora_messaging.example:printer"
 
 [tls]
-ca_cert = "/etc/fedora-messaging/cacert.pem"
-keyfile = "/etc/fedora-messaging/fedora-key.pem"
-certfile = "/etc/fedora-messaging/fedora-cert.pem"
+ca_cert = "tests/fedora-messaging/cacert.pem"
+keyfile = "tests/fedora-messaging/fedora-key.pem"
+certfile = "tests/fedora-messaging/fedora-cert.pem"
 
 [client_properties]
 app = "Example Application"
@@ -33,16 +33,16 @@ arguments = {}
 #
 # If you require a stronger guarantee about delivery, please talk to Fedora's
 # Infrastructure team.
-[queues.00000000-0000-0000-0000-000000000000]
+[queues.f5debce1-6010-4537-8d75-01d3a77e5dad]
 durable = false
 auto_delete = true
 exclusive = true
 arguments = {}
 
 [[bindings]]
-queue = "00000000-0000-0000-0000-000000000000"
+queue = "f5debce1-6010-4537-8d75-01d3a77e5dad"
 exchange = "amq.topic"
-routing_keys = ["#"]  # Set this to the specific topics you are interested in.
+routing_keys = ["#.buildsys.repo.init", "#.buildsys.repo.done", "#.buildsys.tag", "buildsys.task.state.change"]
 
 [consumer_config]
 example_key = "for my consumer"
