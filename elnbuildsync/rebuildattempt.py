@@ -91,7 +91,7 @@ class RebuildAttempt:
 
                 # TODO: Get the build_id here by parsing the request
                 # section of a child task of type 'buildArch'
-                # It will have the form: 
+                # It will have the form:
                 # "request": [
                 #   "tasks/7581/104277581/fedora-release-39-0.22.eln128.src.rpm",
                 #   22493,
