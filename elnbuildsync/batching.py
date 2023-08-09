@@ -20,45 +20,35 @@
 from enum import Enum
 from queue import Queue, Empty
 from fedora_messaging.message import Message
-from twisted.internet.defer import Deferred
+from twisted.internet.defer import inlineCallbacks
 
+from . import config
+from .rebuildbatch import RebuildBatch
 
 message_queue = Queue()
 message_batch_timer = 5
 message_batch_processor = None
 
-rebuild_batch_queue = Queue()
-build_batch_timer = 5
-build_batch_processor = None
 
-
-class BuildTask:
-    def __init__(self):
-        pass
-
-
-class BuildAttempt:
-    def __init__(self, tasks):
-        pass
-
-
+@inlineCallbacks
 def process_message_batch():
-    builds = list()
+    fedora_tag_messages = list()
     while True:
         try:
-            rd = message_queue.get_nowait()
-            builds.append(rd)
+            tag_message = message_queue.get_nowait()
+            fedora_tag_messages.append(tag_message)
         except Empty as e:
             break
 
-    if not builds:
+    if not fedora_tag_messages:
         # Nothing to do here
         return
 
     # Create Batch object
+    batch = yield RebuildBatch(target=config.main["build"]["target"], fedora_tag_messages=fedora_tag_messages, scratch=config.main["build"]["scratch"]).async_init()
 
-
-def process_build_batch(builds):
-    # Wait for the queue to become available
-    yield wait_for_build_batch(build_batch_queue)
-    pass
+    # Run the batch.
+    # IMPORTANT: this must complete before other batches are started. This
+    # may take a long time and will introduce lag in how quickly packages
+    # are processed through.
+    yield batch.run()

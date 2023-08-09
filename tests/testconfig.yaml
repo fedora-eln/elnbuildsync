@@ -22,7 +22,7 @@ configuration:
     prefix: git+https://src.fedoraproject.org
     target: eln
     platform: platform:eln
-    scratch: false
+    scratch: true
   git:
     author: DistroBaker
     email: osci-list@redhat.com

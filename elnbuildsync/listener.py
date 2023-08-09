@@ -127,11 +127,9 @@ def message_handler(msg):
         if not config.is_eligible("rpms", msg.body["name"]):
             raise Drop()
 
-        # This is a component we care about, so process it in the main reactor thread
-        # to avoid blocking new messages
-
-        # TODO
-        # reactor.callLater(0, rebuild_tagged_component, msg)
+        # This is a component we care about, so add it to the queue
+        batching.message_batch_processor.reset()
+        batching.message_queue.put(msg)
 
     except Drop as e:
         # Tell the AMQP server that we're ignoring this message
@@ -160,20 +158,6 @@ def fire_errback(deferred, *data):
         # Most likely due to a timeout, so ignore it
         logger.exception(e)
         pass
-
-
-@inlineCallbacks
-def rebuild_tagged_component(msg):
-    comp = msg.body["name"]
-    version = msg.body["version"]
-    release = msg.body["release"]
-    target = config.main["build"]["target"]
-
-    scmurl = yield kojihelpers.builds.get_scmurl(msg.body["task_id"])
-    rd = RebuildData("rpms", comp, version, release, scmurl, target)
-
-    batching.batch_processor.reset()
-    batching.message_queue.put(rd)
 
 
 def register_build_task_id(task_id):
