@@ -248,7 +248,7 @@ def get_distro_packages(
 # FIXME: This needs even more error checking, e.g.
 #         - check if blocks are actual dictionaries
 #         - check if certain values are what we expect
-def load_config(config_url=None):
+def load_config(config_git_url=None, config_file=None):
     """Loads or updates the global configuration from the provided URL in
     the `link#branch` format.  If no branch is provided, assumes `master`.
 
@@ -260,44 +260,52 @@ def load_config(config_url=None):
     global main
     global comps
     global scmurl
-    cdir = tempfile.TemporaryDirectory(prefix="distrobaker-")
 
-    if config_url:
-        scmurl = config_url
+    if not (config_git_url or config_file):
+        raise ValueError("One of 'config_git_url' or 'config_file' must be specified")
 
-    logger.info("Fetching configuration from %s to %s", scmurl, cdir.name)
-    scm = split_scmurl(scmurl)
-    if scm["ref"] is None:
-        scm["ref"] = "main"
-    for attempt in range(retry):
+    if config_git_url and config_file:
+        raise ValueError("Only one of 'config_git_url' or 'config_file' may be specified")
+
+    y = None
+
+    with tempfile.TemporaryDirectory(prefix="distrobaker-") as cdir:
+        if config_git_url:
+            scmurl = config_git_url
+
+            logger.info(f"Fetching configuration from {scmurl} to {cdir}")
+            scm = split_scmurl(scmurl)
+            if scm["ref"] is None:
+                scm["ref"] = "main"
+            for attempt in range(retry):
+                try:
+                    git.Repo.clone_from(scm["link"], cdir).git.checkout(scm["ref"])
+                except Exception:
+                    logger.warning(
+                        "Failed to fetch configuration, retrying (#%d).",
+                        attempt + 1,
+                        exc_info=True,
+                    )
+                    continue
+                else:
+                    logger.info("Configuration fetched successfully.")
+                    break
+            else:
+                raise ConfigError("Failed to fetch configuration, giving up.")
+
+            if os.path.isfile(os.path.join(cdir, "distrobaker.yaml")):
+                config_file = os.path.join(cdir, "distrobaker.yaml")
+            else:
+                raise ConfigError("Configuration repository does not contain distrobaker.yaml.")
+
         try:
-            git.Repo.clone_from(scm["link"], cdir.name).git.checkout(scm["ref"])
-        except Exception:
-            logger.warning(
-                "Failed to fetch configuration, retrying (#%d).",
-                attempt + 1,
-                exc_info=True,
-            )
-            continue
-        else:
-            logger.info("Configuration fetched successfully.")
-            break
-    else:
-        raise ConfigError("Failed to fetch configuration, giving up.")
-
-    if os.path.isfile(os.path.join(cdir.name, "distrobaker.yaml")):
-        try:
-            with open(os.path.join(cdir.name, "distrobaker.yaml")) as f:
+            with open(config_file) as f:
                 y = yaml.safe_load(f)
-            logger.debug(
-                "%s loaded, processing.",
-                os.path.join(cdir.name, "distrobaker.yaml"),
-            )
+            logger.debug(f"{config_file} loaded, processing.")
+
         except Exception as e:
             logger.info(e)
-            raise ConfigError("Could not parse distrobaker.yaml.")
-    else:
-        raise ConfigError("Configuration repository does not contain distrobaker.yaml.")
+            raise ConfigError(f"Could not parse {config_file}.")
 
     n = dict()
     if "configuration" in y:
