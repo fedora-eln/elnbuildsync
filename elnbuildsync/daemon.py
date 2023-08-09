@@ -50,8 +50,9 @@ logger = logging.getLogger(__name__)
     show_default=True,
 )
 @click.option("--dry-run", is_flag=True, help="Simulate actions only")
-@click.argument("config_url")
-def main(log_level, dry_run, config_url):
+@click.option("--config-url", default=None)
+@click.option("--config-file", default=None)
+def main(log_level, dry_run, config_url, config_file):
     logging.basicConfig(
         format="%(asctime)s : %(name)s : %(levelname)s : %(message)s",
         level=log_level,
@@ -64,7 +65,7 @@ def main(log_level, dry_run, config_url):
 
     # Read in the config file
     try:
-        config.load_config(config_url)
+        config.load_config(config_git_url=config_url, config_file=config_file)
     except Exception as e:
         logger.exception(e)
         logger.critical("Could not load configuration.")
