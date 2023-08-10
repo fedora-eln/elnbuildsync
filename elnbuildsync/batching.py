@@ -48,7 +48,7 @@ def process_message_batch():
     batch = yield RebuildBatch(target=config.main["build"]["target"], fedora_tag_messages=fedora_tag_messages, scratch=config.main["build"]["scratch"]).async_init()
 
     # Run the batch.
-    # IMPORTANT: this must complete before other batches are started. This
-    # may take a long time and will introduce lag in how quickly packages
-    # are processed through.
+    # IMPORTANT: this must complete before other batches are started. A large
+    # number of packages may queue up in this time, but they will be processed
+    # as a single batch.
     yield batch.run()

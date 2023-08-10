@@ -129,6 +129,10 @@ def message_handler(msg):
 
         # This is a component we care about, so add it to the queue
         batching.message_batch_processor.reset()
+
+        # TODO: We also need to save the list of pending messages to the DB
+        # so they aren't lost if we restart. It's okay to block this thread
+        # for this purpose.
         batching.message_queue.put(msg)
 
     except Drop as e:

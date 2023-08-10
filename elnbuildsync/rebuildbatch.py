@@ -45,7 +45,7 @@ class RebuildBatch:
         This ensures that the database actions will settle before the object
         is used.
         """
-        self.tag_messages = list()
+        self.tag_messages = dict()
         self.target = target
         self.scratch = scratch
         self.side_tag = None
@@ -106,7 +106,10 @@ class RebuildBatch:
         ).async_init()
 
         # Add the tag_message object to this batch
-        self.tag_messages.append(message)
+        # Overwrite any earlier instance of this component, since we only want
+        # to rebuild the most recent one. This is necessary to avoid races
+        # where the older build is tagged in after the newer one.
+        self.tag_messages[message.component] = message
 
     @inlineCallbacks
     def run(self):
@@ -115,7 +118,7 @@ class RebuildBatch:
 
         # Get the list of SCM URLs
         scm_urls = list()
-        for tag_message in self.tag_messages:
+        for tag_message in self.tag_messages.values():
             scm_urls.append(tag_message.scmurl)
 
         attempt = yield RebuildAttempt(scm_urls, self).async_init()
