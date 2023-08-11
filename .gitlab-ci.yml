@@ -12,7 +12,7 @@ format-python:
   stage: format
   script:
     - pip install black
-    - black --target-version py39 --verbose --line-length 79 $CI_PROJECT_DIR
+    - black --target-version py39 --verbose $CI_PROJECT_DIR
   artifacts:
     paths:
       - $CI_PROJECT_DIR/
