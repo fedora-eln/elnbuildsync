@@ -172,4 +172,4 @@ class RebuildBatch:
             # TODO: yield kojihelpers.tags.tag_builds(self._dest_tag, build_ids)
 
         logger.info(f"Removing side-tag {self.side_tag}")
-        yield kojihelpers.tags.remove_tag(self._dest_tag)
+        yield kojihelpers.tags.remove_side_tag(self.side_tag)
