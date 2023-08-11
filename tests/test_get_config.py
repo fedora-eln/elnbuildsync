@@ -30,12 +30,24 @@ import elnbuildsync
 
 script_dir = pathlib.Path(__file__).parent
 
-def test_config_file(requests_mock):
 
-    requests_mock.get("https://tiny.distro.builders/view-buildroot-source-package-name-list--view-eln-extras.txt", text="packageA\nkernel")
-    requests_mock.get("https://tiny.distro.builders/view-source-package-name-list--view-eln-extras.txt", text="packageB\ntexlive-base")
-    requests_mock.get("https://tiny.distro.builders/view-buildroot-source-package-name-list--view-eln.txt", text="packageC")
-    requests_mock.get("https://tiny.distro.builders/view-source-package-name-list--view-eln.txt", text="packageD")
+def test_config_file(requests_mock):
+    requests_mock.get(
+        "https://tiny.distro.builders/view-buildroot-source-package-name-list--view-eln-extras.txt",
+        text="packageA\nkernel",
+    )
+    requests_mock.get(
+        "https://tiny.distro.builders/view-source-package-name-list--view-eln-extras.txt",
+        text="packageB\ntexlive-base",
+    )
+    requests_mock.get(
+        "https://tiny.distro.builders/view-buildroot-source-package-name-list--view-eln.txt",
+        text="packageC",
+    )
+    requests_mock.get(
+        "https://tiny.distro.builders/view-source-package-name-list--view-eln.txt",
+        text="packageD",
+    )
 
     # Read in the main config file
     try:
@@ -71,6 +83,7 @@ def test_config_file(requests_mock):
     # TODO: Trim out excluded packages
     # assert "kernel" not in elnbuildsync.config.comps["rpms"]
     # assert "texlive-base" not in elnbuildsync.config.comps["rpms"]
+
 
 def main():
     logging.basicConfig(

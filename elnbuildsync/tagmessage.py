@@ -61,7 +61,6 @@ class TagMessage:
         # TODO: Create the TagMessage record in the database here
         return self
 
-
     @inlineCallbacks
     def assign_to_rebuildbatch(self, rebuild_batch_id: int) -> None:
         self._rebuild_batch_id = rebuild_batch_id
@@ -70,7 +69,6 @@ class TagMessage:
         # This is a placeholder to ensure we return a Deferred
         yield deferToThread(TagMessage._simple_yield)
 
-
     @inlineCallbacks
     def drop(self):
         # Remove this entry from the database. It will not be processed.
@@ -78,7 +76,6 @@ class TagMessage:
         # TODO: actually remove it from the DB
         # This is a placeholder to ensure we return a Deferred
         yield deferToThread(TagMessage._simple_yield)
-
 
     @staticmethod
     def _simple_yield():

@@ -265,7 +265,9 @@ def load_config(config_git_url=None, config_file=None):
         raise ValueError("One of 'config_git_url' or 'config_file' must be specified")
 
     if config_git_url and config_file:
-        raise ValueError("Only one of 'config_git_url' or 'config_file' may be specified")
+        raise ValueError(
+            "Only one of 'config_git_url' or 'config_file' may be specified"
+        )
 
     y = None
 
@@ -296,7 +298,9 @@ def load_config(config_git_url=None, config_file=None):
             if os.path.isfile(os.path.join(cdir, "distrobaker.yaml")):
                 config_file = os.path.join(cdir, "distrobaker.yaml")
             else:
-                raise ConfigError("Configuration repository does not contain distrobaker.yaml.")
+                raise ConfigError(
+                    "Configuration repository does not contain distrobaker.yaml."
+                )
 
         try:
             with open(config_file) as f:

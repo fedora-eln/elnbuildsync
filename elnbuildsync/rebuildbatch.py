@@ -36,9 +36,7 @@ class RebuildBatch:
     # Remove this once we are getting this from the DB
     _latest_batch_id = 0
 
-    def __init__(
-        self, target: str, tag_messages: list[TagMessage], scratch=False
-    ):
+    def __init__(self, target: str, tag_messages: list[TagMessage], scratch=False):
         """
         Do not call RebuildBatch() alone. Instantiate via
         `yield RebuildBatch(target, msgs).async_init()` instead.
@@ -115,7 +113,6 @@ class RebuildBatch:
             yield drop_message.drop()
 
         self.tag_messages[message.component] = message
-
 
     @inlineCallbacks
     def run(self):

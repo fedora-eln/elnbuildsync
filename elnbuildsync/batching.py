@@ -49,7 +49,11 @@ def process_message_batch():
         return
 
     # Create Batch object
-    batch = yield RebuildBatch(target=config.main["build"]["target"], tag_messages=tag_messages, scratch=config.main["build"]["scratch"]).async_init()
+    batch = yield RebuildBatch(
+        target=config.main["build"]["target"],
+        tag_messages=tag_messages,
+        scratch=config.main["build"]["scratch"],
+    ).async_init()
 
     # Run the batch.
     # IMPORTANT: this must complete before other batches are started. A large
