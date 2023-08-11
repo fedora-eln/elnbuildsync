@@ -20,7 +20,8 @@
 import logging
 
 from fedora_messaging.message import Message
-from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.threads import deferToThread
+from twisted.internet.defer import inlineCallbacks
 
 from .kojihelpers.builds import get_scmurl
 
@@ -32,7 +33,7 @@ class TagMessage:
     # Tag JSON samples:
     # https://apps.fedoraproject.org/datagrepper/v2/search?topic=org.fedoraproject.prod.buildsys.tag
 
-    def __init__(self, tag_message: Message, rebuild_batch_id: int) -> None:
+    def __init__(self, tag_message: Message) -> None:
         """
         Do not call TagMessage() alone. Instantiate via
         `yield TagMessage(msg, batch_id).async_init()` instead. This ensures
@@ -40,7 +41,6 @@ class TagMessage:
         """
         self.component = tag_message.body["name"]
         self.scmurl = None
-        self._rebuild_batch_id = rebuild_batch_id
         self._message = tag_message
 
         # Database IDs
@@ -58,5 +58,31 @@ class TagMessage:
 
         logger.debug(f"Got {self.scmurl}")
 
-        # Create the TagMessage record in the database here
+        # TODO: Create the TagMessage record in the database here
         return self
+
+
+    @inlineCallbacks
+    def assign_to_rebuildbatch(self, rebuild_batch_id: int) -> None:
+        self._rebuild_batch_id = rebuild_batch_id
+
+        # TODO: Update DB entry with batch ID
+        # This is a placeholder to ensure we return a Deferred
+        yield deferToThread(TagMessage._simple_yield)
+
+
+    @inlineCallbacks
+    def drop(self):
+        # Remove this entry from the database. It will not be processed.
+
+        # TODO: actually remove it from the DB
+        # This is a placeholder to ensure we return a Deferred
+        yield deferToThread(TagMessage._simple_yield)
+
+
+    @staticmethod
+    def _simple_yield():
+        pass
+
+    def get_build_id(self):
+        return self._message.body["build_id"]

@@ -37,7 +37,7 @@ class RebuildBatch:
     _latest_batch_id = 0
 
     def __init__(
-        self, target: str, fedora_tag_messages: list[FedoraMessage], scratch=False
+        self, target: str, tag_messages: list[TagMessage], scratch=False
     ):
         """
         Do not call RebuildBatch() alone. Instantiate via
@@ -51,7 +51,7 @@ class RebuildBatch:
         self.side_tag = None
         self._dest_tag = None
         self._side_tag_base = None
-        self._fedora_tag_messages = fedora_tag_messages
+        self._unprocessed_tag_messages = tag_messages
 
         # Database ID
         self._rebuild_batch_id = 0
@@ -59,9 +59,9 @@ class RebuildBatch:
     @inlineCallbacks
     def async_init(self):
         build_ids = list()
-        for fedora_tag_message in self._fedora_tag_messages:
-            yield self.add_tag_message(fedora_tag_message)
-            build_ids.append(fedora_tag_message.body["build_id"])
+        for tag_message in self._unprocessed_tag_messages:
+            yield self.add_tag_message(tag_message)
+            build_ids.append(tag_message.get_build_id())
 
         (
             self._side_tag_base,
@@ -99,17 +99,23 @@ class RebuildBatch:
         return self
 
     @inlineCallbacks
-    def add_tag_message(self, fedora_tag_message: FedoraMessage):
-        # Create the new TagMessage (which also creates the DB object)
-        message = yield TagMessage(
-            fedora_tag_message, self._rebuild_batch_id
-        ).async_init()
-
+    def add_tag_message(self, message: TagMessage):
         # Add the tag_message object to this batch
+        yield message.assign_to_rebuildbatch(self._rebuild_batch_id)
+
         # Overwrite any earlier instance of this component, since we only want
         # to rebuild the most recent one. This is necessary to avoid races
         # where the older build is tagged in after the newer one.
+        if message.component in self.tag_messages:
+            # There's an earlier build already queued.
+            drop_message = self.tag_messages[message.component]
+
+            # Remove this entry from the database so it doesn't get
+            # re-loaded in the future
+            yield drop_message.drop()
+
         self.tag_messages[message.component] = message
+
 
     @inlineCallbacks
     def run(self):

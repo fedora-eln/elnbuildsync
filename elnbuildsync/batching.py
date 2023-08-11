@@ -19,10 +19,11 @@
 
 from enum import Enum
 from queue import Queue, Empty
-from fedora_messaging.message import Message
+
 from twisted.internet.defer import inlineCallbacks
 
 from . import config
+from .tagmessage import TagMessage
 from .rebuildbatch import RebuildBatch
 
 message_queue = Queue()
@@ -32,20 +33,23 @@ message_batch_processor = None
 
 @inlineCallbacks
 def process_message_batch():
-    fedora_tag_messages = list()
+    tag_messages = list()
     while True:
         try:
-            tag_message = message_queue.get_nowait()
-            fedora_tag_messages.append(tag_message)
+            fedora_tag_message = message_queue.get_nowait()
+
+            tag_message = yield TagMessage(fedora_tag_message).async_init()
+
+            tag_messages.append(tag_message)
         except Empty as e:
             break
 
-    if not fedora_tag_messages:
+    if not tag_messages:
         # Nothing to do here
         return
 
     # Create Batch object
-    batch = yield RebuildBatch(target=config.main["build"]["target"], fedora_tag_messages=fedora_tag_messages, scratch=config.main["build"]["scratch"]).async_init()
+    batch = yield RebuildBatch(target=config.main["build"]["target"], tag_messages=tag_messages, scratch=config.main["build"]["scratch"]).async_init()
 
     # Run the batch.
     # IMPORTANT: this must complete before other batches are started. A large
