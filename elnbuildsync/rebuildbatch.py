@@ -131,7 +131,6 @@ class RebuildBatch:
 
         return srpm_field.split("/")[-1].partition(".src.rpm")[0]
 
-
     @inlineCallbacks
     def run(self):
         # Create a RebuildAttempt
