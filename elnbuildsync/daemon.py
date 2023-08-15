@@ -76,6 +76,10 @@ def main(log_level, dry_run, config_url, config_file, untagging):
         logger.critical("Could not load configuration.")
         sys.exit(128)
 
+    # Schedule configuration updates
+    updater = task.LoopingCall(config.update_config)
+    updater.start(config.config_timer, now=False)
+
     # Schedule batch checking
     batching.message_batch_processor = task.LoopingCall(batching.process_message_batch)
     batching.message_batch_processor.start(batching.message_batch_timer, now=False)

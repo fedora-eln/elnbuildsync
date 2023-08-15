@@ -170,6 +170,11 @@ def update_config():
     global comps
     global scmurl
     global config_ref
+
+    if not scmurl:
+        logger.info("Config URL not provided.")
+        return
+
     logger.critical(f"Updating configuration")
 
     try:
@@ -190,7 +195,7 @@ def update_config():
         return
 
     try:
-        yield load_config()
+        yield load_config(config_git_url=scmurl)
         config_ref = ref
     except ConfigError as e:
         logger.info(e)
@@ -263,11 +268,6 @@ def load_config(config_git_url=None, config_file=None):
 
     if not (config_git_url or config_file):
         raise ValueError("One of 'config_git_url' or 'config_file' must be specified")
-
-    if config_git_url and config_file:
-        raise ValueError(
-            "Only one of 'config_git_url' or 'config_file' may be specified"
-        )
 
     y = None
 
