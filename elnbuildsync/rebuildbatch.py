@@ -25,6 +25,7 @@ from twisted.internet.defer import inlineCallbacks, TimeoutError
 from .rebuildattempt import RebuildAttempt
 from .tagmessage import TagMessage
 
+from . import config
 from . import kojihelpers
 
 
@@ -59,15 +60,15 @@ class RebuildBatch:
         build_ids = list()
         for tag_message in self._unprocessed_tag_messages:
             yield self.add_tag_message(tag_message)
-            build_ids.append(tag_message.get_build_id())
+
+            if not config.skip_tag("rpms", tag_message.component):
+                build_ids.append(tag_message.get_build_id())
 
         (
             self._side_tag_base,
             self._dest_tag,
         ) = yield kojihelpers.tags.get_tags_for_target(self.target)
 
-        # TODO: Exclude skip_tag components from the initial build_ids
-        # in the side-tag.
 
         # Create the side-tag for this batch
         while True:

@@ -47,7 +47,6 @@ def prepare_side_tag(base_tag, initial_build_ids=list()):
     """
 
     downstream_koji = get_buildsys("destination")
-
     # Trigger the creation of the side-tag
     logger.info(f"Creating side tag from {base_tag}")
     side_tag_info = yield deferToThread(downstream_koji.createSideTag, base_tag)
