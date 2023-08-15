@@ -1,0 +1,98 @@
+<ul xmlns:t="http://twistedmatrix.com/ns/twisted.web.template/0.1">
+    <html>
+        <head>
+            <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.css"/>
+
+            <title>ELN Rebuild Status</title>
+        </head>
+        <body>
+            <h1>ELN Rebuild Status</h1>
+            <script type="text/javascript" src="https://cdn.datatables.net/v/dt/jq-3.6.0/dt-1.12.1/fh-3.2.4/rg-1.2.0/datatables.min.js"></script>
+            <script>
+                $(document).ready(function () {
+                    $('#builds thead tr')
+                        .clone(true)
+                        .addClass('filters')
+                        .appendTo('#builds thead');
+                        $('#builds').DataTable({
+                            orderCellsTop: true,
+                            pageLength: 25,
+                            paging: true,
+                            fixedHeader: true,
+                            initComplete: function (settings, json) {
+                                var api = this.api();
+                                api
+                                    .columns()
+                                    .every(function (colIdx) {
+                                        // Set the footer cell to contain the input element
+                                        var cell = $('.filters th').eq(
+                                            $(api.column(colIdx).header()).index()
+                                        );
+                                        var column = this;
+                                        var select = $('<select><option value=""></option></select>')
+                                            .appendTo($(column.header()).empty())
+                                            .on('change', function () {
+                                                var val = $.fn.dataTable.util.escapeRegex($(this).val());
+                                                column.search(val ? '^' + val + '$' : '', true, false).draw();
+                                            });
+                                        column
+                                            .data()
+                                            .unique()
+                                            .sort()
+                                            .each(function (d, j) {
+                                                select.append('<option value="' + d + '">' + d + '</option>');
+                                            });
+                                    });
+                            },
+                        });
+                });
+            </script>
+            <p t:render="header">Updated at <t:slot name="update_time"/></p>
+            <table id="builds" class="display compact" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>View</th>
+                        <th>Status</th>
+                        <th>Koji Task</th>
+                        <th>Detail</th>
+                        <th>NVR</th>
+                        <th>Current in ELN</th>
+                        <th>Build Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr t:render="builds">
+                        <td><t:slot name="name"/></td>
+                        <td><t:slot name="view"/></td>
+                        <td><t:slot name="state"/></td>
+                        <td>
+                            <a>
+                                <t:attr name="href">
+                                    <t:slot name="task_url"/>
+                                </t:attr>
+                                <t:slot name="task"/>
+                            </a>
+                        </td>
+                        <td><t:slot name="detail"/></td>
+                        <td><t:slot name="nvr"/></td>
+                        <td><t:slot name="tagged_build"/></td>
+                        <td><t:slot name="build_time"/></td>
+                    </tr>
+                </tbody>
+                <tfooter>
+                    <tr>
+                        <th>Name</th>
+                        <th>View</th>
+                        <th>Status</th>
+                        <th>Koji Task</th>
+                        <th>Detail</th>
+                        <th>NVR</th>
+                        <th>Current in ELN</th>
+                        <th>Build Time</th>
+                    </tr>
+                </tfooter>
+            </table>
+        </body>
+    </html>
+</ul>

@@ -116,3 +116,8 @@ def get_buildsys(which, force_login=False):
             )
 
     return bsys
+
+
+def get_koji_url():
+    cfg = koji.read_config(profile_name=config.main["destination"]["profile"])
+    return cfg["weburl"]

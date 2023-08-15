@@ -30,8 +30,8 @@ from twisted.internet.defer import Deferred, inlineCallbacks
 
 from . import batching
 from . import config
-from . import kojihelpers
 from . import listener
+from . import status
 from . import web
 
 from .kojihelpers.builds import perform_builds
@@ -74,6 +74,10 @@ def main(log_level, dry_run, config_url, config_file):
     # Schedule batch checking
     batching.message_batch_processor = task.LoopingCall(batching.process_message_batch)
     batching.message_batch_processor.start(batching.message_batch_timer, now=False)
+
+    # Schedule periodic status page and run it once at startup
+    config.status_processor = task.LoopingCall(status.create_status_page)
+    config.status_processor.start(config.status_timer * 60, now=True)
 
     # Start listening for Fedora Messages
     fedora_messaging.api.twisted_consume(listener.message_handler)

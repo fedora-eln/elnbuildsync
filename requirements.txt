@@ -2,9 +2,11 @@ cachetools
 click >= 8
 fedora_messaging ~= 3.4.1
 GitPython
+htmlmin
 koji
 pytest >= 6.0
 requests
+rpm
 twisted >= 22
 txredisapi
 pyyaml

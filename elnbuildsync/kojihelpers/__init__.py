@@ -16,6 +16,8 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
+import koji
+
 from collections import defaultdict
 
 from . import builds

@@ -24,6 +24,8 @@ from twisted.internet import reactor
 from twisted.web.resource import Resource
 from twisted.web.server import Site
 
+from . import status
+
 logger = logging.getLogger(__name__)
 
 
@@ -88,12 +90,61 @@ class LivenessResource(Resource):
         return b"alive"
 
 
+class StatusJSONResource(Resource):
+    """
+    StatusJSONResource
+
+    Returns either a 200 or 503 response code, depending on whether the first
+    periodic status update has completed successfully.
+
+    Outputs the full status data as a JSON document
+    """
+
+    def getChild(self, name, request):
+        if name == "":
+            return self
+        return Resource.getChild(self, name, request)
+
+    def render_GET(self, request):
+        request.setHeader("Content-Type", "application/json")
+        request.setHeader("Cache-Control", "no-cache")
+        if not status.encoded_json_data:
+            request.setResponseCode(503)
+            return b""
+
+        return status.encoded_json_data
+
+
+class StatusPageResource(Resource):
+    """
+    StatusPageResource
+
+    Returns a table of the most recent rebuild attempts for each package.
+    """
+
+    isLeaf = True
+
+    def getChild(self, name, request):
+        if name == "":
+            return self
+        return Resource.getChild(self, name, request)
+
+    def render_GET(self, request):
+        if not status.web_page:
+            request.setResponseCode(503)
+            return b"Server not ready, please try again in a few minutes"
+
+        return status.web_page
+
+
 def setup_web_resources():
     global started
     started = True
     root = RootResource()
     root.putChild(b"startup", StartupResource())
     root.putChild(b"alive", LivenessResource())
+    root.putChild(b"status.json", StatusJSONResource())
+    root.putChild(b"status.html", StatusPageResource())
 
     return Site(root)
 
