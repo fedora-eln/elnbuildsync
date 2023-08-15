@@ -89,18 +89,13 @@ class RebuildAttempt:
             if success:
                 successes[value["id"]] = value
 
-                # TODO: Get the build_id here by parsing the request
-                # section of a child task of type 'buildArch'
+                # TODO: Get the build_id here by parsing the result
+                # section of a child task of type 'builSRPMfromSCM'
                 # It will have the form:
-                # "request": [
-                #   "tasks/7581/104277581/fedora-release-39-0.22.eln128.src.rpm",
-                #   22493,
-                #   "noarch",
-                #   true,
-                #   {
-                #     "repo_id": 5304909
-                #   }
-                # ],
+                # "result": {
+                #   "srpm": "tasks/7581/104277581/fedora-release-39-0.22.eln128.src.rpm",
+                #  ...
+                # },
 
                 # Store the results in the DB
                 yield self.tasks[value["id"]].finish(value["new"])

@@ -76,8 +76,8 @@ def prepare_side_tag(base_tag, initial_build_ids=list()):
 
 
 @inlineCallbacks
-def tag_builds(tag, build_ids):
-    yield deferToThread(_tag_builds_thread, tag, build_ids)
+def tag_builds(tag, builds):
+    yield deferToThread(_tag_builds_thread, tag, builds)
 
 
 def _tag_builds_thread(tag, build_ids):

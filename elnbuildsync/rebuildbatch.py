@@ -114,6 +114,24 @@ class RebuildBatch:
 
         self.tag_messages[message.component] = message
 
+    @staticmethod
+    def _get_srpm_nvr_from_task_msg(msg_body) -> str:
+        try:
+            children = msg_body["info"]["children"]
+        except NameError as e:
+            raise ValueError("Missing children in message") from e
+
+        for child in children:
+            if child["method"] == "buildSRPMFromSCM":
+                try:
+                    srpm_field = child["result"]["srpm"]
+                except NameError as e:
+                    raise ValueError("Missing 'srpm' in message") from e
+                break
+
+        return srpm_field.split("/")[-1].partition(".src.rpm")[0]
+
+
     @inlineCallbacks
     def run(self):
         # Create a RebuildAttempt
@@ -165,14 +183,29 @@ class RebuildBatch:
             for task_id, err_msg in failures.items():
                 logger.warning(f"FAILED: {task_id}: {err_msg['srpm']}")
 
+        # Get the list of NVRs that we will need to tag.
+        build_nvrs = list()
+        for task_id, msg_body in all_successes.items():
+            try:
+                nvr = RebuildBatch._get_srpm_nvr_from_task_msg(msg_body)
+            except ValueError as e:
+                # This message was missing some key information
+                logger.critical(f"Couldn't get the NVR from {task_id}")
+                logger.critical(msg_body)
+                # Nothing we can do about this, so just give up.
+                pass
+            build_nvrs.append(nvr)
+
         # Only try to tag builds in if they're non-scratch builds.
-        if not self.scratch:
-            logger.info(f"Tagging successful builds into {self._dest_tag}")
+        if self.scratch:
+            for nvr in build_nvrs:
+                logger.info(f"Not tagging scratch-build of {nvr} into {self._dest_tag}")
 
-            # TODO: figure out how to get the build_ids
-            # Probably need to make sure that RebuildAttempt returns them
+        else:
+            for nvr in build_nvrs:
+                logger.info(f"Tagging {nvr} into {self._dest_tag}")
 
-            # TODO: yield kojihelpers.tags.tag_builds(self._dest_tag, build_ids)
+            yield kojihelpers.tags.tag_builds(self._dest_tag, build_nvrs)
 
         logger.info(f"Removing side-tag {self.side_tag}")
         yield kojihelpers.tags.remove_side_tag(self.side_tag)
