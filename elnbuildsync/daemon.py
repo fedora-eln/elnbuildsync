@@ -53,9 +53,11 @@ logger = logging.getLogger(__name__)
 @click.option("--dry-run", is_flag=True, help="Simulate actions only")
 @click.option("--config-url", default=None)
 @click.option("--config-file", default=None)
-@click.option("--untagging/--no-untagging",
-              default=False,
-              help="Untag all but the most recent builds in the destination target")
+@click.option(
+    "--untagging/--no-untagging",
+    default=False,
+    help="Untag all but the most recent builds in the destination target",
+)
 def main(log_level, dry_run, config_url, config_file, untagging):
     logging.basicConfig(
         format="%(asctime)s : %(name)s : %(levelname)s : %(message)s",

@@ -33,7 +33,9 @@ logger = logging.getLogger(__name__)
 @inlineCallbacks
 def periodic_cleanup():
     logger.debug("Starting periodic cleanup.")
-    bsys = kojihelpers.connection.get_buildsys(kojihelpers.connection.BuildSystemType.destination)
+    bsys = kojihelpers.connection.get_buildsys(
+        kojihelpers.connection.BuildSystemType.destination
+    )
 
     # We have the set of desired packages from Content Resolver
     desired_pkg_names = set(config.comps["rpms"].keys())
