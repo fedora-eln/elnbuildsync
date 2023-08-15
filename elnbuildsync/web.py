@@ -23,6 +23,7 @@ import logging
 from twisted.internet import reactor
 from twisted.web.resource import Resource
 from twisted.web.server import Site
+from twisted.web.util import Redirect
 
 from . import status
 
@@ -145,6 +146,7 @@ def setup_web_resources():
     root.putChild(b"alive", LivenessResource())
     root.putChild(b"status.json", StatusJSONResource())
     root.putChild(b"status.html", StatusPageResource())
+    root.putChild(b"status", Redirect(b"status.html"))
 
     return Site(root)
 
