@@ -69,7 +69,6 @@ class RebuildBatch:
             self._dest_tag,
         ) = yield kojihelpers.tags.get_tags_for_target(self.target)
 
-
         # Create the side-tag for this batch
         while True:
             try:
