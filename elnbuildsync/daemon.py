@@ -29,6 +29,7 @@ from twisted.internet import reactor, task
 from twisted.internet.defer import Deferred, inlineCallbacks
 
 from . import batching
+from . import cleanup
 from . import config
 from . import listener
 from . import status
@@ -52,7 +53,10 @@ logger = logging.getLogger(__name__)
 @click.option("--dry-run", is_flag=True, help="Simulate actions only")
 @click.option("--config-url", default=None)
 @click.option("--config-file", default=None)
-def main(log_level, dry_run, config_url, config_file):
+@click.option("--untagging/--no-untagging",
+              default=False,
+              help="Untag all but the most recent builds in the destination target")
+def main(log_level, dry_run, config_url, config_file, untagging):
     logging.basicConfig(
         format="%(asctime)s : %(name)s : %(levelname)s : %(message)s",
         level=log_level,
@@ -62,6 +66,7 @@ def main(log_level, dry_run, config_url, config_file):
     logger.debug("Debug logging enabled")
 
     config.dry_run = dry_run
+    config.do_untagging = untagging
 
     # Read in the config file
     try:
@@ -77,7 +82,11 @@ def main(log_level, dry_run, config_url, config_file):
 
     # Schedule periodic status page and run it once at startup
     config.status_processor = task.LoopingCall(status.create_status_page)
-    config.status_processor.start(config.status_timer * 60, now=True)
+    config.status_processor.start(config.status_timer, now=True)
+
+    # Schedule periodic cleanup and run it once at startup
+    config.cleanup_processor = task.LoopingCall(cleanup.periodic_cleanup)
+    config.cleanup_processor.start(config.cleanup_timer, now=True)
 
     # Start listening for Fedora Messages
     fedora_messaging.api.twisted_consume(listener.message_handler)

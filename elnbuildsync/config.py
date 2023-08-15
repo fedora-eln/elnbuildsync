@@ -38,8 +38,8 @@ DEFAULT_DISTRO_VIEWS = ["eln"]
 
 # Configuration options
 config_timer = 15 * 60  # 15 minutes
-cleanup_timer = 12 * 60  # 12 hours
-status_timer = 10  # 10 minutes
+cleanup_timer = 12 * 60  * 60 # 12 hours
+status_timer = 10 * 60  # 10 minutes
 koji_batch = 500
 configuration = None
 config_ref = None
