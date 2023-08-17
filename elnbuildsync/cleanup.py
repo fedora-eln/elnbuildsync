@@ -97,7 +97,7 @@ def periodic_cleanup():
                         "build_id": latest_tagged_src_table[component]["build_id"],
                         "tag": src_tag,
                         "ELNBuildSync_notes": "Fake message for building missing packages",
-                    }
+                    },
                 )
 
                 batching.message_batch_processor.reset()
