@@ -90,9 +90,9 @@ def main(log_level, dry_run, config_url, config_file, untagging):
     config.status_processor = task.LoopingCall(status.create_status_page)
     config.status_processor.start(config.status_timer, now=True)
 
-    # Schedule periodic cleanup and run it once at startup
+    # Schedule periodic cleanup
     config.cleanup_processor = task.LoopingCall(cleanup.periodic_cleanup)
-    config.cleanup_processor.start(config.cleanup_timer, now=True)
+    config.cleanup_processor.start(config.cleanup_timer, now=False)
 
     # Start listening for Fedora Messages
     fedora_messaging.api.twisted_consume(listener.message_handler)
