@@ -126,6 +126,7 @@ def message_handler(msg):
         # Check whether this component is meaningful to us
         if not config.is_eligible("rpms", msg.body["name"]):
             raise Drop()
+        logger.info(f"Triggering rebuild on tag {tag}")
 
         # This is a component we care about, so add it to the queue
         batching.message_batch_processor.reset()
@@ -133,6 +134,7 @@ def message_handler(msg):
         # TODO: We also need to save the list of pending messages to the DB
         # so they aren't lost if we restart. It's okay to block this thread
         # for this purpose.
+        logger.debug(f"Adding {msg.body['name']} to the next batch.")
         batching.message_queue.put(msg)
 
     except Drop as e:

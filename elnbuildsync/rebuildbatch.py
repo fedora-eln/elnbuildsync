@@ -55,6 +55,10 @@ class RebuildBatch:
         # Database ID
         self._rebuild_batch_id = 0
 
+        logger.debug(
+            f"Creating batch from {len(self._unprocessed_tag_messages)} messages"
+        )
+
     @inlineCallbacks
     def async_init(self):
         build_ids = list()
