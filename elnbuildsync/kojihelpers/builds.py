@@ -81,7 +81,7 @@ def get_taskinfo(which_bsys, task_id, **kwargs):
     bsys = get_buildsys(which_bsys)
 
     try:
-        taskinfo = yield deferToThread(bsys.getTask, task_id, **kwargs)
+        taskinfo = yield deferToThread(bsys.getTaskInfo, task_id, **kwargs)
     except koji.GenericError as e:
         logger.exception(f"Could not retrieve information for task {task_id}")
         raise InfoUnavailableError(
