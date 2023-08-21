@@ -31,3 +31,7 @@ class IneligibleBuildError(KojiHelperBaseError):
 
 class BuildFailedError(KojiHelperBaseError):
     pass
+
+
+class BuildTimeoutError(BuildFailedError):
+    pass
