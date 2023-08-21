@@ -21,7 +21,7 @@ class KojiHelperBaseError(Exception):
     pass
 
 
-class BuildInfoUnavailableError(KojiHelperBaseError):
+class InfoUnavailableError(KojiHelperBaseError):
     pass
 
 

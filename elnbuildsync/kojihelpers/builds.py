@@ -20,7 +20,7 @@
 import koji
 import logging
 
-from .errors import BuildInfoUnavailableError, IneligibleBuildError
+from .errors import InfoUnavailableError, IneligibleBuildError
 from .connection import get_buildsys
 from .. import config
 from .. import listener
@@ -69,11 +69,43 @@ def get_buildinfo(which_bsys, build_id, **kwargs):
         buildinfo = yield deferToThread(bsys.getBuild, build_id, **kwargs)
     except koji.GenericError as e:
         logger.exception(f"Could not retrieve information for build {build_id}")
-        raise BuildInfoUnavailableError(
+        raise InfoUnavailableError(
             f"Could not retrieve information for build {build_id}"
         ) from e
 
     return buildinfo
+
+
+@inlineCallbacks
+def get_taskinfo(which_bsys, task_id, **kwargs):
+    bsys = get_buildsys(which_bsys)
+
+    try:
+        taskinfo = yield deferToThread(bsys.getTask, task_id, **kwargs)
+    except koji.GenericError as e:
+        logger.exception(f"Could not retrieve information for task {task_id}")
+        raise InfoUnavailableError(
+            f"Could not retrieve information for build {task_id}"
+        ) from e
+
+    try:
+        children = yield deferToThread(
+            bsys.getTaskChildren, task_id, request=True, strict=True
+        )
+    except koji.GenericError as e:
+        logger.exception(f"Could not retrieve child information for task {task_id}")
+        raise InfoUnavailableError(
+            f"Could not retrieve child information for build {task_id}"
+        ) from e
+
+    # Add the ["info"]["children"] keys here to simulate the layout of a
+    # state-change message from Koji. This is needed later by
+    # RebuildBatch._get_srpm_nvr_from_task_msg() so that we don't need to
+    # differentiate the two ways we can determine task completion.
+    taskinfo["info"] = dict()
+    taskinfo["info"]["children"] = children
+
+    return taskinfo
 
 
 @inlineCallbacks

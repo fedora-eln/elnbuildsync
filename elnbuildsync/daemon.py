@@ -94,6 +94,11 @@ def main(log_level, dry_run, config_url, config_file, untagging):
     config.cleanup_processor = task.LoopingCall(cleanup.periodic_cleanup)
     config.cleanup_processor.start(config.cleanup_timer, now=False)
 
+    # Add a five-minute timer to check for task completion, because Koji
+    # does not always send out an AMQP message as expected
+    listener.task_check_processor = task.LoopingCall(listener.check_tasks)
+    listener.task_check_processor.start(config.task_check_timer, now=False)
+
     # Start listening for Fedora Messages
     fedora_messaging.api.twisted_consume(listener.message_handler)
 

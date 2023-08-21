@@ -40,6 +40,8 @@ from twisted.internet.defer import (
 
 logger = logging.getLogger(__name__)
 
+task_check_processor = None
+
 
 def message_handler(msg):
     try:
@@ -146,6 +148,41 @@ def message_handler(msg):
         # If anything goes wrong during the message handler, Nack() the
         # message so it will get retried.
         raise Nack("Unexpected error, will retry") from e
+
+
+@inlineCallbacks
+def check_tasks():
+    for task in state.active_builds.keys():
+        try:
+            taskinfo = yield kojihelpers.builds.get_taskinfo("destination", task)
+        except koji.GenericError as e:
+            # Delete this task so we don't continue failing on it
+            del state.active_builds[task]
+            continue
+
+        if taskinfo["state"] == koji.TASK_STATES["CLOSED"]:
+            # Task is finished.
+            logger.info(
+                f"Build {task} ({taskinfo['request'][0]}) completed successfully"
+            )
+            reactor.callLater(0, fire_callback, state.active_builds[task], taskinfo)
+            # Stop watching this task ID
+            del state.active_builds[task]
+
+        elif taskinfo["state"] in (
+            koji.TASK_STATES["FREE"],
+            koji.TASK_STATES["OPEN"],
+            koji.TASK_STATES["ASSIGNED"],
+        ):
+            # Still processing; ignore it
+            continue
+
+        else:
+            # It either failed or was canceled. Call the errback
+            logger.info(f"Build task {task} failed.")
+            reactor.callLater(0, fire_errback, state.active_builds[task], taskinfo)
+            # Stop watching this task ID
+            del state.active_builds[task]
 
 
 def fire_callback(deferred, *data):
