@@ -157,33 +157,35 @@ def check_tasks():
             taskinfo = yield kojihelpers.builds.get_taskinfo(
                 "destination", task, request=True
             )
-        except koji.GenericError as e:
+
+            if taskinfo["state"] == koji.TASK_STATES["CLOSED"]:
+                # Task is finished.
+                logger.info(
+                    f"Build {task} ({taskinfo['request'][0]}) completed successfully"
+                )
+                reactor.callLater(0, fire_callback, state.active_builds[task], taskinfo)
+                # Stop watching this task ID
+                del state.active_builds[task]
+
+            elif taskinfo["state"] in (
+                koji.TASK_STATES["FREE"],
+                koji.TASK_STATES["OPEN"],
+                koji.TASK_STATES["ASSIGNED"],
+            ):
+                # Still processing; ignore it
+                continue
+
+            else:
+                # It either failed or was canceled. Call the errback
+                logger.info(f"Build task {task} failed.")
+                reactor.callLater(0, fire_errback, state.active_builds[task], taskinfo)
+                # Stop watching this task ID
+                del state.active_builds[task]
+        except Exception as e:
+            # Log any failures so we don't block future checks.
+            logger.exception(e)
+
             # Delete this task so we don't continue failing on it
-            del state.active_builds[task]
-            continue
-
-        if taskinfo["state"] == koji.TASK_STATES["CLOSED"]:
-            # Task is finished.
-            logger.info(
-                f"Build {task} ({taskinfo['request'][0]}) completed successfully"
-            )
-            reactor.callLater(0, fire_callback, state.active_builds[task], taskinfo)
-            # Stop watching this task ID
-            del state.active_builds[task]
-
-        elif taskinfo["state"] in (
-            koji.TASK_STATES["FREE"],
-            koji.TASK_STATES["OPEN"],
-            koji.TASK_STATES["ASSIGNED"],
-        ):
-            # Still processing; ignore it
-            continue
-
-        else:
-            # It either failed or was canceled. Call the errback
-            logger.info(f"Build task {task} failed.")
-            reactor.callLater(0, fire_errback, state.active_builds[task], taskinfo)
-            # Stop watching this task ID
             del state.active_builds[task]
 
 
