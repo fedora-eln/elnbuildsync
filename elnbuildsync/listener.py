@@ -161,6 +161,7 @@ def message_handler(msg):
 
 @inlineCallbacks
 def check_tasks():
+    remove_tasks = list()
     for task in state.active_builds.keys():
         try:
             taskinfo = yield kojihelpers.builds.get_taskinfo(
@@ -174,7 +175,7 @@ def check_tasks():
                 )
                 reactor.callLater(0, fire_callback, state.active_builds[task], taskinfo)
                 # Stop watching this task ID
-                del state.active_builds[task]
+                list.append(task)
 
             elif taskinfo["state"] in (
                 koji.TASK_STATES["FREE"],
@@ -189,13 +190,16 @@ def check_tasks():
                 logger.info(f"Build task {task} failed.")
                 reactor.callLater(0, fire_errback, state.active_builds[task], taskinfo)
                 # Stop watching this task ID
-                del state.active_builds[task]
+                list.append(task)
         except Exception as e:
             # Log any failures so we don't block future checks.
             logger.exception(e)
 
             # Delete this task so we don't continue failing on it
-            del state.active_builds[task]
+            list.append(task)
+
+    for task in remove_tasks:
+        del state.active_builds[task]
 
 
 def fire_callback(deferred, *data):
