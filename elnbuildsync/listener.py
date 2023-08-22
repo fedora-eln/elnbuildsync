@@ -45,8 +45,6 @@ task_check_processor = None
 
 def message_handler(msg):
     try:
-        logger.debug(f"Received a message with topic {msg.topic}")
-
         # Listen for repositories we are waiting on.
         if msg.topic.endswith("buildsys.repo.init"):
             tag = msg.body["tag"]
@@ -128,6 +126,12 @@ def message_handler(msg):
         # Check whether this component is meaningful to us
         if not config.is_eligible("rpms", msg.body["name"]):
             raise Drop()
+
+        # If we are currently processing a batch, Nack() the message so it
+        # will stay in the queue and not get lost if we crash/restart.
+        if batching.running:
+            raise Nack()
+
         logger.info(f"Triggering rebuild on tag {tag}")
 
         # This is a component we care about, so add it to the queue
@@ -141,6 +145,11 @@ def message_handler(msg):
 
     except Drop as e:
         # Tell the AMQP server that we're ignoring this message
+        raise
+
+    except Nack as e:
+        # We're explicitly informing the AMQP server that we can't handle
+        # this request currently and it should be re-queued.
         raise
 
     except Exception as e:

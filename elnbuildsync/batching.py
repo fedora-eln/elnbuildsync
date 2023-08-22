@@ -36,11 +36,14 @@ message_queue = Queue()
 message_batch_timer = 5
 message_batch_processor = None
 
+running = False
+
 logger = logging.getLogger(__name__)
 
 
 @inlineCallbacks
 def process_message_batch():
+    global running
     tag_messages = list()
     while True:
         try:
@@ -68,11 +71,14 @@ def process_message_batch():
     # number of packages may queue up in this time, but they will be processed
     # as a single batch.
     try:
+        running = True
         yield batch.run()
     except Exception as e:
         # If something goes unrecoverably wrong here, always log it and skip
         # to the next batch.
         logger.exception(e)
+    finally:
+        running = False
 
 
 @inlineCallbacks
