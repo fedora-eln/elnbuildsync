@@ -154,7 +154,9 @@ def message_handler(msg):
 def check_tasks():
     for task in state.active_builds.keys():
         try:
-            taskinfo = yield kojihelpers.builds.get_taskinfo("destination", task)
+            taskinfo = yield kojihelpers.builds.get_taskinfo(
+                "destination", task, request=True
+            )
         except koji.GenericError as e:
             # Delete this task so we don't continue failing on it
             del state.active_builds[task]
