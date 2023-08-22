@@ -86,9 +86,6 @@ class RebuildBatch:
                 logger.warning(
                     f"Timed out creating the side-tag from {self._side_tag_base}. Retrying."
                 )
-
-                # Delete the failed side-tag
-                yield kojihelpers.tags.remove_side_tag(self.side_tag)
                 continue
 
             # Side-tag is ready. Proceed.
