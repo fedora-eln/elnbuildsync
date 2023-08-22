@@ -18,6 +18,7 @@
 
 
 import ast
+import koji
 import logging
 
 from twisted.internet.defer import inlineCallbacks
@@ -98,7 +99,7 @@ class RebuildAttempt:
                 # },
 
                 # Store the results in the DB
-                yield self.tasks[value["id"]].finish(value["new"])
+                yield self.tasks[value["id"]].finish(koji.TASK_STATES["CLOSED"])
 
             else:
                 err_msg = value.getErrorMessage()
@@ -107,6 +108,6 @@ class RebuildAttempt:
                 failures[err_obj["id"]] = err_obj
 
                 # Store the results in the DB
-                yield self.tasks[err_obj["id"]].finish(err_obj["new"])
+                yield self.tasks[err_obj["id"]].finish(koji.TASK_STATES["FAILED"])
 
         return (successes, failures)
