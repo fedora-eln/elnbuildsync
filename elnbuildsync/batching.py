@@ -21,11 +21,16 @@ import logging
 from enum import Enum
 from queue import Queue, Empty
 
+from fedora_messaging.message import Message as FedoraMessage
+
 from twisted.internet.defer import inlineCallbacks
+from twisted.internet.threads import deferToThread
 
 from . import config
+from . import kojihelpers
 from .tagmessage import TagMessage
 from .rebuildbatch import RebuildBatch
+
 
 message_queue = Queue()
 message_batch_timer = 5
@@ -68,3 +73,47 @@ def process_message_batch():
         # If something goes unrecoverably wrong here, always log it and skip
         # to the next batch.
         logger.exception(e)
+
+
+@inlineCallbacks
+def rebuild_from_components(components):
+    global message_batch_processor
+    global message_queue
+
+    # Fake up a TagMessage for each of these to enqueue into the next batch
+    bsys = kojihelpers.connection.get_buildsys(
+        kojihelpers.connection.BuildSystemType.source
+    )
+
+    src_tag = config.main["trigger"]["rpms"]
+    latest_tagged_src_pkgs = yield deferToThread(
+        bsys.listTagged, src_tag, latest=True, inherit=True
+    )
+    latest_tagged_src_table = {pkg["name"]: pkg for pkg in latest_tagged_src_pkgs}
+
+    for component in components:
+        if config.is_eligible("rpms", component):
+            if component in latest_tagged_src_table:
+                # Fake up a FedoraMessage for the batching system
+                msg = FedoraMessage(
+                    topic="org.fedoraproject.prod.buildsys.tag",
+                    body={
+                        "name": component,
+                        "version": latest_tagged_src_table[component]["version"],
+                        "release": latest_tagged_src_table[component]["release"],
+                        "nvr": latest_tagged_src_table[component]["nvr"],
+                        "build_id": latest_tagged_src_table[component]["build_id"],
+                        "tag": src_tag,
+                        "ELNBuildSync_notes": "Fake message for building missing packages",
+                    },
+                )
+                logger.info(
+                    f"Rebuilding {latest_tagged_src_table[component]} for ELN."
+                )
+
+                message_batch_processor.reset()
+                message_queue.put(msg)
+            else:
+                logger.critical(
+                    f"Package {component} has never been built for {src_tag}"
+                )

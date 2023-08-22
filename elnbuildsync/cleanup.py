@@ -75,36 +75,6 @@ def periodic_cleanup():
     # Packages in the desired list but not in the tag should be built
     latest_tagged_dest_pkg_names = {pkg["name"] for pkg in latest_tagged_dest_pkgs}
     pkgs_to_build = desired_pkg_names - latest_tagged_dest_pkg_names
-
-    # Fake up a TagMessage for each of these to enqueue into the next batch
-    src_tag = config.main["trigger"]["rpms"]
-    latest_tagged_src_pkgs = yield deferToThread(
-        bsys.listTagged, src_tag, latest=True, inherit=True
-    )
-    latest_tagged_src_table = {pkg["name"]: pkg for pkg in latest_tagged_src_pkgs}
-
-    for component in pkgs_to_build:
-        if config.is_eligible("rpms", component):
-            if component in latest_tagged_src_table:
-                # Fake up a FedoraMessage for the batching system
-                msg = FedoraMessage(
-                    topic="org.fedoraproject.prod.buildsys.tag",
-                    body={
-                        "name": component,
-                        "version": latest_tagged_src_table[component]["version"],
-                        "release": latest_tagged_src_table[component]["release"],
-                        "nvr": latest_tagged_src_table[component]["nvr"],
-                        "build_id": latest_tagged_src_table[component]["build_id"],
-                        "tag": src_tag,
-                        "ELNBuildSync_notes": "Fake message for building missing packages",
-                    },
-                )
-
-                batching.message_batch_processor.reset()
-                batching.message_queue.put(msg)
-            else:
-                logger.critical(
-                    f"Package {component} has never been built for {src_tag}"
-                )
+    yield batching.rebuild_from_nvrs(pkgs_to_build)
 
     logger.debug("Periodic cleanup finished.")
