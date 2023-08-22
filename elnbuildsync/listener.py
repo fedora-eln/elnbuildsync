@@ -175,7 +175,7 @@ def check_tasks():
                 )
                 reactor.callLater(0, fire_callback, state.active_builds[task], taskinfo)
                 # Stop watching this task ID
-                list.append(task)
+                remove_tasks.append(task)
 
             elif taskinfo["state"] in (
                 koji.TASK_STATES["FREE"],
@@ -190,13 +190,13 @@ def check_tasks():
                 logger.info(f"Build task {task} failed.")
                 reactor.callLater(0, fire_errback, state.active_builds[task], taskinfo)
                 # Stop watching this task ID
-                list.append(task)
+                remove_tasks.append(task)
         except Exception as e:
             # Log any failures so we don't block future checks.
             logger.exception(e)
 
             # Delete this task so we don't continue failing on it
-            list.append(task)
+            remove_tasks.append(task)
 
     for task in remove_tasks:
         del state.active_builds[task]
