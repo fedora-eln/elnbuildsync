@@ -177,7 +177,6 @@ class TriggerBuildResource(Resource):
         deferred.addErrback(self._failed)
         return NOT_DONE_YET
 
-
     @inlineCallbacks
     def _do_post(self):
         global started
@@ -186,7 +185,6 @@ class TriggerBuildResource(Resource):
         self.request.setHeader("Cache-Control", "no-cache")
         if not started:
             self.request.setResponseCode(503)
-
 
         content_type = self.request.getHeader("Content-Type")
         if not content_type or content_type != "application/json":

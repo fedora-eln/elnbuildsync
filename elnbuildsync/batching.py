@@ -113,9 +113,7 @@ def rebuild_from_components(components):
                         "ELNBuildSync_notes": "Fake message for building missing packages",
                     },
                 )
-                logger.info(
-                    f"Rebuilding {latest_tagged_src_table[component]} for ELN."
-                )
+                logger.info(f"Rebuilding {latest_tagged_src_table[component]} for ELN.")
 
                 message_batch_processor.reset()
                 message_queue.put(msg)
