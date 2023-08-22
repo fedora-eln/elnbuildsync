@@ -16,6 +16,7 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
+import logging
 
 from enum import Enum
 from queue import Queue, Empty
@@ -29,6 +30,8 @@ from .rebuildbatch import RebuildBatch
 message_queue = Queue()
 message_batch_timer = 5
 message_batch_processor = None
+
+logger = logging.getLogger(__name__)
 
 
 @inlineCallbacks
@@ -59,4 +62,9 @@ def process_message_batch():
     # IMPORTANT: this must complete before other batches are started. A large
     # number of packages may queue up in this time, but they will be processed
     # as a single batch.
-    yield batch.run()
+    try:
+        yield batch.run()
+    except Exception as e:
+        # If something goes unrecoverably wrong here, always log it and skip
+        # to the next batch.
+        logger.exception(e)
