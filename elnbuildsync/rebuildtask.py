@@ -39,7 +39,7 @@ class RebuildTask:
 
         # Set up a long timeout, which we will cancel later
         # if the build succeeds or fails normally.
-        self.timeout = reactor.callLater(config.task_timeout, self._timeout())
+        self.timeout = reactor.callLater(config.task_timeout, self._timeout)
 
         # DB IDs
         self._rebuild_task_id = 0
