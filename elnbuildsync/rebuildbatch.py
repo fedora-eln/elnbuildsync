@@ -129,7 +129,7 @@ class RebuildBatch:
             if child["method"] == "buildSRPMFromSCM":
                 try:
                     srpm_field = child["result"]["srpm"]
-                except NameError as e:
+                except KeyError as e:
                     raise ValueError("Missing 'srpm' in message") from e
                 break
 

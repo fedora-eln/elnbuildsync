@@ -98,6 +98,15 @@ def get_taskinfo(which_bsys, task_id, **kwargs):
             f"Could not retrieve child information for build {task_id}"
         ) from e
 
+    # Ensure we have the result for a buildSRPMFromSCM step so we can use that
+    # in RebuildBatch._get_srpm_nvr_from_task_msg() to make sure we know the
+    # proper NVR to tag.
+    for child in children:
+        if child["method"] == "buildSRPMFromSCM":
+            child["result"] =  yield deferToThread(
+                bsys.getTaskResult(child["id"])
+            )
+
     # Add the ["info"] key here to simulate the layout of a
     # state-change message from Koji.
     taskinfo["info"] = dict()
