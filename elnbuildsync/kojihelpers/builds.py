@@ -98,11 +98,15 @@ def get_taskinfo(which_bsys, task_id, **kwargs):
             f"Could not retrieve child information for build {task_id}"
         ) from e
 
+    # Add the ["info"] key here to simulate the layout of a
+    # state-change message from Koji.
+    taskinfo["info"] = dict()
+    taskinfo["info"]["request"] = taskinfo["request"]
+
     # Add the ["info"]["children"] keys here to simulate the layout of a
     # state-change message from Koji. This is needed later by
     # RebuildBatch._get_srpm_nvr_from_task_msg() so that we don't need to
     # differentiate the two ways we can determine task completion.
-    taskinfo["info"] = dict()
     taskinfo["info"]["children"] = children
 
     return taskinfo
