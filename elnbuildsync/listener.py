@@ -56,8 +56,9 @@ def message_handler(msg):
                     # blocking handling new messages
                     reactor.callLater(0, fire_callback, deferred, tag)
 
-                # Clear the awaited list
+                # Remove it from the awaited list
                 del kojihelpers.awaiting_repo_init[tag]
+                return
 
             else:
                 logger.debug(f"Unknown repository tag {msg.body['tag']}, ignoring.")
@@ -72,8 +73,9 @@ def message_handler(msg):
                     # blocking handling new messages
                     reactor.callLater(0, fire_callback, deferred, tag)
 
-                # Clear the awaited list
+                # Remove it from the awaited list
                 del kojihelpers.awaited_repos[tag]
+                return
 
             else:
                 logger.debug(f"Unknown repository tag {msg.body['tag']}, ignoring.")
