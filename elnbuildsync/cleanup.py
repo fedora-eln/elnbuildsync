@@ -75,6 +75,6 @@ def periodic_cleanup():
     # Packages in the desired list but not in the tag should be built
     latest_tagged_dest_pkg_names = {pkg["name"] for pkg in latest_tagged_dest_pkgs}
     pkgs_to_build = desired_pkg_names - latest_tagged_dest_pkg_names
-    yield batching.rebuild_from_nvrs(pkgs_to_build)
+    yield batching.rebuild_from_components(pkgs_to_build)
 
     logger.debug("Periodic cleanup finished.")
