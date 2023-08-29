@@ -88,6 +88,14 @@ def get_taskinfo(which_bsys, task_id, **kwargs):
             f"Could not retrieve information for build {task_id}"
         ) from e
 
+    if taskinfo["state"] in (
+        koji.TASK_STATES["FREE"],
+        koji.TASK_STATES["OPEN"],
+        koji.TASK_STATES["ASSIGNED"],
+    ):
+        # Still processing; don't bother collecting other data
+        return taskinfo
+
     try:
         children = yield deferToThread(
             bsys.getTaskChildren, task_id, request=True, strict=True
