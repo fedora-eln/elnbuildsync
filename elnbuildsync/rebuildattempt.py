@@ -102,12 +102,17 @@ class RebuildAttempt:
                 yield self.tasks[value["id"]].finish(koji.TASK_STATES["CLOSED"])
 
             else:
-                err_msg = value.getErrorMessage()
-                err_obj = ast.literal_eval(err_msg)
+                try:
+                    err_msg = value.getErrorMessage()
+                    logger.debug(f"Rebuild failure: {err_msg}")
 
-                failures[err_obj["id"]] = err_obj
+                    err_obj = ast.literal_eval(err_msg)
+                    failures[err_obj["id"]] = err_obj
 
-                # Store the results in the DB
-                yield self.tasks[err_obj["id"]].finish(koji.TASK_STATES["FAILED"])
+                    # Store the results in the DB
+                    yield self.tasks[err_obj["id"]].finish(koji.TASK_STATES["FAILED"])
+                except Exception as e:
+                    logger.exception(e)
+                    raise
 
         return (successes, failures)
