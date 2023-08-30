@@ -184,7 +184,15 @@ class RebuildBatch:
         if num_failures:
             logger.warning(f"{num_failures} tasks failed for {self.side_tag}")
             for task_id, err_msg in failures.items():
-                logger.warning(f"FAILED: {task_id}: {err_msg['srpm']}")
+                try:
+                    try:
+                        request = err_msg["info"]["request"][0]
+                    except ValueError as e:
+                        request = err_msg["request"][0]
+                    logger.warning(f"FAILED: {task_id}: {request}")
+                except Exception as e:
+                    # If something goes wrong here, just log that the task failed.
+                    logger.warning(f"FAILED: {task_id}")
 
         # Get the list of NVRs that we will need to tag.
         build_nvrs = list()
