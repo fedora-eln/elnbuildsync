@@ -199,11 +199,38 @@ class TriggerBuildResource(Resource):
         yield batching.rebuild_from_components(components)
 
 
+class LogLevelResource(Resource):
+    """
+    LogLevelResource
+
+    Sets the log level of the application or returns 400 if an invalid log
+    level is specified
+    """
+    def getChild(self, name, request):
+        return LogLevelPage(name)
+
+
+class LogLevelPage(Resource):
+    def __init__(self, name):
+        super().__init__()
+        self.loglevel = name.decode('UTF-8').upper()
+
+    def render_GET(self, request):
+        try:
+            logging.getLogger().setLevel(self.loglevel)
+        except ValueError as e:
+            return f"Invalid log level: {self.loglevel}".encode("UTF-8")
+
+        logger.warning(f"Log Level changed to {self.loglevel}")
+        return f"Log level set to {self.loglevel}".encode("UTF-8")
+
+
 def setup_web_resources():
     global started
     root = RootResource()
     root.putChild(b"startup", StartupResource())
     root.putChild(b"alive", LivenessResource())
+    root.putChild(b"loglevel", LogLevelResource())
     root.putChild(b"status.json", StatusJSONResource())
     root.putChild(b"status.html", StatusPageResource())
     root.putChild(b"status", Redirect(b"status.html"))
