@@ -206,6 +206,7 @@ class LogLevelResource(Resource):
     Sets the log level of the application or returns 400 if an invalid log
     level is specified
     """
+
     def getChild(self, name, request):
         return LogLevelPage(name)
 
@@ -213,7 +214,7 @@ class LogLevelResource(Resource):
 class LogLevelPage(Resource):
     def __init__(self, name):
         super().__init__()
-        self.loglevel = name.decode('UTF-8').upper()
+        self.loglevel = name.decode("UTF-8").upper()
 
     def render_GET(self, request):
         try:
