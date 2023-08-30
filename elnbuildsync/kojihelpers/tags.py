@@ -114,7 +114,12 @@ def wait_repo(tag):
     begins. If the initial start is not important, use wait_repo_regen()
     instead.
     """
-    yield _wait_repo_init(tag)
+    try:
+        yield _wait_repo_init(tag)
+    except DeferredTimeoutError as e:
+        # If we've timed out waiting for the init, just wait for regen and
+        # hope for the best.
+        pass
     yield _wait_repo_regen(tag)
 
     return tag
