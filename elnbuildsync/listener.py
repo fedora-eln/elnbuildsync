@@ -30,11 +30,7 @@ from .state import ELNBuildSyncState as state
 
 from fedora_messaging.exceptions import Nack, Drop
 from twisted.internet import reactor
-from twisted.internet.defer import (
-    AlreadyCalledError,
-    Deferred,
-    inlineCallbacks
-)
+from twisted.internet.defer import AlreadyCalledError, Deferred, inlineCallbacks
 
 
 logger = logging.getLogger(__name__)
