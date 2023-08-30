@@ -20,7 +20,8 @@
 import logging
 
 from fedora_messaging.message import Message as FedoraMessage
-from twisted.internet.defer import inlineCallbacks, TimeoutError
+from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 
 from .rebuildattempt import RebuildAttempt
 from .tagmessage import TagMessage
@@ -80,7 +81,7 @@ class RebuildBatch:
                     self._side_tag_base,
                     build_ids,
                 )
-            except TimeoutError as e:
+            except DeferredTimeoutError as e:
                 # Keep retrying to create a side-tag.
                 # Any other exception will be propagated up the stack.
                 logger.warning(

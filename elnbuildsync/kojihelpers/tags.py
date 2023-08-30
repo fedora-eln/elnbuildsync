@@ -21,6 +21,7 @@ import logging
 from cachetools import cached, LRUCache
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 from twisted.internet.threads import deferToThread
 
 from .. import kojihelpers
@@ -61,7 +62,7 @@ def prepare_side_tag(base_tag, initial_build_ids=list()):
     logger.info(f"Waiting for {side_tag_name} to generate.")
     try:
         yield wait_repo(side_tag_name)
-    except TimeoutError as e:
+    except DeferredTimeoutError as e:
         logger.error(f"Timed out awaiting side-tag {side_tag_name}", exc_info=True)
         try:
             yield deferToThread(downstream_koji.removeSideTag, side_tag_name)
