@@ -21,12 +21,13 @@ import git
 import logging
 import os
 import re
-import requests
+from txrequests import Session
 import tempfile
 import twisted.internet.utils
 import yaml
 
 from twisted.internet.defer import inlineCallbacks
+from twisted.internet.threads import deferToThread
 
 from . import config
 
@@ -207,6 +208,7 @@ def update_config():
         return
 
 
+@inlineCallbacks
 def get_distro_packages(
     distro_url,
     distro_view=DEFAULT_DISTRO_VIEWS,
@@ -236,12 +238,13 @@ def get_distro_packages(
 
             logger.debug("downloading {url}".format(url=url))
 
-            r = requests.get(url, allow_redirects=True)
-            for line in r.text.splitlines():
-                merged_packages[line] = {
-                    "view": view,
-                    "content_type": this_source,
-                }
+            with Session() as session:
+                r = yield session.get(url, allow_redirects=True)
+                for line in r.text.splitlines():
+                    merged_packages[line] = {
+                        "view": view,
+                        "content_type": this_source,
+                    }
 
     # There may be an empty line in the file, ignore it.
     if "" in merged_packages:
@@ -255,6 +258,7 @@ def get_distro_packages(
 # FIXME: This needs even more error checking, e.g.
 #         - check if blocks are actual dictionaries
 #         - check if certain values are what we expect
+@inlineCallbacks
 def load_config(config_git_url=None, config_file=None):
     """Loads or updates the global configuration from the provided URL in
     the `link#branch` format.  If no branch is provided, assumes `master`.
@@ -283,7 +287,8 @@ def load_config(config_git_url=None, config_file=None):
                 scm["ref"] = "main"
             for attempt in range(retry):
                 try:
-                    git.Repo.clone_from(scm["link"], cdir).git.checkout(scm["ref"])
+                    repo = yield deferToThread(git.Repo.clone_from, scm["link"], cdir)
+                    yield deferToThread(repo.git.checkout, scm["ref"])
                 except Exception:
                     logger.warning(
                         "Failed to fetch configuration, retrying (#%d).",
@@ -306,7 +311,7 @@ def load_config(config_git_url=None, config_file=None):
 
         try:
             with open(config_file) as f:
-                y = yaml.safe_load(f)
+                y = yield deferToThread(yaml.safe_load, f)
             logger.debug(f"{config_file} loaded, processing.")
 
         except Exception as e:
@@ -475,7 +480,7 @@ def load_config(config_git_url=None, config_file=None):
                     n["control"]["autopackagelist"]["view"],
                 ]
 
-            cnf = get_distro_packages(
+            cnf = yield get_distro_packages(
                 distro_url=resolver,
                 distro_view=views,
             )
