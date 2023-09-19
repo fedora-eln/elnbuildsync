@@ -111,7 +111,10 @@ def get_taskinfo(which_bsys, task_id, **kwargs):
     # proper NVR to tag.
     for child in children:
         if child["method"] == "buildSRPMFromSCM":
-            child["result"] = yield deferToThread(bsys.getTaskResult, child["id"])
+            try:
+                child["result"] = yield deferToThread(bsys.getTaskResult, child["id"])
+            except koji.GenericError as e:
+                raise InfoUnavailableError(f"SRPM build failed for {task_id}") from e
 
     # Add the ["info"] key here to simulate the layout of a
     # state-change message from Koji.
