@@ -190,3 +190,14 @@ def wait_for_builds(task_ids):
 
     result = yield DeferredList(deferreds, consumeErrors=True)
     return result
+
+
+@inlineCallbacks
+def cancel_task(task_id):
+    try:
+        bsys = yield deferToThread(get_buildsys, "destination")
+        yield deferToThread(bsys.cancelTask, task_id, recurse=True)
+    except Exception as e:
+        # Cancellation is best-effort
+        logger.critical(f"Could not cancel task {task_id}. Ignoring.")
+        logger.exception(e)

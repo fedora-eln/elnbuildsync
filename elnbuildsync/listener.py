@@ -190,9 +190,17 @@ def check_tasks():
                 remove_tasks.append(task)
         except Exception as e:
             # Log any failures so we don't block future checks.
+            logger.critical(f"Unexpected failure in {task}")
             logger.exception(e)
 
-            # Delete this task so we don't continue failing on it
+            # Cancel the task on Koji if possible.
+            logger.critical(f"Cancelling Koji task {task}")
+            reactor.callLater(0, kojihelpers.builds.cancel_task, task)
+
+            # Also call cancel() on the Deferred before we remove it
+            reactor.callLater(0, state.active_builds[task].cancel)
+
+            # Stop tracking this task so we don't continue failing on it
             remove_tasks.append(task)
 
     for task in remove_tasks:
