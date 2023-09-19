@@ -60,6 +60,7 @@ def process_message_batch():
         return
 
     # Create Batch object
+    running = True
     batch = yield RebuildBatch(
         target=config.main["build"]["target"],
         tag_messages=tag_messages,
@@ -71,7 +72,6 @@ def process_message_batch():
     # number of packages may queue up in this time, but they will be processed
     # as a single batch.
     try:
-        running = True
         yield batch.run()
     except Exception as e:
         # If something goes unrecoverably wrong here, always log it and skip
