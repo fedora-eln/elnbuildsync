@@ -111,7 +111,10 @@ def get_taskinfo(which_bsys, task_id, **kwargs):
     # proper NVR to tag.
     for child in children:
         if child["method"] == "buildSRPMFromSCM":
-            child["result"] = yield deferToThread(bsys.getTaskResult, child["id"])
+            try:
+                child["result"] = yield deferToThread(bsys.getTaskResult, child["id"])
+            except koji.GenericError as e:
+                raise InfoUnavailableError(f"SRPM build failed for {task_id}") from e
 
     # Add the ["info"] key here to simulate the layout of a
     # state-change message from Koji.
@@ -190,3 +193,14 @@ def wait_for_builds(task_ids):
 
     result = yield DeferredList(deferreds, consumeErrors=True)
     return result
+
+
+@inlineCallbacks
+def cancel_task(task_id):
+    try:
+        bsys = yield deferToThread(get_buildsys, "destination")
+        yield deferToThread(bsys.cancelTask, task_id, recurse=True)
+    except Exception as e:
+        # Cancellation is best-effort
+        logger.critical(f"Could not cancel task {task_id}. Ignoring.")
+        logger.exception(e)
