@@ -225,10 +225,12 @@ def fire_errback(deferred, *data):
         pass
 
 
-def register_build_task_id(task_id):
+def register_build_task_id(task_id, timeout=config.task_check_timer):
     logger.debug(f"Registering task {task_id}")
     if task_id in state.active_builds:
         raise ValueError("Cannot register the same task ID twice")
 
     state.active_builds[task_id] = Deferred()
+    state.active_builds[task_id].addTimeout(timeout, reactor)
+
     return state.active_builds[task_id]
