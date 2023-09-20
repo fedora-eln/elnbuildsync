@@ -37,9 +37,8 @@ class RebuildTask:
         self._rebuild_attempt = rebuild_attempt
         self.deferred = Deferred()
 
-        # Set up a long timeout, which we will cancel later
-        # if the build succeeds or fails normally.
-        self.timeout = reactor.callLater(config.task_timeout, self._timeout)
+        # Set up a long timeout
+        self.deferred.addTimeout(config.task_timeout, reactor)
 
         # DB IDs
         self._rebuild_task_id = 0
@@ -61,24 +60,8 @@ class RebuildTask:
         # until the DB interaction is available.
         yield deferToThread(RebuildTask._simple_yield)
 
-        # Cancel the timeout
-        if self.timeout:
-            self.timeout.cancel()
-            self.timeout = None
-
         self.result = state
         # Save this to the database here
-
-    def _timeout(self):
-        # Construct a fake message for the error
-        msg = dict()
-        msg["id"] = self.koji_task_id
-
-        # TODO: put something useful here.
-        msg["srpm"] = ""
-
-        # Call the errback with a TimeOutError
-        self.deferred.errback(kojihelpers.errors.BuildTimeoutError(msg))
 
     @staticmethod
     def _simple_yield():
