@@ -106,26 +106,31 @@ def get_taskinfo(which_bsys, task_id, **kwargs):
             f"Could not retrieve child information for build {task_id}"
         ) from e
 
-    # Ensure we have the result for a buildSRPMFromSCM step so we can use that
-    # in RebuildBatch._get_srpm_nvr_from_task_msg() to make sure we know the
-    # proper NVR to tag.
-    for child in children:
-        if child["method"] == "buildSRPMFromSCM":
-            try:
-                child["result"] = yield deferToThread(bsys.getTaskResult, child["id"])
-            except koji.GenericError as e:
-                raise InfoUnavailableError(f"SRPM build failed for {task_id}") from e
-
     # Add the ["info"] key here to simulate the layout of a
     # state-change message from Koji.
     taskinfo["info"] = dict()
     taskinfo["info"]["request"] = taskinfo["request"]
 
-    # Add the ["info"]["children"] keys here to simulate the layout of a
-    # state-change message from Koji. This is needed later by
-    # RebuildBatch._get_srpm_nvr_from_task_msg() so that we don't need to
-    # differentiate the two ways we can determine task completion.
-    taskinfo["info"]["children"] = children
+    if taskinfo["state"] == koji.TASK_STATES["CLOSED"]:
+        # Ensure we have the result for a buildSRPMFromSCM step so we can use that
+        # in RebuildBatch._get_srpm_nvr_from_task_msg() to make sure we know the
+        # proper NVR to tag.
+        for child in children:
+            if child["method"] == "buildSRPMFromSCM":
+                try:
+                    child["result"] = yield deferToThread(
+                        bsys.getTaskResult, child["id"]
+                    )
+                except koji.GenericError as e:
+                    raise InfoUnavailableError(
+                        f"SRPM build failed for {task_id}"
+                    ) from e
+
+        # Add the ["info"]["children"] keys here to simulate the layout of a
+        # state-change message from Koji. This is needed later by
+        # RebuildBatch._get_srpm_nvr_from_task_msg() so that we don't need to
+        # differentiate the two ways we can determine task completion.
+        taskinfo["info"]["children"] = children
 
     return taskinfo
 
