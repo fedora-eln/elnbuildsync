@@ -35,10 +35,6 @@ class RebuildTask:
         self.result = None
         self.koji_task_id = koji_task_id
         self._rebuild_attempt = rebuild_attempt
-        self.deferred = Deferred()
-
-        # Set up a long timeout
-        self.deferred.addTimeout(config.task_timeout, reactor)
 
         # DB IDs
         self._rebuild_task_id = 0
