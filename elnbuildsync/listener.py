@@ -31,6 +31,7 @@ from .state import ELNBuildSyncState as state
 from fedora_messaging.exceptions import Nack, Drop
 from twisted.internet import reactor
 from twisted.internet.defer import AlreadyCalledError, Deferred, inlineCallbacks
+from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 
 
 logger = logging.getLogger(__name__)
@@ -193,11 +194,7 @@ def check_tasks():
             logger.critical(f"Unexpected failure in {task}")
             logger.exception(e)
 
-            # Cancel the task on Koji if possible.
-            logger.critical(f"Cancelling Koji task {task}")
-            reactor.callLater(0, kojihelpers.builds.cancel_task, task)
-
-            # Also call cancel() on the Deferred before we remove it
+            # Call cancel() on the Deferred before we remove it
             reactor.callLater(0, state.active_builds[task].cancel)
 
             # Stop tracking this task so we don't continue failing on it
@@ -225,12 +222,30 @@ def fire_errback(deferred, *data):
         pass
 
 
-def register_build_task_id(task_id, timeout=config.task_check_timer):
+def register_build_task_id(task_id, timeout=config.task_timeout):
     logger.debug(f"Registering task {task_id}")
     if task_id in state.active_builds:
         raise ValueError("Cannot register the same task ID twice")
 
     state.active_builds[task_id] = Deferred()
     state.active_builds[task_id].addTimeout(timeout, reactor)
+    state.active_builds[task_id].addErrback(cancel_timed_out_task, task_id)
 
     return state.active_builds[task_id]
+
+
+@inlineCallbacks
+def cancel_timed_out_task(failure, task_id):
+    # Reraise the original exception, catching TimeoutError if it happened
+    try:
+        failure.raiseException()
+    except DeferredTimeoutError as e:
+        pass
+
+    yield kojihelpers.builds.cancel_task(task_id)
+
+    taskinfo = yield kojihelpers.builds.get_taskinfo(
+        "destination", task_id, request=True
+    )
+
+    raise koji.BuildError(taskinfo)
