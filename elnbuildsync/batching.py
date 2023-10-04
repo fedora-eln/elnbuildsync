@@ -17,8 +17,10 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 import logging
+import re
+import rpm
 
-from enum import Enum
+from datetime import datetime
 from queue import Queue, Empty
 
 from fedora_messaging.message import Message as FedoraMessage
@@ -39,6 +41,13 @@ message_batch_processor = None
 running = False
 
 logger = logging.getLogger(__name__)
+
+# A regular expression to detect the %dist portion of a Fedora or ELN build
+nodist_re_pattern = re.compile("((\.fc|\.eln)\d+)")
+
+
+class ComponentNotFoundError(Exception):
+    pass
 
 
 @inlineCallbacks
@@ -92,32 +101,91 @@ def rebuild_from_components(components):
     )
 
     src_tag = config.main["trigger"]["rpms"]
-    latest_tagged_src_pkgs = yield deferToThread(
+    latest_tagged_rawhide_pkgs = yield deferToThread(
         bsys.listTagged, src_tag, latest=True, inherit=True
     )
-    latest_tagged_src_table = {pkg["name"]: pkg for pkg in latest_tagged_src_pkgs}
+    latest_tagged_rawhide_table = {
+        pkg["name"]: pkg for pkg in latest_tagged_rawhide_pkgs
+    }
+
+    (
+        _,
+        dest_tag,
+    ) = yield kojihelpers.tags.get_tags_for_target(config.main["build"]["target"])
+    latest_tagged_eln_pkgs = yield deferToThread(
+        bsys.listTagged, dest_tag, latest=True, inherit=True
+    )
+    latest_tagged_eln_table = {pkg["name"]: pkg for pkg in latest_tagged_eln_pkgs}
 
     for component in components:
         if config.is_eligible("rpms", component):
-            if component in latest_tagged_src_table:
+            try:
+                if component in latest_tagged_rawhide_table:
+                    if component in latest_tagged_eln_table:
+                        # Check whether the latest build in ELN is equal or newer than
+                        # the latest build in Rawhide
+                        rawhide_nvr = re.sub(
+                            nodist_re_pattern,
+                            "",
+                            latest_tagged_rawhide_table[component]["nvr"],
+                        )
+                        eln_nvr = re.sub(
+                            nodist_re_pattern,
+                            "",
+                            latest_tagged_eln_table[component]["nvr"],
+                        )
+                        ver_cmp = rpm.labelCompare(rawhide_nvr, eln_nvr)
+
+                        if ver_cmp < 0:
+                            # The ELN build is newer than the Rawhide build
+                            buildinfo = latest_tagged_eln_table[component]
+                        elif ver_cmp > 0:
+                            # The Rawhide build is newer than the ELN build
+                            buildinfo = latest_tagged_rawhide_table[component]
+                        else:
+                            # They have the same version, so check their creation times
+                            rawhide_start_time = datetime.fromisoformat(
+                                latest_tagged_rawhide_table[component]["creation_time"]
+                            )
+                            eln_start_time = datetime.fromisoformat(
+                                latest_tagged_eln_table[component]["creation_time"]
+                            )
+
+                            if rawhide_start_time > eln_start_time:
+                                buildinfo = latest_tagged_rawhide_table[component]
+                            else:
+                                buildinfo = latest_tagged_eln_table[component]
+
+                    else:
+                        # No ELN builds have occurred yet, so use Rawhide
+                        buildinfo = latest_tagged_rawhide_table[component]
+
+                elif component in latest_tagged_eln_table:
+                    # Component is probably renamed in RHEL, so use the latest ELN build
+                    buildinfo = latest_tagged_eln_table[component]
+                else:
+                    raise ComponentNotFoundError(
+                        f"No existing builds in either Rawhide or ELN for {component}"
+                    )
+
                 # Fake up a FedoraMessage for the batching system
                 msg = FedoraMessage(
                     topic="org.fedoraproject.prod.buildsys.tag",
                     body={
-                        "name": component,
-                        "version": latest_tagged_src_table[component]["version"],
-                        "release": latest_tagged_src_table[component]["release"],
-                        "nvr": latest_tagged_src_table[component]["nvr"],
-                        "build_id": latest_tagged_src_table[component]["build_id"],
-                        "tag": src_tag,
+                        "name": buildinfo["name"],
+                        "version": buildinfo["version"],
+                        "release": buildinfo["release"],
+                        "nvr": buildinfo["nvr"],
+                        "build_id": buildinfo["build_id"],
+                        "tag": buildinfo["tag_name"],
                         "ELNBuildSync_notes": "Fake message for building missing packages",
                     },
                 )
-                logger.info(f"Rebuilding {latest_tagged_src_table[component]} for ELN.")
+                logger.info(f"Rebuilding {buildinfo['nvr']} for ELN.")
 
                 message_batch_processor.reset()
                 message_queue.put(msg)
-            else:
-                logger.critical(
-                    f"Package {component} has never been built for {src_tag}"
-                )
+
+            except ComponentNotFoundError as e:
+                logger.exception(e)
+                logger.critical(f"Cannot determine commit ID to build {component}")
