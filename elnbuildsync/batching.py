@@ -189,3 +189,7 @@ def rebuild_from_components(components):
             except ComponentNotFoundError as e:
                 logger.exception(e)
                 logger.critical(f"Cannot determine commit ID to build {component}")
+            except Exception as e:
+                # Unexpected exception, log it so we don't crash
+                logger.critical(f"Unexpected error while handling {component}")
+                logger.exception(e)
