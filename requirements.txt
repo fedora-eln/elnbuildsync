@@ -8,5 +8,6 @@ pytest >= 6.0
 requests
 rpm
 twisted >= 22
+txrequests
 txredisapi
 pyyaml

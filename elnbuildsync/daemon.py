@@ -70,9 +70,17 @@ def main(log_level, dry_run, config_url, config_file, untagging):
     config.dry_run = dry_run
     config.do_untagging = untagging
 
+    task.deferLater(reactor, 0, initialize_services, config_url, config_file)
+
+    logger.debug("Starting Twisted mainloop")
+    reactor.run()
+
+
+@inlineCallbacks
+def initialize_services(config_url=None, config_file=None):
     # Read in the config file
     try:
-        config.load_config(config_git_url=config_url, config_file=config_file)
+        yield config.load_config(config_git_url=config_url, config_file=config_file)
     except Exception as e:
         logger.exception(e)
         logger.critical("Could not load configuration.")
@@ -104,10 +112,6 @@ def main(log_level, dry_run, config_url, config_file, untagging):
 
     logger.debug("Starting HTTP server")
     reactor.listenTCP(8080, web.setup_web_resources())
-
-    logger.debug("Starting Twisted mainloop")
-    reactor.run()
-    pass
 
 
 if __name__ == "__main__":
