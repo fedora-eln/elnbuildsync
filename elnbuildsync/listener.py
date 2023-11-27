@@ -40,6 +40,7 @@ task_check_processor = None
 
 
 def message_handler(msg):
+    logger.debug(f"Received {msg.topic}: UUID {msg.id}")
     try:
         # Listen for repositories we are waiting on.
         if msg.topic.endswith("buildsys.repo.init"):
@@ -143,18 +144,20 @@ def message_handler(msg):
 
     except Drop as e:
         # Tell the AMQP server that we're ignoring this message
+        logger.debug(f"Dropped message {msg.id}")
         raise
 
     except Nack as e:
         # We're explicitly informing the AMQP server that we can't handle
         # this request currently and it should be re-queued.
+        logger.debug(f"Re-queued message {msg.id}")
         raise
 
     except Exception as e:
         logger.exception(e)
         # If anything goes wrong during the message handler, Nack() the
         # message so it will get retried.
-        raise Nack("Unexpected error, will retry") from e
+        raise Nack(f"Unexpected error on message {msg.id}, will retry") from e
 
 
 @inlineCallbacks
