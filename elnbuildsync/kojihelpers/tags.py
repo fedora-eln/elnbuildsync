@@ -52,6 +52,7 @@ def prepare_side_tag(base_tag, initial_build_ids=list()):
     logger.info(f"Creating side tag from {base_tag}")
     side_tag_info = yield deferToThread(downstream_koji.createSideTag, base_tag)
     side_tag_name = side_tag_info["name"]
+    initial_repo = yield deferToThread(downstream_koji.getRepo, side_tag_name)
 
     logger.debug(f"Side {side_tag_name} created.")
 
@@ -63,14 +64,22 @@ def prepare_side_tag(base_tag, initial_build_ids=list()):
     try:
         yield wait_repo(side_tag_name)
     except DeferredTimeoutError as e:
-        logger.error(f"Timed out awaiting side-tag {side_tag_name}", exc_info=True)
-        try:
-            yield deferToThread(downstream_koji.removeSideTag, side_tag_name)
-        except Exception:
-            logger.warning(f"Unable to remove {side_tag_name}")
+        logger.warning(f"Timed out awaiting side-tag {side_tag_name}")
 
-        # Re-raise the timeout error to the caller
-        raise
+        # In case we've somehow just missed the notification, do a last check
+        # before abandoning the side tag.
+        repo = yield deferToThread(downstream_koji.getRepo, side_tag_name)
+        if repo == initial_repo:
+            try:
+                yield deferToThread(downstream_koji.removeSideTag, side_tag_name)
+            except Exception:
+                logger.warning(f"Unable to remove {side_tag_name}")
+
+            # Re-raise the timeout error to the caller
+            raise
+
+        # If we get here, the repo regenerated successfully, so proceed.
+        logger.warning("Despite timeout, repo has been updated. Proceeding.")
 
     return side_tag_name
 
