@@ -43,7 +43,7 @@ running = False
 logger = logging.getLogger(__name__)
 
 # A regular expression to detect the %dist portion of a Fedora or ELN build
-nodist_re_pattern = re.compile("((\.fc|\.eln)\d+)")
+nodist_re_pattern = re.compile(r"((\.fc|\.eln)\d+)")
 
 
 class ComponentNotFoundError(Exception):
