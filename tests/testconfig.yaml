@@ -50,8 +50,8 @@ configuration:
         # If other packages build against the Fedora LLVM, they will fail to
         # run against the ELN LLVM due to missing symbols. Avoid allowing LLVM
         # to tag the Fedora build into the buildroot.
-        - ^llvm[0-9.]*
-        - ^clang[0-9.]*$
+        - ^llvm[0-9\.]*$
+        - ^clang[0-9\.]*$
         # The selinux-policy package provides RPM macros that other packages
         # use to set their minimum required policy (such as smartmon). This
         # dependency includes the %dist tag, meaning we cannot tag the Fedora
@@ -123,6 +123,12 @@ configuration:
         # Maintained in the ELN branch
         # https://issues.redhat.com/browse/CS-1661
         - ^qemu$
+    ordering:
+      # Default ordering value is 1000 if not listed here
+      rpms:
+        ^ocaml$: 0
+        ^llvm[0-9\.]*$: 0
+        ^clang[0-9\.]*$: 1
   defaults:
     rpms:
       source: "%(component)s.git#rawhide"

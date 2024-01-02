@@ -435,6 +435,13 @@ def load_config(config_git_url=None, config_file=None):
                         "Not excluding any components from the %s namespace.",
                         cns,
                     )
+            n["control"]["ordering"] = {"rpms": dict(), "modules": dict()}
+            if "ordering" in cnf["control"]:
+                for cns in ("rpms", "modules"):
+                    if cns in cnf["control"]["ordering"]:
+                        n["control"]["ordering"][cns].update(
+                            cnf["control"]["ordering"][cns]
+                        )
         else:
             raise ConfigError("control missing.")
 
@@ -572,3 +579,13 @@ def skip_tag(ns, comp):
             logger.debug(f"{ns}/{comp} is on the skip_tag list, building immediately")
             return True
     return False
+
+
+def get_order(ns, comp):
+    for pattern in config.main["control"]["ordering"][ns]:
+        if re.search(pattern, comp):
+            return config.main["control"]["ordering"][ns][pattern]
+
+    # If we don't have a specific pattern, return a high number (1000)
+    # so we always build them late in the cycle
+    return 1000

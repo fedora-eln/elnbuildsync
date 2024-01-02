@@ -150,7 +150,7 @@ def create_status_page():
                     and _status_data[pname]["status"] == BuildStatus.UNKNOWN
                 ):
                     # Check whether the latest tagged package is ELN or Fedora
-                    if re.search("\.fc\d\d$", _status_data[pname]["tagged"]):
+                    if re.search(r"\.fc\d\d$", _status_data[pname]["tagged"]):
                         _status_data[pname]["status"] = BuildStatus.FAILED
                         _status_data[pname]["status_detail"] = "Fedora build in tag"
 
