@@ -126,9 +126,10 @@ def message_handler(msg):
         if not config.is_eligible("rpms", msg.body["name"]):
             raise Drop()
 
-        # If we are currently processing a batch, Nack() the message so it
-        # will stay in the queue and not get lost if we crash/restart.
-        if batching.running:
+        # If we are currently processing a batch or are in a "paused" state,
+        # Nack() the message so it will stay in the queue and not get lost if
+        # we crash/restart.
+        if batching.running or config.is_paused():
             raise Nack()
 
         logger.info(f"Triggering rebuild on tag {tag}")
