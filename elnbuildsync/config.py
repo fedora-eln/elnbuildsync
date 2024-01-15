@@ -398,7 +398,7 @@ def load_config(config_git_url=None, config_file=None):
 
         if "control" in cnf:
             n["control"] = dict()
-            for k in ("build", "merge", "strict"):
+            for k in ("build", "merge", "pause", "strict"):
                 if k in cnf["control"]:
                     n["control"][k] = bool(cnf["control"][k])
                 else:
@@ -589,3 +589,7 @@ def get_order(ns, comp):
     # If we don't have a specific pattern, return a high number (1000)
     # so we always build them late in the cycle
     return 1000
+
+
+def is_paused():
+    return config.main["control"]["pause"]
