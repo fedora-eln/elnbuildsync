@@ -136,19 +136,21 @@ def get_taskinfo(which_bsys, task_id, **kwargs):
 
 
 @inlineCallbacks
-def perform_builds(target, scm_urls, scratch=False):
-    task_index = yield start_builds(target, scm_urls, scratch)
+def perform_builds(target, scm_urls, scratch=False, fail_fast=False):
+    task_index = yield start_builds(target, scm_urls, scratch, fail_fast)
     results = yield wait_for_builds(task_index.values())
     return results
 
 
 @inlineCallbacks
-def start_builds(target, scm_urls, scratch=False):
-    task_index = yield deferToThread(_start_builds_thread, target, scm_urls, scratch)
+def start_builds(target, scm_urls, scratch=False, fail_fast=False):
+    task_index = yield deferToThread(
+        _start_builds_thread, target, scm_urls, scratch, fail_fast
+    )
     return task_index
 
 
-def _start_builds_thread(target, scm_urls, scratch=False):
+def _start_builds_thread(target, scm_urls, scratch=False, fail_fast=False):
     bsys = get_buildsys("destination")
     build_vcalls = dict()
     try:
@@ -164,7 +166,10 @@ def _start_builds_thread(target, scm_urls, scratch=False):
                 build_vcalls[scmurl] = mc.build(
                     scmurl,
                     target,
-                    {"scratch": scratch},
+                    {
+                        "scratch": scratch,
+                        "fail_fast": fail_fast,
+                    },
                     priority=KOJI_BACKGROUND_PRIORITY,
                 )
     except Exception as e:

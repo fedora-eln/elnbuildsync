@@ -35,8 +35,6 @@ from . import listener
 from . import status
 from . import web
 
-from .kojihelpers.builds import perform_builds
-
 
 logger = logging.getLogger(__name__)
 

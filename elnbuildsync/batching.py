@@ -74,6 +74,7 @@ def process_message_batch():
         target=config.main["build"]["target"],
         tag_messages=tag_messages,
         scratch=config.main["build"]["scratch"],
+        fail_fast=config.main["build"]["fail_fast"],
     ).async_init()
 
     # Run the batch.

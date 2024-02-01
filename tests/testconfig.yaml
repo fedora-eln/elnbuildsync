@@ -23,6 +23,7 @@ configuration:
     target: eln
     platform: platform:eln
     scratch: true
+    fail_fast: true
   git:
     author: DistroBaker
     email: osci-list@redhat.com

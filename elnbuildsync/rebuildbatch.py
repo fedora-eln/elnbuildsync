@@ -40,7 +40,13 @@ class RebuildBatch:
     # Remove this once we are getting this from the DB
     _latest_batch_id = 0
 
-    def __init__(self, target: str, tag_messages: list[TagMessage], scratch=False):
+    def __init__(
+        self,
+        target: str,
+        tag_messages: list[TagMessage],
+        scratch=False,
+        fail_fast=False,
+    ):
         """
         Do not call RebuildBatch() alone. Instantiate via
         `yield RebuildBatch(target, msgs).async_init()` instead.
@@ -50,6 +56,7 @@ class RebuildBatch:
         self.tag_messages = dict()
         self.target = target
         self.scratch = scratch
+        self.fail_fast = fail_fast
         self.side_tag = None
         self._dest_tag = None
         self._side_tag_base = None

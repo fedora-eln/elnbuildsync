@@ -382,6 +382,13 @@ def load_config(config_git_url=None, config_file=None):
                     "Configuration warning: build.scratch not defined, assuming false."
                 )
                 n["build"]["scratch"] = False
+            if "fail_fast" in cnf["build"]:
+                n["build"]["fail_fast"] = bool(cnf["build"]["fail_fast"])
+            else:
+                logger.warning(
+                    "Configuration warning: build.fail_fast not defined, assuming false."
+                )
+                n["build"]["fail_fast"] = False
         else:
             raise ConfigError("build missing.")
 
