@@ -25,8 +25,8 @@ import fedora_messaging.config
 import logging
 import sys
 
-from twisted.internet import reactor, task
-from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet import task
+from twisted.internet.defer import Deferred
 
 from . import batching
 from . import cleanup
@@ -68,17 +68,18 @@ def main(log_level, dry_run, config_url, config_file, untagging):
     config.dry_run = dry_run
     config.do_untagging = untagging
 
-    task.deferLater(reactor, 0, initialize_services, config_url, config_file)
-
     logger.debug("Starting Twisted mainloop")
-    reactor.run()
+    return task.react(
+        lambda reactor: Deferred.fromCoroutine(_main(reactor, config_url, config_file))
+    )
 
 
-@inlineCallbacks
-def initialize_services(config_url=None, config_file=None):
+async def _main(reactor, config_url=None, config_file=None) -> None:
+    config.terminator = Deferred()
+
     # Read in the config file
     try:
-        yield config.load_config(config_git_url=config_url, config_file=config_file)
+        await config.load_config(config_git_url=config_url, config_file=config_file)
     except Exception as e:
         logger.exception(e)
         logger.critical("Could not load configuration.")
@@ -110,6 +111,8 @@ def initialize_services(config_url=None, config_file=None):
 
     logger.debug("Starting HTTP server")
     reactor.listenTCP(8080, web.setup_web_resources())
+
+    await config.terminator
 
 
 if __name__ == "__main__":

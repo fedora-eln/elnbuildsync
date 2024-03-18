@@ -22,8 +22,6 @@ import logging
 from . import config
 from . import kojihelpers
 
-from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks, Deferred
 from twisted.internet.threads import deferToThread
 
 
@@ -41,24 +39,22 @@ class RebuildTask:
 
         logger.debug(f"Created RebuildTask for task_id {koji_task_id}")
 
-    @inlineCallbacks
-    def async_init(self):
+    async def async_init(self):
         # TODO remove this; it's just to ensure we have an async generator
         # until the DB interaction is available.
-        yield deferToThread(RebuildTask._simple_yield)
+        await deferToThread(RebuildTask._simple_await)
 
         # Save this to the database here
         return self
 
-    @inlineCallbacks
-    def finish(self, state):
+    async def finish(self, state):
         # TODO remove this; it's just to ensure we have an async generator
         # until the DB interaction is available.
-        yield deferToThread(RebuildTask._simple_yield)
+        await deferToThread(RebuildTask._simple_await)
 
         self.result = state
         # Save this to the database here
 
     @staticmethod
-    def _simple_yield():
+    def _simple_await():
         pass

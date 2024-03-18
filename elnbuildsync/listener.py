@@ -30,7 +30,7 @@ from .state import ELNBuildSyncState as state
 
 from fedora_messaging.exceptions import Nack, Drop
 from twisted.internet import reactor
-from twisted.internet.defer import AlreadyCalledError, Deferred, inlineCallbacks
+from twisted.internet.defer import AlreadyCalledError, Deferred
 from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 
 
@@ -161,12 +161,11 @@ def message_handler(msg):
         raise Nack(f"Unexpected error on message {msg.id}, will retry") from e
 
 
-@inlineCallbacks
-def check_tasks():
+async def check_tasks():
     remove_tasks = list()
     for task in state.active_builds.keys():
         try:
-            taskinfo = yield kojihelpers.builds.get_taskinfo(
+            taskinfo = await kojihelpers.builds.get_taskinfo(
                 "destination", task, request=True
             )
 
@@ -238,17 +237,16 @@ def register_build_task_id(task_id, timeout=config.task_timeout):
     return state.active_builds[task_id]
 
 
-@inlineCallbacks
-def cancel_timed_out_task(failure, task_id):
+async def cancel_timed_out_task(failure, task_id):
     # Reraise the original exception, catching TimeoutError if it happened
     try:
         failure.raiseException()
     except DeferredTimeoutError as e:
         pass
 
-    yield kojihelpers.builds.cancel_task(task_id)
+    await kojihelpers.builds.cancel_task(task_id)
 
-    taskinfo = yield kojihelpers.builds.get_taskinfo(
+    taskinfo = await kojihelpers.builds.get_taskinfo(
         "destination", task_id, request=True
     )
 

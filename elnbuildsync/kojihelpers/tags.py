@@ -20,7 +20,7 @@ import logging
 
 from cachetools import cached, LRUCache
 from twisted.internet import reactor
-from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.defer import Deferred
 from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 from twisted.internet.threads import deferToThread
 
@@ -33,12 +33,11 @@ from .. import config
 logger = logging.getLogger(__name__)
 
 
-@inlineCallbacks
-def prepare_side_tag(base_tag, initial_build_ids=list()):
+async def prepare_side_tag(base_tag, initial_build_ids=list()):
     """
     Creates a Koji side tag based on @base_tag
 
-    Requests the side-tag and yields until the repo has been generated.
+    Requests the side-tag and awaits until the repo has been generated.
 
     :params str base_tag: The build tag to inherit from (e.g. f39-build)
     :params list initial_packages: The set of build_ids that will be tagged
@@ -50,28 +49,28 @@ def prepare_side_tag(base_tag, initial_build_ids=list()):
     downstream_koji = get_buildsys("destination")
     # Trigger the creation of the side-tag
     logger.info(f"Creating side tag from {base_tag}")
-    side_tag_info = yield deferToThread(downstream_koji.createSideTag, base_tag)
+    side_tag_info = await deferToThread(downstream_koji.createSideTag, base_tag)
     side_tag_name = side_tag_info["name"]
-    initial_repo = yield deferToThread(downstream_koji.getRepo, side_tag_name)
+    initial_repo = await deferToThread(downstream_koji.getRepo, side_tag_name)
 
     logger.debug(f"Side {side_tag_name} created.")
 
     if initial_build_ids:
-        yield tag_builds(side_tag_name, initial_build_ids)
+        await tag_builds(side_tag_name, initial_build_ids)
 
     # Wait for koji to generate the buildroot repo
     logger.info(f"Waiting for {side_tag_name} to generate.")
     try:
-        yield wait_repo(side_tag_name)
+        await wait_repo(side_tag_name)
     except DeferredTimeoutError as e:
         logger.warning(f"Timed out awaiting side-tag {side_tag_name}")
 
         # In case we've somehow just missed the notification, do a last check
         # before abandoning the side tag.
-        repo = yield deferToThread(downstream_koji.getRepo, side_tag_name)
+        repo = await deferToThread(downstream_koji.getRepo, side_tag_name)
         if repo == initial_repo:
             try:
-                yield deferToThread(downstream_koji.removeSideTag, side_tag_name)
+                await deferToThread(downstream_koji.removeSideTag, side_tag_name)
             except Exception:
                 logger.warning(f"Unable to remove {side_tag_name}")
 
@@ -84,9 +83,8 @@ def prepare_side_tag(base_tag, initial_build_ids=list()):
     return side_tag_name
 
 
-@inlineCallbacks
-def tag_builds(tag, builds):
-    yield deferToThread(_tag_builds_thread, tag, builds)
+async def tag_builds(tag, builds):
+    await deferToThread(_tag_builds_thread, tag, builds)
 
 
 def _tag_builds_thread(tag, build_ids):
@@ -98,9 +96,8 @@ def _tag_builds_thread(tag, build_ids):
             mc.tagBuild(tag, build_id)
 
 
-@inlineCallbacks
-def untag_builds(tag, builds):
-    yield deferToThread(_untag_builds_thread, tag, builds)
+async def untag_builds(tag, builds):
+    await deferToThread(_untag_builds_thread, tag, builds)
 
 
 def _untag_builds_thread(tag, build_ids):
@@ -112,8 +109,7 @@ def _untag_builds_thread(tag, build_ids):
             mc.untagBuild(tag, build_id, strict=False)
 
 
-@inlineCallbacks
-def wait_repo(tag):
+async def wait_repo(tag):
     """
     Wait for a repo regeneration to begin and then to complete
 
@@ -124,24 +120,23 @@ def wait_repo(tag):
     instead.
     """
     try:
-        yield _wait_repo_init(tag)
+        await _wait_repo_init(tag)
     except DeferredTimeoutError as e:
         # If we've timed out waiting for the init, just wait for regen and
         # hope for the best.
         pass
-    yield _wait_repo_regen(tag)
+    await _wait_repo_regen(tag)
 
     return tag
 
 
-@inlineCallbacks
-def wait_repo_regen(tag):
+async def wait_repo_regen(tag):
     """
     Wait for a repo to regenerate without first waiting for the regen to start.
 
     This should be used whenever a repo is created for the first time.
     """
-    yield _wait_repo_regen(tag)
+    await _wait_repo_regen(tag)
 
     return tag
 
@@ -164,13 +159,12 @@ def _wait_repo_regen(tag):
     return deferred
 
 
-@inlineCallbacks
-def get_tags_for_target(target):
+async def get_tags_for_target(target):
     """
     Returns: buildroot_tag, destination_tag
     """
 
-    buildroot_tag, destination_tag = yield deferToThread(
+    buildroot_tag, destination_tag = await deferToThread(
         _get_tags_for_target_thread, target
     )
 
@@ -185,9 +179,8 @@ def _get_tags_for_target_thread(target):
     return targetinfo["build_tag_name"], targetinfo["dest_tag_name"]
 
 
-@inlineCallbacks
-def remove_side_tag(side_tag):
-    yield deferToThread(_remove_side_tag_thread, side_tag)
+async def remove_side_tag(side_tag):
+    await deferToThread(_remove_side_tag_thread, side_tag)
 
 
 def _remove_side_tag_thread(side_tag):

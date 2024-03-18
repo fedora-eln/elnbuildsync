@@ -21,7 +21,6 @@ import logging
 
 from fedora_messaging.message import Message
 from twisted.internet.threads import deferToThread
-from twisted.internet.defer import inlineCallbacks
 
 from .kojihelpers.builds import get_scmurl
 
@@ -36,7 +35,7 @@ class TagMessage:
     def __init__(self, tag_message: Message) -> None:
         """
         Do not call TagMessage() alone. Instantiate via
-        `yield TagMessage(msg, batch_id).async_init()` instead. This ensures
+        `await TagMessage(msg, batch_id).async_init()` instead. This ensures
         that the database actions will settle before the object is used.
         """
         self.component = tag_message.body["name"]
@@ -47,11 +46,10 @@ class TagMessage:
         self._tag_message_id = 0
         self._rebuild_batch_id = 0
 
-    @inlineCallbacks
-    def async_init(self):
+    async def async_init(self):
         try:
             logger.debug(f"Getting SCM URL for {self._message.body['build_id']}")
-            self.scmurl = yield get_scmurl(self._message.body["build_id"])
+            self.scmurl = await get_scmurl(self._message.body["build_id"])
         except Exception as e:
             logger.exception(e)
             raise
@@ -61,24 +59,22 @@ class TagMessage:
         # TODO: Create the TagMessage record in the database here
         return self
 
-    @inlineCallbacks
-    def assign_to_rebuildbatch(self, rebuild_batch_id: int) -> None:
+    async def assign_to_rebuildbatch(self, rebuild_batch_id: int) -> None:
         self._rebuild_batch_id = rebuild_batch_id
 
         # TODO: Update DB entry with batch ID
         # This is a placeholder to ensure we return a Deferred
-        yield deferToThread(TagMessage._simple_yield)
+        await deferToThread(TagMessage._simple_await)
 
-    @inlineCallbacks
-    def drop(self):
+    async def drop(self):
         # Remove this entry from the database. It will not be processed.
 
         # TODO: actually remove it from the DB
         # This is a placeholder to ensure we return a Deferred
-        yield deferToThread(TagMessage._simple_yield)
+        await deferToThread(TagMessage._simple_await)
 
     @staticmethod
-    def _simple_yield():
+    def _simple_await():
         pass
 
     def get_build_id(self):

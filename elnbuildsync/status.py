@@ -27,7 +27,6 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from enum import Enum, auto
 import htmlmin
-from twisted.internet.defer import inlineCallbacks
 from twisted.internet.threads import deferToThread
 from twisted.web.template import (
     Element,
@@ -54,8 +53,7 @@ class BuildStatus(Enum):
     BUILDING = auto()
 
 
-@inlineCallbacks
-def create_status_page():
+async def create_status_page():
     global raw_data
     global encoded_json_data
     global web_page
@@ -86,7 +84,7 @@ def create_status_page():
 
         try:
             # Look up packages tagged into the tag associated with the target
-            tagged_pkgs = yield deferToThread(
+            tagged_pkgs = await deferToThread(
                 bsys.listTagged, config.main["build"]["target"], latest=True
             )
         except koji.GenericError as e:
@@ -104,7 +102,7 @@ def create_status_page():
         koji_url = kojihelpers.connection.get_koji_url()
 
         # Get the list of packages that DBS has built.
-        built_packages = yield deferToThread(
+        built_packages = await deferToThread(
             bsys.listBuilds, userID=username, queryOpts={"order": "start_ts"}
         )
         for build in built_packages:
@@ -174,7 +172,7 @@ def create_status_page():
         encoded_json_data = json.dumps(raw_data, default=str).encode("UTF-8")
 
         # Pre-generate the web page
-        raw_page = yield flattenString(None, StatusTableElement())
+        raw_page = await flattenString(None, StatusTableElement())
         logger.debug(f"Uncompressed page: {len(raw_page)}")
 
         web_page = htmlmin.minify(raw_page.decode("utf-8")).encode()

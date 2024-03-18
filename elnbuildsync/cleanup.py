@@ -21,8 +21,6 @@ import logging
 
 from fedora_messaging.message import Message as FedoraMessage
 
-from twisted.internet.defer import inlineCallbacks
-from twisted.internet.task import deferLater
 from twisted.internet.threads import deferToThread
 
 from . import batching
@@ -32,8 +30,7 @@ from . import kojihelpers
 logger = logging.getLogger(__name__)
 
 
-@inlineCallbacks
-def periodic_cleanup():
+async def periodic_cleanup():
     logger.debug("Starting periodic cleanup.")
     bsys = kojihelpers.connection.get_buildsys(
         kojihelpers.connection.BuildSystemType.destination
@@ -43,7 +40,7 @@ def periodic_cleanup():
     desired_pkg_names = set(config.comps["rpms"].keys())
 
     # Get the list of packages currently tagged into the destination tag
-    latest_tagged_dest_pkgs = yield deferToThread(
+    latest_tagged_dest_pkgs = await deferToThread(
         bsys.listTagged, config.main["build"]["target"], latest=True
     )
 
@@ -58,7 +55,7 @@ def periodic_cleanup():
     )
 
     # Get the complete list of builds tagged into the destination tag
-    all_tagged_dest_pkgs = yield deferToThread(
+    all_tagged_dest_pkgs = await deferToThread(
         bsys.listTagged, config.main["build"]["target"], latest=False
     )
     all_tagged_dest_nvrs = set([pkg["nvr"] for pkg in all_tagged_dest_pkgs])
@@ -75,6 +72,6 @@ def periodic_cleanup():
     # Packages in the desired list but not in the tag should be built
     latest_tagged_dest_pkg_names = {pkg["name"] for pkg in latest_tagged_dest_pkgs}
     pkgs_to_build = desired_pkg_names - latest_tagged_dest_pkg_names
-    yield batching.rebuild_from_components(pkgs_to_build)
+    await batching.rebuild_from_components(pkgs_to_build)
 
     logger.debug("Periodic cleanup finished.")
