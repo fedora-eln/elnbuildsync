@@ -25,7 +25,6 @@ from queue import Queue, Empty
 
 from fedora_messaging.message import Message as FedoraMessage
 
-from twisted.internet.defer import inlineCallbacks
 from twisted.internet.threads import deferToThread
 
 from . import config
@@ -50,15 +49,14 @@ class ComponentNotFoundError(Exception):
     pass
 
 
-@inlineCallbacks
-def process_message_batch():
+async def process_message_batch():
     global running
     tag_messages = list()
     while True:
         try:
             fedora_tag_message = message_queue.get_nowait()
 
-            tag_message = yield TagMessage(fedora_tag_message).async_init()
+            tag_message = await TagMessage(fedora_tag_message).async_init()
 
             tag_messages.append(tag_message)
         except Empty as e:
@@ -70,10 +68,11 @@ def process_message_batch():
 
     # Create Batch object
     running = True
-    batch = yield RebuildBatch(
+    batch = await RebuildBatch(
         target=config.main["build"]["target"],
         tag_messages=tag_messages,
         scratch=config.main["build"]["scratch"],
+        fail_fast=config.main["build"]["fail_fast"],
     ).async_init()
 
     # Run the batch.
@@ -81,7 +80,7 @@ def process_message_batch():
     # number of packages may queue up in this time, but they will be processed
     # as a single batch.
     try:
-        yield batch.run()
+        await batch.run()
     except Exception as e:
         # If something goes unrecoverably wrong here, always log it and skip
         # to the next batch.
@@ -90,8 +89,7 @@ def process_message_batch():
         running = False
 
 
-@inlineCallbacks
-def rebuild_from_components(components):
+async def rebuild_from_components(components):
     global message_batch_processor
     global message_queue
 
@@ -101,7 +99,7 @@ def rebuild_from_components(components):
     )
 
     src_tag = config.main["trigger"]["rpms"]
-    latest_tagged_rawhide_pkgs = yield deferToThread(
+    latest_tagged_rawhide_pkgs = await deferToThread(
         bsys.listTagged, src_tag, latest=True, inherit=True
     )
     latest_tagged_rawhide_table = {
@@ -111,8 +109,8 @@ def rebuild_from_components(components):
     (
         _,
         dest_tag,
-    ) = yield kojihelpers.tags.get_tags_for_target(config.main["build"]["target"])
-    latest_tagged_eln_pkgs = yield deferToThread(
+    ) = await kojihelpers.tags.get_tags_for_target(config.main["build"]["target"])
+    latest_tagged_eln_pkgs = await deferToThread(
         bsys.listTagged, dest_tag, latest=True, inherit=True
     )
     latest_tagged_eln_table = {pkg["name"]: pkg for pkg in latest_tagged_eln_pkgs}

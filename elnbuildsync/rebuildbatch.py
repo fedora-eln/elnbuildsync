@@ -21,8 +21,6 @@ import logging
 
 from collections import defaultdict
 
-from fedora_messaging.message import Message as FedoraMessage
-from twisted.internet.defer import inlineCallbacks
 from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 
 from .rebuildattempt import RebuildAttempt
@@ -40,16 +38,23 @@ class RebuildBatch:
     # Remove this once we are getting this from the DB
     _latest_batch_id = 0
 
-    def __init__(self, target: str, tag_messages: list[TagMessage], scratch=False):
+    def __init__(
+        self,
+        target: str,
+        tag_messages: list[TagMessage],
+        scratch=False,
+        fail_fast=False,
+    ):
         """
         Do not call RebuildBatch() alone. Instantiate via
-        `yield RebuildBatch(target, msgs).async_init()` instead.
+        `await RebuildBatch(target, msgs).async_init()` instead.
         This ensures that the database actions will settle before the object
         is used.
         """
         self.tag_messages = dict()
         self.target = target
         self.scratch = scratch
+        self.fail_fast = fail_fast
         self.side_tag = None
         self._dest_tag = None
         self._side_tag_base = None
@@ -62,11 +67,10 @@ class RebuildBatch:
             f"Creating batch from {len(self._unprocessed_tag_messages)} messages"
         )
 
-    @inlineCallbacks
-    def async_init(self):
+    async def async_init(self):
         build_ids = list()
         for tag_message in self._unprocessed_tag_messages:
-            yield self.add_tag_message(tag_message)
+            await self.add_tag_message(tag_message)
 
             if not config.skip_tag("rpms", tag_message.component):
                 build_ids.append(tag_message.get_build_id())
@@ -74,12 +78,12 @@ class RebuildBatch:
         (
             self._side_tag_base,
             self._dest_tag,
-        ) = yield kojihelpers.tags.get_tags_for_target(self.target)
+        ) = await kojihelpers.tags.get_tags_for_target(self.target)
 
         # Create the side-tag for this batch
         while True:
             try:
-                self.side_tag = yield kojihelpers.tags.prepare_side_tag(
+                self.side_tag = await kojihelpers.tags.prepare_side_tag(
                     self._side_tag_base,
                     build_ids,
                 )
@@ -103,10 +107,9 @@ class RebuildBatch:
 
         return self
 
-    @inlineCallbacks
-    def add_tag_message(self, message: TagMessage):
+    async def add_tag_message(self, message: TagMessage):
         # Add the tag_message object to this batch
-        yield message.assign_to_rebuildbatch(self._rebuild_batch_id)
+        await message.assign_to_rebuildbatch(self._rebuild_batch_id)
 
         # Overwrite any earlier instance of this component, since we only want
         # to rebuild the most recent one. This is necessary to avoid races
@@ -117,7 +120,7 @@ class RebuildBatch:
 
             # Remove this entry from the database so it doesn't get
             # re-loaded in the future
-            yield drop_message.drop()
+            await drop_message.drop()
 
         self.tag_messages[message.component] = message
 
@@ -138,8 +141,7 @@ class RebuildBatch:
 
         return srpm_field.split("/")[-1].partition(".src.rpm")[0]
 
-    @inlineCallbacks
-    def run(self):
+    async def run(self):
         # Create a RebuildAttempt
         # The initial one contains the complete set of components from the tag_messages
 
@@ -162,15 +164,15 @@ class RebuildBatch:
                 # to regenerate, because that was already done when creating
                 # the side-tag in async_init()
                 try:
-                    yield kojihelpers.tags.wait_repo(self.side_tag)
+                    await kojihelpers.tags.wait_repo(self.side_tag)
                 except DeferredTimeoutError as e:
                     logger.warning(
                         f"Timed out awaiting side-tag {self.side_tag}, proceeding anyway."
                     )
             first = False
 
-            attempt = yield RebuildAttempt(scm_urls, self).async_init()
-            successes, failures = yield attempt.async_await()
+            attempt = await RebuildAttempt(scm_urls, self).async_init()
+            successes, failures = await attempt.async_await()
 
             # Store all successful builds for later tagging
             all_successes.update(successes)
@@ -199,8 +201,8 @@ class RebuildBatch:
                 for url in retry_urls:
                     logger.debug(f"Retrying {url}")
 
-                attempt = yield RebuildAttempt(retry_urls, self).async_init()
-                successes, failures = yield attempt.async_await()
+                attempt = await RebuildAttempt(retry_urls, self).async_init()
+                successes, failures = await attempt.async_await()
                 all_successes.update(successes)
 
                 num_failures = len(failures)
@@ -240,7 +242,7 @@ class RebuildBatch:
             for nvr in build_nvrs:
                 logger.info(f"Tagging {nvr} into {self._dest_tag}")
 
-            yield kojihelpers.tags.tag_builds(self._dest_tag, build_nvrs)
+            await kojihelpers.tags.tag_builds(self._dest_tag, build_nvrs)
 
         logger.info(f"Removing side-tag {self.side_tag}")
-        yield kojihelpers.tags.remove_side_tag(self.side_tag)
+        await kojihelpers.tags.remove_side_tag(self.side_tag)

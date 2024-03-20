@@ -25,7 +25,7 @@ from .connection import get_buildsys
 from .. import config
 from .. import listener
 from twisted.internet import reactor
-from twisted.internet.defer import DeferredList, inlineCallbacks
+from twisted.internet.defer import DeferredList
 from twisted.internet.threads import deferToThread
 
 logger = logging.getLogger(__name__)
@@ -35,8 +35,7 @@ logger = logging.getLogger(__name__)
 KOJI_BACKGROUND_PRIORITY = 5
 
 
-@inlineCallbacks
-def get_scmurl(build_id):
+async def get_scmurl(build_id):
     """Get the SCMURL that the build was created from
 
     :param build_id: The ID of the build (likely retrieved from a tagging message)
@@ -45,7 +44,7 @@ def get_scmurl(build_id):
 
     logger.debug(f"Retrieving SCM URL for {build_id}")
     try:
-        buildinfo = yield get_buildinfo("source", build_id)
+        buildinfo = await get_buildinfo("source", build_id)
     except Exception as e:
         logger.critical("Unexpected error retrieving SCM URL", exc_info=True)
         reactor.stop()
@@ -55,8 +54,7 @@ def get_scmurl(build_id):
     return buildinfo["source"]
 
 
-@inlineCallbacks
-def get_buildinfo(which_bsys, build_id, **kwargs):
+async def get_buildinfo(which_bsys, build_id, **kwargs):
     """
     Get all information about a particular build
 
@@ -66,7 +64,7 @@ def get_buildinfo(which_bsys, build_id, **kwargs):
     bsys = get_buildsys(which_bsys)
 
     try:
-        buildinfo = yield deferToThread(bsys.getBuild, build_id, **kwargs)
+        buildinfo = await deferToThread(bsys.getBuild, build_id, **kwargs)
     except koji.GenericError as e:
         logger.exception(f"Could not retrieve information for build {build_id}")
         raise InfoUnavailableError(
@@ -76,12 +74,11 @@ def get_buildinfo(which_bsys, build_id, **kwargs):
     return buildinfo
 
 
-@inlineCallbacks
-def get_taskinfo(which_bsys, task_id, **kwargs):
+async def get_taskinfo(which_bsys, task_id, **kwargs):
     bsys = get_buildsys(which_bsys)
 
     try:
-        taskinfo = yield deferToThread(bsys.getTaskInfo, task_id, **kwargs)
+        taskinfo = await deferToThread(bsys.getTaskInfo, task_id, **kwargs)
     except koji.GenericError as e:
         logger.exception(f"Could not retrieve information for task {task_id}")
         raise InfoUnavailableError(
@@ -97,7 +94,7 @@ def get_taskinfo(which_bsys, task_id, **kwargs):
         return taskinfo
 
     try:
-        children = yield deferToThread(
+        children = await deferToThread(
             bsys.getTaskChildren, task_id, request=True, strict=True
         )
     except koji.GenericError as e:
@@ -118,7 +115,7 @@ def get_taskinfo(which_bsys, task_id, **kwargs):
         for child in children:
             if child["method"] == "buildSRPMFromSCM":
                 try:
-                    child["result"] = yield deferToThread(
+                    child["result"] = await deferToThread(
                         bsys.getTaskResult, child["id"]
                     )
                 except koji.GenericError as e:
@@ -135,20 +132,20 @@ def get_taskinfo(which_bsys, task_id, **kwargs):
     return taskinfo
 
 
-@inlineCallbacks
-def perform_builds(target, scm_urls, scratch=False):
-    task_index = yield start_builds(target, scm_urls, scratch)
-    results = yield wait_for_builds(task_index.values())
+async def perform_builds(target, scm_urls, scratch=False, fail_fast=False):
+    task_index = await start_builds(target, scm_urls, scratch, fail_fast)
+    results = await wait_for_builds(task_index.values())
     return results
 
 
-@inlineCallbacks
-def start_builds(target, scm_urls, scratch=False):
-    task_index = yield deferToThread(_start_builds_thread, target, scm_urls, scratch)
+async def start_builds(target, scm_urls, scratch=False, fail_fast=False):
+    task_index = await deferToThread(
+        _start_builds_thread, target, scm_urls, scratch, fail_fast
+    )
     return task_index
 
 
-def _start_builds_thread(target, scm_urls, scratch=False):
+def _start_builds_thread(target, scm_urls, scratch=False, fail_fast=False):
     bsys = get_buildsys("destination")
     build_vcalls = dict()
     try:
@@ -164,7 +161,10 @@ def _start_builds_thread(target, scm_urls, scratch=False):
                 build_vcalls[scmurl] = mc.build(
                     scmurl,
                     target,
-                    {"scratch": scratch},
+                    {
+                        "scratch": scratch,
+                        "fail_fast": fail_fast,
+                    },
                     priority=KOJI_BACKGROUND_PRIORITY,
                 )
     except Exception as e:
@@ -180,31 +180,28 @@ def _start_builds_thread(target, scm_urls, scratch=False):
     return task_index
 
 
-@inlineCallbacks
-def wait_for_build(task_id):
+async def wait_for_build(task_id):
     logger.debug(f"Waiting for {task_id}.")
 
     # Wait until this task is complete
-    yield listener.register_build_task_id(task_id)
+    await listener.register_build_task_id(task_id)
 
 
-@inlineCallbacks
-def wait_for_builds(task_ids):
+async def wait_for_builds(task_ids):
     deferreds = list()
 
     for task_id in task_ids:
         logger.debug(f"Waiting for {task_id} to complete.")
         deferreds.append(listener.register_build_task_id(task_id))
 
-    result = yield DeferredList(deferreds, consumeErrors=True)
+    result = await DeferredList(deferreds, consumeErrors=True)
     return result
 
 
-@inlineCallbacks
-def cancel_task(task_id):
+async def cancel_task(task_id):
     try:
-        bsys = yield deferToThread(get_buildsys, "destination")
-        yield deferToThread(bsys.cancelTask, task_id, recurse=True)
+        bsys = await deferToThread(get_buildsys, "destination")
+        await deferToThread(bsys.cancelTask, task_id, recurse=True)
     except Exception as e:
         # Cancellation is best-effort
         logger.critical(f"Could not cancel task {task_id}. Ignoring.")

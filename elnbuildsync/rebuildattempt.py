@@ -21,9 +21,6 @@ import ast
 import koji
 import logging
 
-from twisted.internet.defer import inlineCallbacks
-from twisted.internet.threads import deferToThread
-
 from . import kojihelpers
 from .rebuildtask import RebuildTask
 
@@ -44,10 +41,9 @@ class RebuildAttempt:
         # DB ID
         self._rebuild_attempt_id = 0
 
-    @inlineCallbacks
-    def async_init(self):
+    async def async_init(self):
         # Kick off the builds and get their task IDs
-        task_index = yield kojihelpers.builds.start_builds(
+        task_index = await kojihelpers.builds.start_builds(
             self._rebuild_batch.side_tag,
             self.scm_urls,
             scratch=self._rebuild_batch.scratch,
@@ -58,7 +54,7 @@ class RebuildAttempt:
 
         # Create the associated RebuildTask objects
         for task in tasks:
-            yield self.add_task(task)
+            await self.add_task(task)
 
         # TODO: get this from the DB
         self._rebuild_attempt_id = self._latest_attempt_id
@@ -66,26 +62,24 @@ class RebuildAttempt:
 
         return self
 
-    @inlineCallbacks
-    def add_task(self, task):
+    async def add_task(self, task):
         if task in self.tasks:
             raise ValueError("You may only register the same task_id once")
 
         try:
-            rtask = yield RebuildTask(task, self).async_init()
+            rtask = await RebuildTask(task, self).async_init()
         except Exception as e:
             logger.critical(f"Failed to create RebuildTask", exc_info=True)
             raise
 
         self.tasks[task] = rtask
 
-    @inlineCallbacks
-    def async_await(self):
+    async def async_await(self):
         successes = dict()
         failures = dict()
 
         task_ids = [task.koji_task_id for task in self.tasks.values()]
-        results = yield kojihelpers.builds.wait_for_builds(task_ids)
+        results = await kojihelpers.builds.wait_for_builds(task_ids)
         for success, value in results:
             if success:
                 successes[value["id"]] = value
@@ -99,7 +93,7 @@ class RebuildAttempt:
                 # },
 
                 # Store the results in the DB
-                yield self.tasks[value["id"]].finish(koji.TASK_STATES["CLOSED"])
+                await self.tasks[value["id"]].finish(koji.TASK_STATES["CLOSED"])
 
             else:
                 try:
@@ -111,7 +105,7 @@ class RebuildAttempt:
                         failures[err_obj["id"]] = err_obj
 
                         # Store the results in the DB
-                        yield self.tasks[err_obj["id"]].finish(
+                        await self.tasks[err_obj["id"]].finish(
                             koji.TASK_STATES["FAILED"]
                         )
                     except SyntaxError as e:
