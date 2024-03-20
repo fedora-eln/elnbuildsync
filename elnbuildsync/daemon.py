@@ -18,6 +18,11 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
+# Install the asyncio reactor as early as possible
+# The fedora_messaging imports may install the Twisted one otherwise
+from twisted.internet import asyncioreactor
+
+asyncioreactor.install()
 
 import click
 import fedora_messaging.api
