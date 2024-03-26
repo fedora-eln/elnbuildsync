@@ -22,7 +22,7 @@ import json
 import logging
 
 from twisted.internet import reactor
-from twisted.internet.task import deferLater
+from twisted.internet.defer import Deferred
 from twisted.web.error import Error as WebError
 from twisted.web.resource import Resource
 from twisted.web.server import Site, NOT_DONE_YET
@@ -157,10 +157,6 @@ class TriggerBuildResource(Resource):
             return self
         return Resource.getChild(self, name, request)
 
-    @staticmethod
-    def _simple_await():
-        pass
-
     def _done(self, data):
         self.request.finish()
 
@@ -171,14 +167,13 @@ class TriggerBuildResource(Resource):
     def render_POST(self, request):
         self.request = request
 
-        deferred = deferLater(reactor, 0, self._do_post)
+        deferred = Deferred.fromCoroutine(self._do_post())
         deferred.addCallback(self._done)
         deferred.addErrback(self._failed)
         return NOT_DONE_YET
 
     async def _do_post(self):
         global started
-        await self._simple_await()
 
         self.request.setHeader("Cache-Control", "no-cache")
         if not started:
@@ -192,7 +187,11 @@ class TriggerBuildResource(Resource):
 
         # Read in the content
         # TODO: This is insecure! Do something about this.
-        components = json.load(self.request.content)
+        try:
+            components = json.load(self.request.content)
+        except json.decoder.JSONDecodeError as e:
+            logger.exception(e)
+            raise
 
         await batching.rebuild_from_components(components)
 

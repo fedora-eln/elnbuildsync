@@ -109,8 +109,9 @@ async def _main(reactor, config_url=None, config_file=None) -> None:
     # Start listening for Fedora Messages
     fedora_messaging.api.twisted_consume(listener.message_handler)
 
-    logger.debug("Starting HTTP server")
+    logger.info("Starting HTTP server")
     reactor.listenTCP(8080, web.setup_web_resources())
+    logger.info("HTTP server ready")
 
     await config.terminator
 
