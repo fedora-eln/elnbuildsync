@@ -35,10 +35,12 @@ from twisted.internet.defer import Deferred
 
 from . import batching
 from . import cleanup
+from . import db_models
 from . import config
 from . import listener
 from . import status
 from . import web
+from .utils import as_deferred
 
 
 logger = logging.getLogger(__name__)
@@ -62,12 +64,13 @@ def log_filter(record):
 @click.option("--dry-run", is_flag=True, help="Simulate actions only")
 @click.option("--config-url", default=None)
 @click.option("--config-file", default=None)
+@click.option("--db-pw-file", type=click.File(mode="r"), default="/etc/ebs_db_pw")
 @click.option(
     "--untagging/--no-untagging",
     default=False,
     help="Untag all but the most recent builds in the destination target",
 )
-def main(log_level, dry_run, config_url, config_file, untagging):
+def main(log_level, dry_run, config_url, config_file, db_pw_file, untagging):
     logging.basicConfig(
         format="%(asctime)s : %(name)s : %(levelname)s : %(message)s",
         level=log_level,
@@ -81,20 +84,32 @@ def main(log_level, dry_run, config_url, config_file, untagging):
 
     logger.debug("Starting Twisted mainloop")
     return task.react(
-        lambda reactor: Deferred.fromCoroutine(_main(reactor, config_url, config_file))
+        lambda reactor: Deferred.fromCoroutine(
+            _main(reactor, db_pw_file, config_url, config_file)
+        )
     )
 
 
-async def _main(reactor, config_url=None, config_file=None) -> None:
+async def _main(reactor, db_pw_file, config_url=None, config_file=None) -> None:
     config.terminator = Deferred()
+
+    # Read in the database password
+    db_pw = db_pw_file.readline().rstrip()
 
     # Read in the config file
     try:
-        await config.load_config(config_git_url=config_url, config_file=config_file)
+        await config.load_config(
+            db_pw, config_git_url=config_url, config_file=config_file
+        )
     except Exception as e:
         logger.exception(e)
         logger.critical("Could not load configuration.")
         sys.exit(128)
+
+    # Set up the Database
+    logger.info("Initializing database")
+    engine = await as_deferred(db_models.init_db(config.db_url, echo=True))
+    logger.info("Database Initialized")
 
     # Schedule configuration updates
     updater = task.LoopingCall(config.update_config)

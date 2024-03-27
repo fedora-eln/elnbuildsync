@@ -21,6 +21,7 @@ import git
 import logging
 import os
 import re
+import sqlalchemy
 from txrequests import Session
 import tempfile
 import twisted.internet.utils
@@ -38,6 +39,9 @@ DEFAULT_DISTRO_VIEWS = ["eln"]
 
 # A special Deferred for terminating the program
 terminator = None
+
+# The URL for connecting to the database
+db_url = None
 
 # Configuration options
 config_timer = 15 * 60  # 15 minutes
@@ -257,7 +261,7 @@ async def get_distro_packages(
 # FIXME: This needs even more error checking, e.g.
 #         - check if blocks are actual dictionaries
 #         - check if certain values are what we expect
-async def load_config(config_git_url=None, config_file=None):
+async def load_config(db_pw=None, config_git_url=None, config_file=None):
     """Loads or updates the global configuration from the provided URL in
     the `link#branch` format.  If no branch is provided, assumes `master`.
 
@@ -269,6 +273,7 @@ async def load_config(config_git_url=None, config_file=None):
     global main
     global comps
     global scmurl
+    global db_url
 
     if not (config_git_url or config_file):
         raise ValueError("One of 'config_git_url' or 'config_file' must be specified")
@@ -428,6 +433,13 @@ async def load_config(config_git_url=None, config_file=None):
                         n["control"]["exclude"][cns].update(
                             cnf["control"]["exclude"][cns]
                         )
+
+            try:
+                n["control"]["db"] = cnf["control"]["db"]
+            except KeyError as e:
+                logger.exception(e)
+                raise ConfigError("Missing database configuration")
+
             for cns in ("rpms", "modules"):
                 if n["control"]["exclude"]["rpms"]:
                     logger.info(
@@ -562,6 +574,26 @@ async def load_config(config_git_url=None, config_file=None):
             logger.info("No components explicitly configured.")
     main = n
     comps = nc
+
+    # Configure the database credentials
+    if not db_url:
+        # Unlike other settings, the DB cannot be changed during a basic
+        # config file edit. To change DB settings, the process must be
+        # restarted.
+        try:
+            db_config = n["control"]["db"]
+            db_url = sqlalchemy.URL.create(
+                drivername=db_config["driver"],
+                host=db_config["host"],
+                port=db_config["port"],
+                database=db_config["name"],
+                username=db_config["user"],
+                password=db_pw,
+            )
+
+        except KeyError as e:
+            logger.exception(e)
+            raise ConfigError("Missing database configuration")
 
 
 def is_eligible(ns, comp):
