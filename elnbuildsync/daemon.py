@@ -44,6 +44,12 @@ from . import web
 logger = logging.getLogger(__name__)
 
 
+def log_filter(record):
+    if record.name.startswith("elnbuildsync") or record.name.startswith("sqlalchemy"):
+        return True
+    return False
+
+
 @click.command()
 @click.option(
     "--log-level",
@@ -67,7 +73,7 @@ def main(log_level, dry_run, config_url, config_file, untagging):
         level=log_level,
     )
     for handler in logging.root.handlers:
-        handler.addFilter(logging.Filter("elnbuildsync"))
+        handler.addFilter(log_filter)
     logger.debug("Debug logging enabled")
 
     config.dry_run = dry_run
