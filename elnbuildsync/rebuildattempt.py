@@ -22,6 +22,8 @@ import koji
 import logging
 
 from . import kojihelpers
+from . import db_models
+from .utils import as_deferred
 from .rebuildtask import RebuildTask
 
 
@@ -29,38 +31,46 @@ logger = logging.getLogger(__name__)
 
 
 class RebuildAttempt:
-    # Temporary internal class variable to store the latest attempt ID
-    # Remove this once we are getting this from the DB
-    _latest_attempt_id = 0
-
     def __init__(self, scm_urls, slice):
         self.tasks = dict()
         self.scm_urls = scm_urls
-        self._slice = slice
+        self.slice = slice
 
-        # DB ID
-        self._rebuild_attempt_id = 0
+        # DB Object
+        self._db_obj = None
 
     async def async_init(self):
         # Kick off the builds and get their task IDs
         task_index = await kojihelpers.builds.start_builds(
-            self._slice._rebuild_batch.side_tag,
+            self.slice.rebuild_batch.side_tag,
             self.scm_urls,
-            scratch=self._slice._rebuild_batch.scratch,
+            scratch=self.slice.rebuild_batch.scratch,
         )
         tasks = task_index.values()
 
-        # TODO: Create the RebuildAttempt in the database here
+        # Create the RebuildAttempt in the database
+        await as_deferred(self._async_db_init())
 
         # Create the associated RebuildTask objects
         for task in tasks:
             await self.add_task(task)
 
-        # TODO: get this from the DB
-        self._rebuild_attempt_id = self._latest_attempt_id
-        self._latest_attempt_id += 1
-
         return self
+
+    async def _async_db_init(self):
+        """
+        This function returns a coroutine and must be wrapped by
+        `as_deferred()` to be used in a Twisted async function.
+        """
+        # Create the object in the database
+        async with db_models.async_session() as session:
+            db_attempt = db_models.DBRebuildAttempt(
+                slice=self.slice._db_obj, completed=False
+            )
+            session.add(db_attempt)
+            await session.commit()
+            logger.debug(f"RebuildAttempt DB ID: {db_attempt.id}")
+            self._db_obj = db_attempt
 
     async def add_task(self, task):
         if task in self.tasks:
@@ -116,4 +126,18 @@ class RebuildAttempt:
                     logger.exception(e)
                     raise
 
+        await as_deferred(self._async_db_finish())
+
         return (successes, failures)
+
+    async def _async_db_finish(self):
+        """
+        This function returns a coroutine and must be wrapped by
+        `as_deferred()` to be used in a Twisted async function.
+        """
+        # Save this to the database here
+        async with db_models.async_session() as session:
+            self._db_obj.completed = True
+            session.add(self._db_obj)
+            await session.commit()
+            logger.debug(f"Rebuild Attempt {self._db_obj.id}: COMPLETE")
