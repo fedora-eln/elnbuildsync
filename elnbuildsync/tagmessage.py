@@ -19,8 +19,11 @@
 
 import logging
 
-from fedora_messaging.message import Message
+from fedora_messaging.message import Message as FedoraMessage
 from twisted.internet.threads import deferToThread
+
+from elnbuildsync import db_models
+from elnbuildsync.utils import as_deferred
 
 from .kojihelpers.builds import get_scmurl
 
@@ -32,7 +35,7 @@ class TagMessage:
     # Tag JSON samples:
     # https://apps.fedoraproject.org/datagrepper/v2/search?topic=org.fedoraproject.prod.buildsys.tag
 
-    def __init__(self, tag_message: Message) -> None:
+    def __init__(self, tag_message: FedoraMessage) -> None:
         """
         Do not call TagMessage() alone. Instantiate via
         `await TagMessage(msg, batch_id).async_init()` instead. This ensures
@@ -42,9 +45,8 @@ class TagMessage:
         self.scmurl = None
         self._message = tag_message
 
-        # Database IDs
-        self._tag_message_id = 0
-        self._rebuild_batch_id = 0
+        # Database object
+        self._db_obj = None
 
     async def async_init(self):
         try:
@@ -56,26 +58,35 @@ class TagMessage:
 
         logger.debug(f"Got {self.scmurl}")
 
-        # TODO: Create the TagMessage record in the database here
+        # Create the TagMessage record in the database here
+        await as_deferred(self._async_db_init())
+
         return self
 
-    async def assign_to_rebuildbatch(self, rebuild_batch_id: int) -> None:
-        self._rebuild_batch_id = rebuild_batch_id
-
-        # TODO: Update DB entry with batch ID
-        # This is a placeholder to ensure we return a Deferred
-        await deferToThread(TagMessage._simple_await)
+    async def _async_db_init(self):
+        """
+        This function returns a coroutine and must be wrapped by
+        `as_deferred()` to be used in a Twisted async function.
+        """
+        async with db_models.async_session() as session:
+            db_tag_msg = db_models.DBTagMessage(
+                component=self.component,
+                scmurl=self.scmurl,
+                raw=str(self._message),
+            )
+            session.add(db_tag_msg)
+            await session.commit()
+            logger.debug(f"TagMessage DB ID: {db_tag_msg.id}")
+            self._db_obj = db_tag_msg
 
     async def drop(self):
-        # Remove this entry from the database. It will not be processed.
-
-        # TODO: actually remove it from the DB
-        # This is a placeholder to ensure we return a Deferred
-        await deferToThread(TagMessage._simple_await)
-
-    @staticmethod
-    def _simple_await():
-        pass
+        """
+        This function returns a coroutine and must be wrapped by
+        `as_deferred()` to be used in a Twisted async function.
+        """
+        async with db_models.async_session() as session:
+            session.delete(self._db_obj)
+            await session.commit()
 
     def get_build_id(self):
         return self._message.body["build_id"]
