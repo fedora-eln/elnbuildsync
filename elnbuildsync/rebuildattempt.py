@@ -33,10 +33,10 @@ class RebuildAttempt:
     # Remove this once we are getting this from the DB
     _latest_attempt_id = 0
 
-    def __init__(self, scm_urls, rebuild_batch):
+    def __init__(self, scm_urls, slice):
         self.tasks = dict()
         self.scm_urls = scm_urls
-        self._rebuild_batch = rebuild_batch
+        self._slice = slice
 
         # DB ID
         self._rebuild_attempt_id = 0
@@ -44,9 +44,9 @@ class RebuildAttempt:
     async def async_init(self):
         # Kick off the builds and get their task IDs
         task_index = await kojihelpers.builds.start_builds(
-            self._rebuild_batch.side_tag,
+            self._slice._rebuild_batch.side_tag,
             self.scm_urls,
-            scratch=self._rebuild_batch.scratch,
+            scratch=self._slice._rebuild_batch.scratch,
         )
         tasks = task_index.values()
 
