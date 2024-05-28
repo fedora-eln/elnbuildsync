@@ -24,6 +24,8 @@ from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 
 from . import config
 from . import kojihelpers
+from . import db_models
+from .utils import as_deferred
 from .rebuildattempt import RebuildAttempt
 
 logger = logging.getLogger(__name__)
@@ -54,7 +56,7 @@ class RebuildBatchSlice:
     an ordering value. Triggers one or more RebuildAttempts.
     """
 
-    def __init__(self, ordering, scm_urls, rebuild_batch):
+    def __init__(self, ordering, tag_messages, rebuild_batch):
         """
         Never call this function on its own. Invoke via
         ```
@@ -63,7 +65,7 @@ class RebuildBatchSlice:
         """
 
         self.ordering = ordering
-        self.scm_urls = scm_urls
+        self.tag_messages = tag_messages
         self.rebuild_batch = rebuild_batch
         self.status = RebuildBatchSliceStatus.INITIALIZING
 
@@ -71,18 +73,46 @@ class RebuildBatchSlice:
         self._db_obj = None
 
     async def async_init(self):
-        # TODO: Create database entry and mark it as "queued"
-        # self._rebuild_batch_slice_id = ID from database
-
-        self.status = RebuildBatchSliceStatus.QUEUED
+        # Create database entry and mark it as "queued"
+        await as_deferred(self._async_db_init())
 
         return self
+
+    async def _async_db_init(self):
+        """
+        This function returns a coroutine and must be wrapped by
+        `as_deferred()` to be used in a Twisted async function.
+        """
+        # Create the object in the database
+        async with db_models.async_session() as session:
+            self.status = RebuildBatchSliceStatus.QUEUED
+            msg_objs = [msg._db_obj for msg in self.tag_messages]
+            db_slice = db_models.DBRebuildBatchSlice(
+                ordering=self.ordering,
+                state=self.status,
+                tag_messages=msg_objs,
+                batch=self.rebuild_batch._db_obj,
+            )
+            session.add(db_slice)
+            await session.commit()
+            self._db_obj = db_slice
+
+    async def _update_status(self, status):
+        """
+        This function returns a coroutine and must be wrapped by
+        `as_deferred()` to be used in a Twisted async function.
+        """
+        async with db_models.async_session() as session:
+            self.status = status
+            self._db_obj.state = status
+            session.add(self._db_obj)
+            await session.commit()
 
     async def run(self, skip_waitrepo=False):
         logger.debug(f"Processing components at ordering {self.ordering}.")
 
-        # TODO: Update database state to be "running"
-        self.status = RebuildBatchSliceStatus.RUNNING
+        # Update database state to be "running"
+        await as_deferred(self._update_status(RebuildBatchSliceStatus.RUNNING))
 
         if skip_waitrepo is False:
             try:
@@ -94,8 +124,9 @@ class RebuildBatchSlice:
 
         # Set up the RebuildAttempt
         all_successes = dict()
+        scm_urls = [msg.scmurl for msg in self.tag_messages]
         attempt = attempt = await RebuildAttempt(
-            self.scm_urls, self.rebuild_batch
+            scm_urls=scm_urls, slice=self
         ).async_init()
 
         successes, failures = await attempt.async_await()
@@ -152,7 +183,7 @@ class RebuildBatchSlice:
                     # If something goes wrong here, just log that the task failed.
                     logger.warning(f"FAILED: {task_id}")
 
-        # TODO: Update database state to "finished"
-        self.status = RebuildBatchSliceStatus.FINISHED
+        # Update database state to "finished"
+        await as_deferred(self._update_status(RebuildBatchSliceStatus.FINISHED))
 
         return all_successes
