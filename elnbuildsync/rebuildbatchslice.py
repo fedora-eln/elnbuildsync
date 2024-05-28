@@ -19,6 +19,7 @@
 
 import logging
 
+from enum import IntEnum
 from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 
 from . import config
@@ -26,6 +27,25 @@ from . import kojihelpers
 from .rebuildattempt import RebuildAttempt
 
 logger = logging.getLogger(__name__)
+
+
+class RebuildBatchSliceStatus(IntEnum):
+    # __init__() has been called on this slice, but it's not in the DB yet
+    INITIALIZING = 0
+
+    # The slice has been fully initialized and recorded in the DB, but has not
+    # yet started running.
+    QUEUED = 1
+
+    # The slice has begun running
+    # Note: this state may be inaccurate; it is possible that the slice has
+    # completed or otherwise terminated and we haven't yet detected that.
+    # This is particularly likely when loading from the database on a process
+    # restart.
+    RUNNING = 2
+
+    # The slice has terminated and the results are available.
+    FINISHED = 3
 
 
 class RebuildBatchSlice:
@@ -45,6 +65,7 @@ class RebuildBatchSlice:
         self.ordering = ordering
         self.scm_urls = scm_urls
         self.rebuild_batch = rebuild_batch
+        self.status = RebuildBatchSliceStatus.INITIALIZING
 
         # Database object
         self._db_obj = None
@@ -53,12 +74,15 @@ class RebuildBatchSlice:
         # TODO: Create database entry and mark it as "queued"
         # self._rebuild_batch_slice_id = ID from database
 
+        self.status = RebuildBatchSliceStatus.QUEUED
+
         return self
 
     async def run(self, skip_waitrepo=False):
         logger.debug(f"Processing components at ordering {self.ordering}.")
 
         # TODO: Update database state to be "running"
+        self.status = RebuildBatchSliceStatus.RUNNING
 
         if skip_waitrepo is False:
             try:
@@ -129,4 +153,6 @@ class RebuildBatchSlice:
                     logger.warning(f"FAILED: {task_id}")
 
         # TODO: Update database state to "finished"
+        self.status = RebuildBatchSliceStatus.FINISHED
+
         return all_successes
