@@ -24,6 +24,7 @@ from collections import defaultdict
 from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 
 from .rebuildattempt import RebuildAttempt
+from .rebuildbatchslice import RebuildBatchSlice
 from .tagmessage import TagMessage
 
 from . import config
@@ -56,6 +57,7 @@ class RebuildBatch:
         self.scratch = scratch
         self.fail_fast = fail_fast
         self.side_tag = None
+        self.slices = ()
         self._dest_tag = None
         self._side_tag_base = None
         self._unprocessed_tag_messages = tag_messages
@@ -155,70 +157,17 @@ class RebuildBatch:
 
         all_successes = dict()
 
-        first = True
+        # Create RebuildBatchSlices for each ordering value
         for order, scm_urls in sorted(all_scm_urls.items()):
-            logger.debug(f"Processing components at ordering {order}.")
+            slice = await RebuildBatchSlice(order, scm_urls, self).async_init()
+            self.slices.append(slice)
 
-            if not first:
-                # On the first ordering, we can skip waiting for the repo
-                # to regenerate, because that was already done when creating
-                # the side-tag in async_init()
-                try:
-                    await kojihelpers.tags.wait_repo(self.side_tag)
-                except DeferredTimeoutError as e:
-                    logger.warning(
-                        f"Timed out awaiting side-tag {self.side_tag}, proceeding anyway."
-                    )
+        # Process each of the slices
+        first = True
+        for slice in self.slices:
+            successes = await slice.run(skip_waitrepo=first)
             first = False
-
-            attempt = await RebuildAttempt(scm_urls, self).async_init()
-            successes, failures = await attempt.async_await()
-
-            # Store all successful builds for later tagging
             all_successes.update(successes)
-
-            for success in successes.values():
-                logger.info(f"Rebuild of {success['info']['request'][0]} succeeded")
-
-            # TODO: Config option to enable/disable retry loop
-
-            # Arbitrarily pick ten million, since we will never have that many
-            # packages, let alone failures.
-            # Note: if the batch consists of a single component, it will still be
-            # retried here if it fails. This is intentional and should reduce the
-            # number of flaky-test failures.
-            prev_failures = 10000000
-            num_failures = len(failures)
-            while num_failures > 0 and num_failures < prev_failures:
-                prev_failures = num_failures
-
-                logger.info(
-                    f"Retrying {num_failures} tasks that failed for {self.side_tag}"
-                )
-                retry_urls = [
-                    failure["info"]["request"][0] for failure in failures.values()
-                ]
-                for url in retry_urls:
-                    logger.debug(f"Retrying {url}")
-
-                attempt = await RebuildAttempt(retry_urls, self).async_init()
-                successes, failures = await attempt.async_await()
-                all_successes.update(successes)
-
-                num_failures = len(failures)
-
-            if num_failures:
-                logger.warning(f"{num_failures} tasks failed for {self.side_tag}")
-                for task_id, err_msg in failures.items():
-                    try:
-                        try:
-                            request = err_msg["info"]["request"][0]
-                        except ValueError as e:
-                            request = err_msg["request"][0]
-                        logger.warning(f"FAILED: {task_id}: {request}")
-                    except Exception as e:
-                        # If something goes wrong here, just log that the task failed.
-                        logger.warning(f"FAILED: {task_id}")
 
         # Get the list of NVRs that we will need to tag.
         build_nvrs = list()

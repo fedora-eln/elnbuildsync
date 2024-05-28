@@ -127,10 +127,13 @@ configuration:
         - ^qemu$
     ordering:
       # Default ordering value is 1000 if not listed here
+      # fedora-repos is used for testing purposes and should not be included
+      # in a real config.
       rpms:
         ^ocaml$: 0
         ^llvm[0-9\.]*$: 0
         ^clang[0-9\.]*$: 1
+        ^fedora-repos.*$: 0
   defaults:
     rpms:
       source: "%(component)s.git#rawhide"
