@@ -179,7 +179,7 @@ class RebuildBatch:
                 logger.critical(f"Couldn't get the NVR from {task_id}")
                 logger.critical(msg_body)
                 # Nothing we can do about this, so just give up.
-                pass
+                continue
             build_nvrs.append(nvr)
 
         # Only try to tag builds in if they're non-scratch builds.
