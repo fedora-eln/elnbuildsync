@@ -17,6 +17,7 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
+import json
 import logging
 
 from collections import defaultdict
@@ -29,6 +30,8 @@ from .tagmessage import TagMessage
 
 from . import config
 from . import kojihelpers
+from . import db_models
+from .utils import as_deferred
 
 
 logger = logging.getLogger(__name__)
@@ -57,13 +60,13 @@ class RebuildBatch:
         self.scratch = scratch
         self.fail_fast = fail_fast
         self.side_tag = None
-        self.slices = ()
+        self.slices = list()
         self._dest_tag = None
         self._side_tag_base = None
         self._unprocessed_tag_messages = tag_messages
 
-        # Database ID
-        self._rebuild_batch_id = 0
+        # Database object
+        self._db_obj = None
 
         logger.debug(
             f"Creating batch from {len(self._unprocessed_tag_messages)} messages"
@@ -101,18 +104,34 @@ class RebuildBatch:
             break
 
         # Create the RebuildBatch record in the database here.
-        # self._rebuild_batch_id = ID from database
-
-        # TODO: get this from the DB
-        self._rebuild_batch_id = self._latest_batch_id
-        self._latest_batch_id += 1
+        await as_deferred(self._async_db_init())
 
         return self
 
-    async def add_tag_message(self, message: TagMessage):
-        # Add the tag_message object to this batch
-        await message.assign_to_rebuildbatch(self._rebuild_batch_id)
+    async def _async_db_init(self):
+        """
+        This function returns a coroutine and must be wrapped by
+        `as_deferred()` to be used in a Twisted async function.
+        """
+        async with db_models.async_session() as session:
+            tag_msg_objs = [msg._db_obj for msg in self.tag_messages.values()]
+            koji_opts = {
+                "scratch": self.scratch,
+                "fail_fast": self.fail_fast,
+            }
+            db_batch = db_models.DBRebuildBatch(
+                side_tag=self.side_tag,
+                dest_tag=self._dest_tag,
+                tag_messages=tag_msg_objs,
+                options=json.dumps(koji_opts),
+                completed=False,
+            )
+            session.add(db_batch)
+            session.commit()
 
+        self._db_obj = db_batch
+
+    async def add_tag_message(self, message: TagMessage):
         # Overwrite any earlier instance of this component, since we only want
         # to rebuild the most recent one. This is necessary to avoid races
         # where the older build is tagged in after the newer one.
@@ -122,7 +141,7 @@ class RebuildBatch:
 
             # Remove this entry from the database so it doesn't get
             # re-loaded in the future
-            await drop_message.drop()
+            await as_deferred(drop_message.drop())
 
         self.tag_messages[message.component] = message
 
@@ -144,22 +163,17 @@ class RebuildBatch:
         return srpm_field.split("/")[-1].partition(".src.rpm")[0]
 
     async def run(self):
-        # Create a RebuildAttempt
-        # The initial one contains the complete set of components from the tag_messages
-
         # Get the SCM URLs and order them
-        all_scm_urls = defaultdict(list)
+        all_tag_messages = defaultdict(list)
         for tag_message in self.tag_messages.values():
             order = config.get_order("rpms", tag_message.component)
-
-            all_scm_urls[order].append(tag_message.scmurl)
-        logger.debug(f"SCM_URLs: {all_scm_urls}")
+            all_tag_messages[order].append(tag_message)
 
         all_successes = dict()
 
         # Create RebuildBatchSlices for each ordering value
-        for order, scm_urls in sorted(all_scm_urls.items()):
-            slice = await RebuildBatchSlice(order, scm_urls, self).async_init()
+        for order, tag_messages in sorted(all_tag_messages.items()):
+            slice = await RebuildBatchSlice(order, tag_messages, self).async_init()
             self.slices.append(slice)
 
         # Process each of the slices
@@ -195,3 +209,15 @@ class RebuildBatch:
 
         logger.info(f"Removing side-tag {self.side_tag}")
         await kojihelpers.tags.remove_side_tag(self.side_tag)
+
+        await as_deferred(self._finalize())
+
+    async def _finalize(self):
+        """
+        This function returns a coroutine and must be wrapped by
+        `as_deferred()` to be used in a Twisted async function.
+        """
+        async with db_models.async_session() as session:
+            self._db_obj.completed = True
+            session.add(self._db_obj)
+            await session.commit()
