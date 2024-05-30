@@ -31,7 +31,7 @@ from .tagmessage import TagMessage
 from . import config
 from . import kojihelpers
 from . import db_models
-from .utils import as_deferred
+from .decorators import as_deferred
 
 
 logger = logging.getLogger(__name__)
@@ -104,15 +104,12 @@ class RebuildBatch:
             break
 
         # Create the RebuildBatch record in the database here.
-        await as_deferred(self._async_db_init())
+        await self._async_db_init()
 
         return self
 
+    @as_deferred
     async def _async_db_init(self):
-        """
-        This function returns a coroutine and must be wrapped by
-        `as_deferred()` to be used in a Twisted async function.
-        """
         async with db_models.async_session() as session:
             tag_msg_objs = [msg._db_obj for msg in self.tag_messages.values()]
             koji_opts = {
@@ -141,7 +138,7 @@ class RebuildBatch:
 
             # Remove this entry from the database so it doesn't get
             # re-loaded in the future
-            await as_deferred(drop_message.drop())
+            await drop_message.drop()
 
         self.tag_messages[message.component] = message
 
@@ -210,13 +207,10 @@ class RebuildBatch:
         logger.info(f"Removing side-tag {self.side_tag}")
         await kojihelpers.tags.remove_side_tag(self.side_tag)
 
-        await as_deferred(self._finalize())
+        await self._finalize()
 
+    @as_deferred
     async def _finalize(self):
-        """
-        This function returns a coroutine and must be wrapped by
-        `as_deferred()` to be used in a Twisted async function.
-        """
         async with db_models.async_session() as session:
             self._db_obj.completed = True
             session.add(self._db_obj)

@@ -23,7 +23,7 @@ import logging
 
 from . import kojihelpers
 from . import db_models
-from .utils import as_deferred
+from .decorators import as_deferred
 from .rebuildtask import RebuildTask
 
 
@@ -49,7 +49,7 @@ class RebuildAttempt:
         tasks = task_index.values()
 
         # Create the RebuildAttempt in the database
-        await as_deferred(self._async_db_init())
+        await self._async_db_init()
 
         # Create the associated RebuildTask objects
         for task in tasks:
@@ -57,11 +57,8 @@ class RebuildAttempt:
 
         return self
 
+    @as_deferred
     async def _async_db_init(self):
-        """
-        This function returns a coroutine and must be wrapped by
-        `as_deferred()` to be used in a Twisted async function.
-        """
         # Create the object in the database
         async with db_models.async_session() as session:
             db_attempt = db_models.DBRebuildAttempt(
@@ -126,15 +123,10 @@ class RebuildAttempt:
                     logger.exception(e)
                     raise
 
-        await as_deferred(self._async_db_finish())
-
         return (successes, failures)
 
+    @as_deferred
     async def _async_db_finish(self):
-        """
-        This function returns a coroutine and must be wrapped by
-        `as_deferred()` to be used in a Twisted async function.
-        """
         # Save this to the database here
         async with db_models.async_session() as session:
             self._db_obj.completed = True

@@ -40,7 +40,6 @@ from . import config
 from . import listener
 from . import status
 from . import web
-from .utils import as_deferred
 
 
 logger = logging.getLogger(__name__)
@@ -108,7 +107,7 @@ async def _main(reactor, db_pw_file, config_url=None, config_file=None) -> None:
 
     # Set up the Database
     logger.info("Initializing database")
-    engine = await as_deferred(db_models.init_db(config.db_url, echo=True))
+    engine = await db_models.init_db(config.db_url, echo=True)
     logger.info("Database Initialized")
 
     # Schedule configuration updates

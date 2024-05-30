@@ -25,7 +25,7 @@ from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 from . import config
 from . import kojihelpers
 from . import db_models
-from .utils import as_deferred
+from .decorators import as_deferred
 from .rebuildattempt import RebuildAttempt
 
 logger = logging.getLogger(__name__)
@@ -74,15 +74,12 @@ class RebuildBatchSlice:
 
     async def async_init(self):
         # Create database entry and mark it as "queued"
-        await as_deferred(self._async_db_init())
+        await self._async_db_init()
 
         return self
 
+    @as_deferred
     async def _async_db_init(self):
-        """
-        This function returns a coroutine and must be wrapped by
-        `as_deferred()` to be used in a Twisted async function.
-        """
         # Create the object in the database
         async with db_models.async_session() as session:
             self.status = RebuildBatchSliceStatus.QUEUED
@@ -97,11 +94,8 @@ class RebuildBatchSlice:
             await session.commit()
             self._db_obj = db_slice
 
+    @as_deferred
     async def _update_status(self, status):
-        """
-        This function returns a coroutine and must be wrapped by
-        `as_deferred()` to be used in a Twisted async function.
-        """
         async with db_models.async_session() as session:
             self.status = status
             self._db_obj.state = status
@@ -112,7 +106,7 @@ class RebuildBatchSlice:
         logger.debug(f"Processing components at ordering {self.ordering}.")
 
         # Update database state to be "running"
-        await as_deferred(self._update_status(RebuildBatchSliceStatus.RUNNING))
+        await self._update_status(RebuildBatchSliceStatus.RUNNING)
 
         if skip_waitrepo is False:
             try:
@@ -184,6 +178,6 @@ class RebuildBatchSlice:
                     logger.warning(f"FAILED: {task_id}")
 
         # Update database state to "finished"
-        await as_deferred(self._update_status(RebuildBatchSliceStatus.FINISHED))
+        await self._update_status(RebuildBatchSliceStatus.FINISHED)
 
         return all_successes

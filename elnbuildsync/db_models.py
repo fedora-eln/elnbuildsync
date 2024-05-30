@@ -28,6 +28,9 @@ from typing import List
 from typing import Optional
 
 
+from .decorators import as_deferred
+
+
 async_session: async_sessionmaker[AsyncSession]
 
 
@@ -154,6 +157,7 @@ class DBRebuildTask(Base):
     attempt: Mapped["DBRebuildAttempt"] = relationship(back_populates="tasks")
 
 
+@as_deferred
 async def init_db(db_url, echo=False):
     global async_session
 

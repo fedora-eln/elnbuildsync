@@ -20,7 +20,7 @@
 import logging
 
 from . import db_models
-from .utils import as_deferred
+from .decorators import as_deferred
 
 logger = logging.getLogger(__name__)
 
@@ -40,15 +40,12 @@ class RebuildTask:
         logger.debug(f"Created RebuildTask for task_id {koji_task_id}")
 
     async def async_init(self):
-        await as_deferred(self._async_db_init())
+        await self._async_db_init()
 
         return self
 
+    @as_deferred
     async def _async_db_init(self):
-        """
-        This function returns a coroutine and must be wrapped by
-        `as_deferred()` to be used in a Twisted async function.
-        """
         # Create the object in the database
         async with db_models.async_session() as session:
             db_task = db_models.DBRebuildTask(
@@ -63,8 +60,9 @@ class RebuildTask:
     async def finish(self, state):
 
         self.result = state
-        await as_deferred(self._async_db_finish())
+        await self._async_db_finish()
 
+    @as_deferred
     async def _async_db_finish(self):
         # Save this to the database here
         async with db_models.async_session() as session:

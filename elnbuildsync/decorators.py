@@ -16,14 +16,19 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
-
 import asyncio
+import functools
 from twisted.internet.defer import Deferred
 
 
-def as_deferred(f):
+def as_deferred(func):
     """
-    Function to wrap a call to an asyncio coroutine or Future in a Deferred
-    object.
+    Decorator to convert functions that return an asyncio coroutine
+    (such as functions interacting with sqlalchemy) into ones that return
+    a Deferred.
     """
-    return Deferred.fromFuture(asyncio.ensure_future(f))
+    @functools.wraps(func)
+    async def wrapper_as_deferred(*args, **kwargs):
+        return await Deferred.fromFuture(asyncio.ensure_future(func(*args, **kwargs)))
+
+    return wrapper_as_deferred

@@ -23,7 +23,7 @@ from fedora_messaging.message import Message as FedoraMessage
 from twisted.internet.threads import deferToThread
 
 from elnbuildsync import db_models
-from elnbuildsync.utils import as_deferred
+from .decorators import as_deferred
 
 from .kojihelpers.builds import get_scmurl
 
@@ -59,15 +59,12 @@ class TagMessage:
         logger.debug(f"Got {self.scmurl}")
 
         # Create the TagMessage record in the database here
-        await as_deferred(self._async_db_init())
+        await self._async_db_init()
 
         return self
 
+    @as_deferred
     async def _async_db_init(self):
-        """
-        This function returns a coroutine and must be wrapped by
-        `as_deferred()` to be used in a Twisted async function.
-        """
         async with db_models.async_session() as session:
             db_tag_msg = db_models.DBTagMessage(
                 component=self.component,
@@ -79,11 +76,8 @@ class TagMessage:
             logger.debug(f"TagMessage DB ID: {db_tag_msg.id}")
             self._db_obj = db_tag_msg
 
+    @as_deferred
     async def drop(self):
-        """
-        This function returns a coroutine and must be wrapped by
-        `as_deferred()` to be used in a Twisted async function.
-        """
         async with db_models.async_session() as session:
             session.delete(self._db_obj)
             await session.commit()
