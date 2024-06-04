@@ -19,11 +19,8 @@
 
 import logging
 
-from . import config
-from . import kojihelpers
-
-from twisted.internet.threads import deferToThread
-
+from . import db_models
+from .decorators import as_deferred
 
 logger = logging.getLogger(__name__)
 
@@ -32,29 +29,44 @@ class RebuildTask:
     def __init__(self, koji_task_id, rebuild_attempt):
         self.result = None
         self.koji_task_id = koji_task_id
-        self._rebuild_attempt = rebuild_attempt
+        self.rebuild_attempt = rebuild_attempt
 
-        # DB IDs
-        self._rebuild_task_id = 0
+        # DB ID
+        # This may only be accessed within a
+        # async with db_models.async_session() as session:
+        # context manager.
+        self._db_obj = None
 
         logger.debug(f"Created RebuildTask for task_id {koji_task_id}")
 
     async def async_init(self):
-        # TODO remove this; it's just to ensure we have an async generator
-        # until the DB interaction is available.
-        await deferToThread(RebuildTask._simple_await)
+        await self._async_db_init()
 
-        # Save this to the database here
         return self
 
+    @as_deferred
+    async def _async_db_init(self):
+        # Create the object in the database
+        async with db_models.async_session() as session:
+            db_task = db_models.DBRebuildTask(
+                koji_task_id=self.koji_task_id,
+                attempt=self.rebuild_attempt._db_obj,
+            )
+            session.add(db_task)
+            await session.commit()
+            logger.debug(f"RebuildTask DB ID: {db_task.id}")
+            self._db_obj = db_task
+
     async def finish(self, state):
-        # TODO remove this; it's just to ensure we have an async generator
-        # until the DB interaction is available.
-        await deferToThread(RebuildTask._simple_await)
 
         self.result = state
-        # Save this to the database here
+        await self._async_db_finish()
 
-    @staticmethod
-    def _simple_await():
-        pass
+    @as_deferred
+    async def _async_db_finish(self):
+        # Save this to the database here
+        async with db_models.async_session() as session:
+            self._db_obj.koji_task_result = self.result
+            session.add(self._db_obj)
+            await session.commit()
+            logger.debug(f"Final task result: {self._db_obj.koji_task_result}")

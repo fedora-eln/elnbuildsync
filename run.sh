@@ -39,7 +39,10 @@ pip install -r requirements.txt
 
 export FEDORA_MESSAGING_CONF=/etc/fedora-messaging/config.toml
 
-python3 -c "from elnbuildsync import main; main()" --config-url $CONFIG_URL $EXTRA_ARGS
+python3 -c "from elnbuildsync import main; main()" \
+  --config-url $CONFIG_URL \
+  --db-pw-file /db_pw/ebs-db-pw \
+  $EXTRA_ARGS
 
 # Added for debug
 # echo "Sleep 10 hours. Debugging..."

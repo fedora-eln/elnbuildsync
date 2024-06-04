@@ -21,14 +21,60 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJ_DIR=$SCRIPT_DIR/..
 
+if [ -r /run/.containerenv ]; then
+  CONTAINER_ENGINE=/usr/bin/podman-remote
+else
+  CONTAINER_ENGINE=/usr/bin/podman
+fi
+
 cd $PROJ_DIR
 
+sudo dnf -y install postgresql
 pip install -r requirements.txt
 pip install --editable $PROJ_DIR
+
+function check_db_avail() {
+    psql --quiet \
+         --host localhost \
+         --port 5432 \
+         --username elnbuildsync \
+         --dbname elnbuildsync \
+         --list 2>&1 > /dev/null
+    db_ready=$?
+}
+
+function closedb() {
+    echo "Terminating non-persistent database"
+    ${CONTAINER_ENGINE} stop temp_postgres
+}
+
+# Check if there's already a database running
+check_db_avail > /dev/null 2>&1
+
+if [ $db_ready -ne 0 ]; then
+    # Start a non-persistent database for testing
+    echo "Starting up non-persistent database container"
+    ${CONTAINER_ENGINE} pull postgres:15
+    ${CONTAINER_ENGINE} run --publish 5432:5432 --rm --detach \
+        --volume ${SCRIPT_DIR}/ebs_db_pw:/run/secrets/ebs_db_pw:Z \
+        --name temp_postgres \
+        --env POSTGRES_PASSWORD_FILE=/run/secrets/ebs_db_pw \
+        --env POSTGRES_USER=elnbuildsync \
+        postgres:15
+    trap closedb EXIT
+
+    # Wait for the DB to start up
+    db_ready=-1
+    while [ $db_ready -ne 0 ]; do
+        sleep 0.1
+        check_db_avail > /dev/null 2>&1
+    done
+fi
 
 FEDORA_MESSAGING_CONF="$SCRIPT_DIR/fedora-messaging/fedora.toml" \
 ~/.local/bin/elnbuildsync \
     --log-level info \
     --config-file $SCRIPT_DIR/testconfig.yaml \
+    --db-pw-file $SCRIPT_DIR/ebs_db_pw \
     $@ \
     2>&1 | tee /tmp/elnbuildsync.log
