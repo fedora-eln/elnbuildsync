@@ -29,6 +29,7 @@ from twisted.web.server import Site, NOT_DONE_YET
 from twisted.web.util import Redirect
 
 from . import batching
+from . import config
 from . import status
 
 logger = logging.getLogger(__name__)
@@ -176,8 +177,9 @@ class TriggerBuildResource(Resource):
         global started
 
         self.request.setHeader("Cache-Control", "no-cache")
-        if not started:
+        if not started or config.is_paused():
             self.request.setResponseCode(503)
+            return
 
         content_type = self.request.getHeader("Content-Type")
         if not content_type or content_type != "application/json":
