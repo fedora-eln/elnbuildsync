@@ -199,6 +199,7 @@ async def wait_for_builds(task_ids):
 
 
 async def cancel_task(task_id):
+    logger.debug(f"Canceling task {task_id}")
     try:
         bsys = await deferToThread(get_buildsys, "destination")
         await deferToThread(bsys.cancelTask, task_id, recurse=True)

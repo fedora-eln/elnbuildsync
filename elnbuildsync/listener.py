@@ -237,17 +237,22 @@ def register_build_task_id(task_id, timeout=config.task_timeout):
     return state.active_builds[task_id]
 
 
-async def cancel_timed_out_task(failure, task_id):
+def cancel_timed_out_task(failure, task_id):
     # Reraise the original exception, catching TimeoutError if it happened
     try:
         failure.raiseException()
     except DeferredTimeoutError as e:
         pass
 
-    await kojihelpers.builds.cancel_task(task_id)
+    # If we got a timeout, the Koji task is still running, so we will need to
+    # cancel it. Do this asynchronously so we don't block on it. It's
+    # technically possible that the cancelation might fail, but there's
+    # nothing we can do to recover from that anyway.
+    reactor.callLater(0, _do_cancelation, task_id)
 
-    taskinfo = await kojihelpers.builds.get_taskinfo(
-        "destination", task_id, request=True
-    )
+    # Raise a BuildTimeoutError with the task_id
+    raise kojihelpers.errors.BuildTimeoutError({"id": task_id})
 
-    raise koji.BuildError(taskinfo)
+
+def _do_cancelation(task_id):
+    return Deferred.fromCoroutine(kojihelpers.builds.cancel_task(task_id))
