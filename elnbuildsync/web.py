@@ -195,7 +195,16 @@ class TriggerBuildResource(Resource):
             logger.exception(e)
             raise
 
-        await batching.rebuild_from_components(components)
+        self.request.write(b"Requesting builds of:\n")
+        for comp in sorted(components):
+            self.request.write(f"{comp}\n".encode())
+
+        reactor.callLater(0, _build_from_components, components)
+
+def _build_from_components(components):
+    # Wrap this call into a Deferred so we can fire-and-forget it in the
+    # mainloop
+    Deferred.fromCoroutine(batching.rebuild_from_components(components))
 
 
 class LogLevelResource(Resource):
