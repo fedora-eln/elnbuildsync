@@ -45,6 +45,7 @@ class RebuildAttempt:
             self.slice.rebuild_batch.side_tag,
             self.scm_urls,
             scratch=self.slice.rebuild_batch.scratch,
+            fail_fast=self.slice.rebuild_batch.fail_fast,
         )
         tasks = task_index.values()
 
