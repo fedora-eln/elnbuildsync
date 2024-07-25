@@ -61,6 +61,13 @@ def log_filter(record):
     show_default=True,
 )
 @click.option("--dry-run", is_flag=True, help="Simulate actions only")
+@click.option(
+    "--lull-time",
+    default=config.message_batch_timer,
+    show_default=True,
+    type=int,
+    help="How long (in seconds) to wait after the last trigger before starting the batch",
+)
 @click.option("--config-url", default=None)
 @click.option("--config-file", default=None)
 @click.option("--db-pw-file", type=click.File(mode="r"), default="/etc/ebs_db_pw")
@@ -69,7 +76,7 @@ def log_filter(record):
     default=False,
     help="Untag all but the most recent builds in the destination target",
 )
-def main(log_level, dry_run, config_url, config_file, db_pw_file, untagging):
+def main(log_level, dry_run, lull_time, config_url, config_file, db_pw_file, untagging):
     logging.basicConfig(
         format="%(asctime)s : %(name)s : %(levelname)s : %(message)s",
         level=log_level,
@@ -80,6 +87,7 @@ def main(log_level, dry_run, config_url, config_file, db_pw_file, untagging):
 
     config.dry_run = dry_run
     config.do_untagging = untagging
+    config.message_batch_timer = lull_time
 
     logger.debug("Starting Twisted mainloop")
     return task.react(
@@ -116,7 +124,7 @@ async def _main(reactor, db_pw_file, config_url=None, config_file=None) -> None:
 
     # Schedule batch checking
     batching.message_batch_processor = task.LoopingCall(batching.process_message_batch)
-    batching.message_batch_processor.start(batching.message_batch_timer, now=False)
+    batching.message_batch_processor.start(config.message_batch_timer, now=False)
 
     # Schedule periodic status page and run it once at startup
     config.status_processor = task.LoopingCall(status.create_status_page)

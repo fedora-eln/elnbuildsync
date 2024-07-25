@@ -34,7 +34,6 @@ from .rebuildbatch import RebuildBatch
 
 
 message_queue = Queue()
-message_batch_timer = 5
 message_batch_processor = None
 
 running = False

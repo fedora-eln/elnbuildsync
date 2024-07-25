@@ -49,6 +49,7 @@ cleanup_timer = 12 * 60 * 60  # 12 hours
 status_timer = 10 * 60  # 10 minutes
 task_check_timer = 5 * 60  # 5 minutes
 task_timeout = 24 * 60 * 60  # 24 hours
+message_batch_timer = 60  # 1 minute
 koji_batch = 500
 configuration = None
 config_ref = None

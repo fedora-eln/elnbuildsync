@@ -74,6 +74,7 @@ fi
 FEDORA_MESSAGING_CONF="$SCRIPT_DIR/fedora-messaging/fedora.toml" \
 ~/.local/bin/elnbuildsync \
     --log-level info \
+    --lull-time 5 \
     --config-file $SCRIPT_DIR/testconfig.yaml \
     --db-pw-file $SCRIPT_DIR/ebs_db_pw \
     $@ \
