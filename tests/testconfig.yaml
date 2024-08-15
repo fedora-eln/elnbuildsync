@@ -16,7 +16,7 @@ configuration:
     profile: koji
     mbs: https://mbs.fedoraproject.org
   trigger:
-    rpms: f40
+    rpms: rawhide
     modules: f40-modular
   build:
     prefix: git+https://src.fedoraproject.org
