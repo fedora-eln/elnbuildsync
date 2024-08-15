@@ -46,8 +46,12 @@ logger = logging.getLogger(__name__)
 
 
 def log_filter(record):
-    if record.name.startswith("elnbuildsync") or record.name.startswith("sqlalchemy"):
+    if record.name.startswith("elnbuildsync"):
         return True
+
+    if record.name.startswith("sqlalchemy") and config.is_debug():
+        return True
+
     return False
 
 
@@ -115,7 +119,7 @@ async def _main(reactor, db_pw_file, config_url=None, config_file=None) -> None:
 
     # Set up the Database
     logger.info("Initializing database")
-    engine = await db_models.init_db(config.db_url, echo=True)
+    engine = await db_models.init_db(config.db_url, echo=config.is_debug())
     logger.info("Database Initialized")
 
     # Schedule configuration updates

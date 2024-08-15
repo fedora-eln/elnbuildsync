@@ -100,6 +100,16 @@ def loglevel(val=None):
     return logger.getEffectiveLevel()
 
 
+def is_debug():
+    """
+    Determines if we are in debug logging mode.
+
+    This is useful for enabling/disabling third-party logging such as the
+    sqlalchemy logger.
+    """
+    return loglevel() <= logging.DEBUG
+
+
 def retries(val=None):
     """Gets or, optionally, sets the number of retries for various
     operational failures.  Typically used for handling dist-git requests.
