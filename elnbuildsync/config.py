@@ -194,14 +194,6 @@ async def update_config():
         )
         return
 
-    # If we're using the automatic package list (such as with Fedora ELN), we cannot
-    # assume that it remains unchanged, so we need to reload it each interval.
-    if ref == config_ref and not main["control"]["autopackagelist"]:
-        logger.debug(
-            f"Configuration not changed, skipping update.  Checking again in {config_timer} seconds."
-        )
-        return
-
     try:
         await load_config(config_git_url=scmurl)
         config_ref = ref
