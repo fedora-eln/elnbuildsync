@@ -18,9 +18,11 @@
 
 
 import git
+import json
 import logging
 import os
 import re
+import requests.exceptions
 import sqlalchemy
 from txrequests import Session
 import tempfile
@@ -251,6 +253,40 @@ async def get_distro_packages(
     return {"rpms": merged_packages}
 
 
+async def get_rawhide_tag():
+    """
+    Queries Bodhi for the current tag associated with Rawhide
+    """
+
+    # Retrieve the list of "pending" (aka development) releases
+    url = "https://bodhi.fedoraproject.org/releases?state=pending"
+    with Session() as session:
+        try:
+            r = await session.get(url, allow_redirects=True)
+            r.raise_for_status()
+            releases = json.loads(r.text)
+            logger.debug(releases)
+        except json.decoder.JSONDecodeError as e:
+            raise ConfigError("Could not parse JSON from Bodhi releases") from e
+
+        except requests.exceptions.HTTPError as e:
+            raise ConfigError("HTTP Error") from e
+
+    # Get the stable tag corresponding to the rawhide branch
+    stable_tag = None
+    for release in releases["releases"]:
+        # Get the stable tag associated with this release
+        if release["branch"] == "rawhide":
+            stable_tag = release["stable_tag"]
+            break
+
+    # Shouldn't ever happen, but...
+    if not stable_tag:
+        raise ConfigError("Unexpectedly received no valid Fedora rawhide release")
+
+    return stable_tag
+
+
 # FIXME: This needs even more error checking, e.g.
 #         - check if blocks are actual dictionaries
 #         - check if certain values are what we expect
@@ -362,6 +398,11 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
 
         else:
             raise ConfigError("trigger missing.")
+
+        # Handle auto-configuration of the trigger for Rawhide
+        if n["trigger"]["rpms"] == "rawhide":
+            n["trigger"]["rpms"] = await get_rawhide_tag()
+            logger.info(f"Detected rawhide tag {n['trigger']['rpms']}")
 
         if "build" in cnf:
             n["build"] = dict()
