@@ -124,7 +124,7 @@ class RebuildBatch:
                 completed=False,
             )
             session.add(db_batch)
-            session.commit()
+            await session.commit()
 
         self._db_obj = db_batch
 
