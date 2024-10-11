@@ -174,10 +174,8 @@ class RebuildBatch:
             self.slices.append(slice)
 
         # Process each of the slices
-        first = True
         for slice in self.slices:
-            successes = await slice.run(skip_waitrepo=first)
-            first = False
+            successes = await slice.run()
             all_successes.update(successes)
 
         # Get the list of NVRs that we will need to tag.
