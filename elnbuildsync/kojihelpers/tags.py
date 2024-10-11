@@ -51,34 +51,11 @@ async def prepare_side_tag(base_tag, initial_build_ids=list()):
     logger.info(f"Creating side tag from {base_tag}")
     side_tag_info = await deferToThread(downstream_koji.createSideTag, base_tag)
     side_tag_name = side_tag_info["name"]
-    initial_repo = await deferToThread(downstream_koji.getRepo, side_tag_name)
 
     logger.debug(f"Side {side_tag_name} created.")
 
     if initial_build_ids:
         await tag_builds(side_tag_name, initial_build_ids)
-
-    # Wait for koji to generate the buildroot repo
-    logger.info(f"Waiting for {side_tag_name} to generate.")
-    try:
-        await wait_repo(side_tag_name)
-    except DeferredTimeoutError as e:
-        logger.warning(f"Timed out awaiting side-tag {side_tag_name}")
-
-        # In case we've somehow just missed the notification, do a last check
-        # before abandoning the side tag.
-        repo = await deferToThread(downstream_koji.getRepo, side_tag_name)
-        if repo == initial_repo:
-            try:
-                await deferToThread(downstream_koji.removeSideTag, side_tag_name)
-            except Exception:
-                logger.warning(f"Unable to remove {side_tag_name}")
-
-            # Re-raise the timeout error to the caller
-            raise
-
-        # If we get here, the repo regenerated successfully, so proceed.
-        logger.warning("Despite timeout, repo has been updated. Proceeding.")
 
     return side_tag_name
 
@@ -107,56 +84,6 @@ def _untag_builds_thread(tag, build_ids):
         logger.info(f"Untagging {len(build_ids)} builds from {tag}")
         for build_id in build_ids:
             mc.untagBuild(tag, build_id, strict=False)
-
-
-async def wait_repo(tag):
-    """
-    Wait for a repo regeneration to begin and then to complete
-
-    Note: there is a possibility of a small race-condition where the repo
-    may begin regenerating slightly before this function starts listening
-    for it. In that case, it may be waiting until the next time the regen
-    begins. If the initial start is not important, use wait_repo_regen()
-    instead.
-    """
-    try:
-        await _wait_repo_init(tag)
-    except DeferredTimeoutError as e:
-        # If we've timed out waiting for the init, just wait for regen and
-        # hope for the best.
-        pass
-    await _wait_repo_regen(tag)
-
-    return tag
-
-
-async def wait_repo_regen(tag):
-    """
-    Wait for a repo to regenerate without first waiting for the regen to start.
-
-    This should be used whenever a repo is created for the first time.
-    """
-    await _wait_repo_regen(tag)
-
-    return tag
-
-
-def _wait_repo_init(tag):
-    deferred = Deferred()
-    deferred.addTimeout(config.waitrepo_init_timeout, reactor)
-    kojihelpers.awaiting_repo_init[tag].append(deferred)
-
-    logger.info(f"Waiting for {tag} to begin regenerating")
-    return deferred
-
-
-def _wait_repo_regen(tag):
-    deferred = Deferred()
-    deferred.addTimeout(config.waitrepo_timeout, reactor)
-    kojihelpers.awaited_repos[tag].append(deferred)
-
-    logger.info(f"Waiting for {tag} to finish regenerating")
-    return deferred
 
 
 async def get_tags_for_target(target):

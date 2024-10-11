@@ -102,19 +102,11 @@ class RebuildBatchSlice:
             session.add(self._db_obj)
             await session.commit()
 
-    async def run(self, skip_waitrepo=False):
+    async def run(self):
         logger.debug(f"Processing components at ordering {self.ordering}.")
 
         # Update database state to be "running"
         await self._update_status(RebuildBatchSliceStatus.RUNNING)
-
-        if skip_waitrepo is False:
-            try:
-                await kojihelpers.tags.wait_repo(self.rebuild_batch.side_tag)
-            except DeferredTimeoutError as e:
-                logger.warning(
-                    f"Timed out awaiting side-tag {self.rebuild_batch.side_tag}, proceeding anyway."
-                )
 
         # Set up the RebuildAttempt
         all_successes = dict()
