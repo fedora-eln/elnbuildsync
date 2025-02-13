@@ -79,7 +79,7 @@ class TagMessage:
     @as_deferred
     async def drop(self):
         async with db_models.async_session() as session:
-            session.delete(self._db_obj)
+            await session.delete(self._db_obj)
             await session.commit()
 
     def get_build_id(self):
