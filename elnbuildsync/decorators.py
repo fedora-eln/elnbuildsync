@@ -27,6 +27,7 @@ def as_deferred(func):
     (such as functions interacting with sqlalchemy) into ones that return
     a Deferred.
     """
+
     @functools.wraps(func)
     async def wrapper_as_deferred(*args, **kwargs):
         return await Deferred.fromFuture(asyncio.ensure_future(func(*args, **kwargs)))
