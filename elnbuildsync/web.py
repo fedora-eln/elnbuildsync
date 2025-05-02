@@ -201,6 +201,7 @@ class TriggerBuildResource(Resource):
 
         reactor.callLater(0, _build_from_components, components)
 
+
 def _build_from_components(components):
     # Wrap this call into a Deferred so we can fire-and-forget it in the
     # mainloop
