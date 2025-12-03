@@ -19,13 +19,10 @@
 
 import koji
 import logging
-import txredisapi as redis
-
 from . import batching
 from . import config
 
 from . import kojihelpers
-from .rebuild_data import RebuildData
 from .state import ELNBuildSyncState as state
 
 from fedora_messaging.exceptions import Nack, Drop
