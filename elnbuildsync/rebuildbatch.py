@@ -17,12 +17,21 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
+import backoff
 import json
 import logging
 
 from collections import defaultdict
+from typing import Generator
+from bodhi.client.bindings import BodhiClient, BodhiClientException
 
-from twisted.internet.defer import TimeoutError as DeferredTimeoutError
+from twisted.internet.defer import (
+    Deferred,
+    DeferredList,
+    TimeoutError as DeferredTimeoutError,
+    ensureDeferred,
+)
+from twisted.internet.threads import deferToThread
 
 from .rebuildattempt import RebuildAttempt
 from .rebuildbatchslice import RebuildBatchSlice
@@ -86,9 +95,26 @@ class RebuildBatch:
         ) = await kojihelpers.tags.get_tags_for_target(self.target)
 
         # Create the side-tag for this batch
+        self.side_tag = await self._create_and_populate_side_tag(build_ids)
+
+        # Create the RebuildBatch record in the database here.
+        await self._async_db_init()
+
+        return self
+
+    async def _create_and_populate_side_tag(self, build_ids: list[int]) -> str:
+        """
+        Creates a side-tag for this batch.
+
+        :param build_ids: The list of build_ids to tag into the side-tag.
+        :type build_ids: list[int]
+
+        :return: The name of the side-tag.
+        :rtype: str
+        """
         while True:
             try:
-                self.side_tag = await kojihelpers.tags.prepare_side_tag(
+                side_tag = await kojihelpers.tags.prepare_side_tag(
                     self._side_tag_base,
                     build_ids,
                 )
@@ -102,11 +128,7 @@ class RebuildBatch:
 
             # Side-tag is ready. Proceed.
             break
-
-        # Create the RebuildBatch record in the database here.
-        await self._async_db_init()
-
-        return self
+        return side_tag
 
     @as_deferred
     async def _async_db_init(self):
@@ -194,18 +216,87 @@ class RebuildBatch:
         # Only try to tag builds in if they're non-scratch builds.
         if self.scratch:
             for nvr in build_nvrs:
+                # This message is out of date now, since we are using Bodhi
+                # updates, but it's not exposed to users anyway.
                 logger.info(f"Not tagging scratch-build of {nvr} into {self._dest_tag}")
 
         else:
-            for nvr in build_nvrs:
-                logger.info(f"Tagging {nvr} into {self._dest_tag}")
+            await self._create_and_submit_bodhi_updates(build_nvrs)
 
-            await kojihelpers.tags.tag_builds(self._dest_tag, build_nvrs)
-
+        # Remove the side-tag where we performed the rebuilds.
+        # The update tag will be automatically removed when the Bodhi update
+        # makes it to stable.
         logger.info(f"Removing side-tag {self.side_tag}")
         await kojihelpers.tags.remove_side_tag(self.side_tag)
 
         await self._finalize()
+
+    async def _create_and_submit_bodhi_updates(self, build_nvrs: list[str]) -> None:
+        def _build_batch_generator(
+            build_nvrs: list[str],
+        ) -> Generator[list[str], None, None]:
+            batch_size = config.main["control"]["update_batch_size"]
+            if batch_size == 0:
+                yield build_nvrs
+                return
+
+            for i in range(0, len(build_nvrs), batch_size):
+                yield build_nvrs[i : i + batch_size]
+
+        async def _process_batch(batch_nvrs: list[str]) -> None:
+            if len(batch_nvrs) == 0:
+                return
+
+            update_tag = await self._create_and_populate_side_tag(batch_nvrs)
+
+            logger.info(f"Submitting Bodhi update for {update_tag}")
+            try:
+                await deferToThread(self._submit_bodhi_update, update_tag)
+            except Exception as e:
+                logger.exception(f"Failed to submit Bodhi update for {update_tag}")
+                raise
+            logger.debug(f"Submitted Bodhi update for {batch_nvrs}")
+
+        batches = [
+            ensureDeferred(_process_batch(batch_nvrs))
+            for batch_nvrs in _build_batch_generator(build_nvrs)
+        ]
+        await DeferredList(batches, consumeErrors=True)
+
+    @backoff.on_exception(backoff.expo, Exception, max_time=60)
+    def _submit_bodhi_update(self, update_tag: str) -> None:
+        try:
+            # Submitting a Bodhi update is infrequent-enough that it doesn't
+            # really make sense to try to cache the connection. Just
+            # establish a new connection for each update. It will keep the
+            # authentication token in a file so it doesn't need to perform
+            # a full OIDC authentication flow every time unless the token
+            # has expired.
+            bodhi = BodhiClient(oidc_storage_path="/tmp/bodhi_client.json")
+
+            # Authenticate with Bodhi. This will use Kerberos the first time
+            # and will store an authentication token in the oidc_storage_path
+            # to reuse for future updates.
+            bodhi.ensure_auth()
+
+            # Create a new Bodhi update from the side-tag.
+            # The "type" is set to "unspecified" because it has to be
+            # something and this matches what Bodhi does for automated
+            # Rawhide updates.
+            bodhi.save(
+                type="unspecified",
+                from_tag=update_tag,
+                notes="Automatic update for ELN rebuild batch",
+            )
+            logger.info(f"Submitted Bodhi update for {update_tag}")
+        except BodhiClientException as e:
+            logger.error(f"Failed to submit Bodhi update: {e}")
+            raise
+        except Exception as e:
+            logger.exception(f"Failed to submit Bodhi update: {e}")
+            raise
+
+        return
 
     @as_deferred
     async def _finalize(self):
