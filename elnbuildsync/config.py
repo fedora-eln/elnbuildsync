@@ -459,6 +459,17 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
                 else:
                     raise ConfigError("control.%s missing.", k)
 
+            # If update_batch_size is not set, set it to 0 (unlimited batch
+            # size)
+            n["control"]["update_batch_size"] = 0
+            if "update_batch_size" in cnf["control"]:
+                try:
+                    n["control"]["update_batch_size"] = int(
+                        cnf["control"]["update_batch_size"]
+                    )
+                except ValueError:
+                    raise ConfigError("control.update_batch_size must be an integer")
+
             n["control"]["autopackagelist"] = None
             if "autopackagelist" in cnf["control"]:
                 n["control"]["autopackagelist"] = cnf["control"]["autopackagelist"]
