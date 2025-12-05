@@ -20,9 +20,15 @@
 
 # Install the asyncio reactor as early as possible
 # The fedora_messaging imports may install the Twisted one otherwise
+import asyncio
 from twisted.internet import asyncioreactor
 
-asyncioreactor.install()
+try:
+    event_loop = asyncio.get_event_loop()
+except RuntimeError:
+    event_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(event_loop)
+asyncioreactor.install(event_loop)
 
 import click
 import fedora_messaging.api
