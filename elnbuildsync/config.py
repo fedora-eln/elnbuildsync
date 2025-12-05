@@ -237,7 +237,7 @@ async def get_distro_packages(
     for view in reversed(distro_view):
         for this_source in reversed(which_source):
             url = (
-                "{distro_url}" "/view-{this_source}-package-name-list--view-{view}.txt"
+                "{distro_url}/view-{this_source}-package-name-list--view-{view}.txt"
             ).format(
                 distro_url=distro_url,
                 this_source=this_source,

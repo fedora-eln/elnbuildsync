@@ -58,7 +58,6 @@ class RebuildTask:
             self._db_obj = db_task
 
     async def finish(self, state):
-
         self.result = state
         await self._async_db_finish()
 

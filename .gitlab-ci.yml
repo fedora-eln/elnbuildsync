@@ -11,8 +11,8 @@ stages:
 format-python:
   stage: format
   script:
-    - pip install black
-    - black --target-version py39 --verbose $CI_PROJECT_DIR
+    - pip install ruff
+    - ruff format --target-version py39 --verbose $CI_PROJECT_DIR
   artifacts:
     paths:
       - $CI_PROJECT_DIR/
