@@ -30,16 +30,19 @@ fi
 cd $PROJ_DIR
 
 sudo dnf -y install postgresql
+# htmlmin requires the cgi module which was removed from stdlib, but hasn't been updated to declare it
+pip install legacy-cgi
+pip install --no-build-isolation htmlmin
 pip install -r requirements.txt
 pip install --editable $PROJ_DIR
 
 function check_db_avail() {
-    psql --quiet \
-         --host localhost \
-         --port 5432 \
-         --username elnbuildsync \
-         --dbname elnbuildsync \
-         --list 2>&1 > /dev/null
+    PGPASSWORD=$(cat tests/ebs_db_pw) \
+    pg_isready --quiet \
+               --dbname elnbuildsync \
+               --username elnbuildsync \
+               --host localhost \
+               --port 5432
     db_ready=$?
 }
 
@@ -54,20 +57,28 @@ check_db_avail > /dev/null 2>&1
 if [ $db_ready -ne 0 ]; then
     # Start a non-persistent database for testing
     echo "Starting up non-persistent database container"
-    ${CONTAINER_ENGINE} pull postgres:15
+    ${CONTAINER_ENGINE} pull docker.io/postgres:18
+    echo ${CONTAINER_ENGINE} run --publish 5432:5432 --rm --detach \
+        --volume ${SCRIPT_DIR}/ebs_db_pw:/run/secrets/ebs_db_pw:Z \
+        --name temp_postgres \
+        --env POSTGRES_PASSWORD_FILE=/run/secrets/ebs_db_pw \
+        --env POSTGRES_USER=elnbuildsync \
+        docker.io/postgres:18
     ${CONTAINER_ENGINE} run --publish 5432:5432 --rm --detach \
         --volume ${SCRIPT_DIR}/ebs_db_pw:/run/secrets/ebs_db_pw:Z \
         --name temp_postgres \
         --env POSTGRES_PASSWORD_FILE=/run/secrets/ebs_db_pw \
         --env POSTGRES_USER=elnbuildsync \
-        postgres:15
+        docker.io/postgres:18
     trap closedb EXIT
+
+    echo Started database container, waiting for it to complete initialization
 
     # Wait for the DB to start up
     db_ready=-1
     while [ $db_ready -ne 0 ]; do
         sleep 0.1
-        check_db_avail > /dev/null 2>&1
+        check_db_avail
     done
 fi
 
