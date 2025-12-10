@@ -87,7 +87,7 @@ class RebuildAttempt:
         failures = dict()
 
         task_ids = [task.koji_task_id for task in self.tasks.values()]
-        results = await kojihelpers.builds.wait_for_builds(task_ids)
+        results = await kojihelpers.builds.wait_for_tasks(task_ids)
         for success, value in results:
             if success:
                 successes[value["id"]] = value
