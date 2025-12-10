@@ -185,15 +185,15 @@ async def wait_for_task(task_id):
     logger.debug(f"Waiting for {task_id}.")
 
     # Wait until this task is complete
-    await listener.register_build_task_id(task_id)
+    await listener.register_task_id(task_id)
 
 
-async def wait_for_tasks(task_ids):
+async def wait_for_tasks(task_ids, timeout=config.task_timeout):
     deferreds = list()
 
     for task_id in task_ids:
         logger.debug(f"Waiting for {task_id} to complete.")
-        deferreds.append(listener.register_build_task_id(task_id))
+        deferreds.append(listener.register_task_id(task_id, timeout))
 
     result = await DeferredList(deferreds, consumeErrors=True)
     return result

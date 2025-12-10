@@ -78,7 +78,7 @@ def message_handler(msg):
         elif msg.topic.endswith("buildsys.task.state.change"):
             # Are we looking for this build?
             task_id = msg.body["id"]
-            if task_id in state.active_builds:
+            if task_id in state.active_tasks:
                 if msg.body["new"] in ("FREE", "OPEN", "ASSIGNED"):
                     logger.debug(
                         f"Build {task_id} ({msg.body['info']['request']}) is {msg.body['new']}"
@@ -91,17 +91,17 @@ def message_handler(msg):
                         f"Build {task_id} ({msg.body['info']['request']}) completed successfully"
                     )
                     reactor.callLater(
-                        0, fire_callback, state.active_builds[task_id], msg.body
+                        0, fire_callback, state.active_tasks[task_id], msg.body
                     )
 
                 else:
                     # It either failed or was canceled. Call the errback
                     logger.info(f"Build {task_id} failed.")
                     reactor.callLater(
-                        0, fire_errback, state.active_builds[task_id], msg.body
+                        0, fire_errback, state.active_tasks[task_id], msg.body
                     )
 
-                del state.active_builds[task_id]
+                del state.active_tasks[task_id]
                 return
 
             else:
@@ -160,7 +160,7 @@ def message_handler(msg):
 
 async def check_tasks():
     remove_tasks = list()
-    for task in state.active_builds.keys():
+    for task in state.active_tasks.keys():
         try:
             taskinfo = await kojihelpers.builds.get_taskinfo(
                 "destination", task, request=True
@@ -171,7 +171,7 @@ async def check_tasks():
                 logger.info(
                     f"Build {task} ({taskinfo['request'][0]}) completed successfully"
                 )
-                reactor.callLater(0, fire_callback, state.active_builds[task], taskinfo)
+                reactor.callLater(0, fire_callback, state.active_tasks[task], taskinfo)
                 # Stop watching this task ID
                 remove_tasks.append(task)
 
@@ -186,7 +186,7 @@ async def check_tasks():
             else:
                 # It either failed or was canceled. Call the errback
                 logger.info(f"Build task {task} failed.")
-                reactor.callLater(0, fire_errback, state.active_builds[task], taskinfo)
+                reactor.callLater(0, fire_errback, state.active_tasks[task], taskinfo)
                 # Stop watching this task ID
                 remove_tasks.append(task)
         except Exception as e:
@@ -195,13 +195,13 @@ async def check_tasks():
             logger.exception(e)
 
             # Call cancel() on the Deferred before we remove it
-            reactor.callLater(0, state.active_builds[task].cancel)
+            reactor.callLater(0, state.active_tasks[task].cancel)
 
             # Stop tracking this task so we don't continue failing on it
             remove_tasks.append(task)
 
     for task in remove_tasks:
-        del state.active_builds[task]
+        del state.active_tasks[task]
 
 
 def fire_callback(deferred, *data):
@@ -222,16 +222,16 @@ def fire_errback(deferred, *data):
         pass
 
 
-def register_build_task_id(task_id, timeout=config.task_timeout):
+def register_task_id(task_id, timeout=config.task_timeout):
     logger.debug(f"Registering task {task_id}")
-    if task_id in state.active_builds:
+    if task_id in state.active_tasks:
         raise ValueError("Cannot register the same task ID twice")
 
-    state.active_builds[task_id] = Deferred()
-    state.active_builds[task_id].addTimeout(timeout, reactor)
-    state.active_builds[task_id].addErrback(cancel_timed_out_task, task_id)
+    state.active_tasks[task_id] = Deferred()
+    state.active_tasks[task_id].addTimeout(timeout, reactor)
+    state.active_tasks[task_id].addErrback(cancel_timed_out_task, task_id)
 
-    return state.active_builds[task_id]
+    return state.active_tasks[task_id]
 
 
 def cancel_timed_out_task(failure, task_id):
