@@ -55,22 +55,40 @@ async def prepare_side_tag(base_tag, initial_build_ids=list()):
     logger.debug(f"Side {side_tag_name} created.")
 
     if initial_build_ids:
-        await tag_builds(side_tag_name, initial_build_ids)
+        task_index = await tag_builds(side_tag_name, initial_build_ids)
+        await kojihelpers.builds.wait_for_tasks(
+            task_index.values(), timeout=config.tag_timeout
+        )
 
     return side_tag_name
 
 
 async def tag_builds(tag, builds):
-    await deferToThread(_tag_builds_thread, tag, builds)
+    task_index = await deferToThread(_tag_builds_thread, tag, builds)
+    logger.debug(f"Tagged {len(builds)} builds into {tag}")
+    return task_index
 
 
 def _tag_builds_thread(tag, build_ids):
     downstream_koji = get_buildsys("destination")
+    build_vcalls = dict()
 
-    with downstream_koji.multicall(batch=config.koji_batch) as mc:
-        logger.info(f"Tagging {len(build_ids)} builds into {tag}")
-        for build_id in build_ids:
-            mc.tagBuild(tag, build_id)
+    try:
+        with downstream_koji.multicall(batch=config.koji_batch) as mc:
+            logger.info(f"Tagging {len(build_ids)} builds into {tag}")
+            for build_id in build_ids:
+                build_vcalls[build_id] = mc.tagBuild(tag, build_id)
+    except Exception as e:
+        logger.exception(e)
+        raise
+
+    task_index = dict()
+    for build_id, vcall in build_vcalls.items():
+        task_id = vcall.result
+        task_index[build_id] = task_id
+        logger.info(f"Tagging build {build_id} into {tag} via task {task_id}")
+
+    return task_index
 
 
 async def untag_builds(tag, builds):
