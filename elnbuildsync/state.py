@@ -24,5 +24,5 @@ class ELNBuildSyncState:
     TODO: Make data persistent on disk
     """
 
-    # A dictionary to keep track of builds in-progress
-    active_builds = dict()
+    # A dictionary to keep track of tasks in-progress
+    active_tasks = dict()

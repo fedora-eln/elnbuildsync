@@ -134,7 +134,7 @@ async def get_taskinfo(which_bsys, task_id, **kwargs):
 
 async def perform_builds(target, scm_urls, scratch=False, fail_fast=False):
     task_index = await start_builds(target, scm_urls, scratch, fail_fast)
-    results = await wait_for_builds(task_index.values())
+    results = await wait_for_tasks(task_index.values())
     return results
 
 
@@ -181,19 +181,19 @@ def _start_builds_thread(target, scm_urls, scratch=False, fail_fast=False):
     return task_index
 
 
-async def wait_for_build(task_id):
+async def wait_for_task(task_id):
     logger.debug(f"Waiting for {task_id}.")
 
     # Wait until this task is complete
-    await listener.register_build_task_id(task_id)
+    await listener.register_task_id(task_id)
 
 
-async def wait_for_builds(task_ids):
+async def wait_for_tasks(task_ids, timeout=config.task_timeout):
     deferreds = list()
 
     for task_id in task_ids:
         logger.debug(f"Waiting for {task_id} to complete.")
-        deferreds.append(listener.register_build_task_id(task_id))
+        deferreds.append(listener.register_task_id(task_id, timeout))
 
     result = await DeferredList(deferreds, consumeErrors=True)
     return result

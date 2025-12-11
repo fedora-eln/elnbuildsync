@@ -51,6 +51,7 @@ cleanup_timer = 12 * 60 * 60  # 12 hours
 status_timer = 10 * 60  # 10 minutes
 task_check_timer = 5 * 60  # 5 minutes
 task_timeout = 24 * 60 * 60  # 24 hours
+tag_timeout = 1 * 60 * 60  # 1 hour
 message_batch_timer = 60  # 1 minute
 koji_batch = 500
 configuration = None
@@ -71,6 +72,7 @@ waitrepo_timeout = 20 * 60
 # Process state
 cleanup_processor = None
 status_processor = None
+tmpdir = None
 
 
 class ConfigError(Exception):
@@ -237,7 +239,7 @@ async def get_distro_packages(
     for view in reversed(distro_view):
         for this_source in reversed(which_source):
             url = (
-                "{distro_url}" "/view-{this_source}-package-name-list--view-{view}.txt"
+                "{distro_url}/view-{this_source}-package-name-list--view-{view}.txt"
             ).format(
                 distro_url=distro_url,
                 this_source=this_source,
@@ -457,6 +459,17 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
                     n["control"][k] = bool(cnf["control"][k])
                 else:
                     raise ConfigError("control.%s missing.", k)
+
+            # If update_batch_size is not set, set it to 0 (unlimited batch
+            # size)
+            n["control"]["update_batch_size"] = 0
+            if "update_batch_size" in cnf["control"]:
+                try:
+                    n["control"]["update_batch_size"] = int(
+                        cnf["control"]["update_batch_size"]
+                    )
+                except ValueError:
+                    raise ConfigError("control.update_batch_size must be an integer")
 
             n["control"]["autopackagelist"] = None
             if "autopackagelist" in cnf["control"]:
