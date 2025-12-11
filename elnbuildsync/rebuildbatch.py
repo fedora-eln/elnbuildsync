@@ -20,6 +20,7 @@
 import backoff
 import json
 import logging
+import os
 
 from collections import defaultdict
 from typing import Generator
@@ -272,7 +273,9 @@ class RebuildBatch:
             # authentication token in a file so it doesn't need to perform
             # a full OIDC authentication flow every time unless the token
             # has expired.
-            bodhi = BodhiClient(oidc_storage_path="/tmp/bodhi_client.json")
+            bodhi = BodhiClient(
+                oidc_storage_path=os.path.join(config.tmpdir, "bodhi_client.json")
+            )
 
             # Authenticate with Bodhi. This will use Kerberos the first time
             # and will store an authentication token in the oidc_storage_path

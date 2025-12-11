@@ -35,6 +35,7 @@ import fedora_messaging.api
 import fedora_messaging.config
 import logging
 import sys
+import tempfile
 
 from twisted.internet import task
 from twisted.internet.defer import Deferred
@@ -109,54 +110,58 @@ def main(log_level, dry_run, lull_time, config_url, config_file, db_pw_file, unt
 
 async def _main(reactor, db_pw_file, config_url=None, config_file=None) -> None:
     config.terminator = Deferred()
+    with tempfile.TemporaryDirectory(prefix="elnbuildsync-") as cdir:
+        config.tmpdir = cdir
 
-    # Read in the database password
-    db_pw = db_pw_file.readline().rstrip()
+        # Read in the database password
+        db_pw = db_pw_file.readline().rstrip()
 
-    # Read in the config file
-    try:
-        await config.load_config(
-            db_pw, config_git_url=config_url, config_file=config_file
+        # Read in the config file
+        try:
+            await config.load_config(
+                db_pw, config_git_url=config_url, config_file=config_file
+            )
+        except Exception as e:
+            logger.exception(e)
+            logger.critical("Could not load configuration.")
+            sys.exit(128)
+
+        # Set up the Database
+        logger.info("Initializing database")
+        engine = await db_models.init_db(config.db_url, echo=config.is_debug())
+        logger.info("Database Initialized")
+
+        # Schedule configuration updates
+        updater = task.LoopingCall(config.update_config)
+        updater.start(config.config_timer, now=False)
+
+        # Schedule batch checking
+        batching.message_batch_processor = task.LoopingCall(
+            batching.process_message_batch
         )
-    except Exception as e:
-        logger.exception(e)
-        logger.critical("Could not load configuration.")
-        sys.exit(128)
+        batching.message_batch_processor.start(config.message_batch_timer, now=False)
 
-    # Set up the Database
-    logger.info("Initializing database")
-    engine = await db_models.init_db(config.db_url, echo=config.is_debug())
-    logger.info("Database Initialized")
+        # Schedule periodic status page and run it once at startup
+        config.status_processor = task.LoopingCall(status.create_status_page)
+        config.status_processor.start(config.status_timer, now=True)
 
-    # Schedule configuration updates
-    updater = task.LoopingCall(config.update_config)
-    updater.start(config.config_timer, now=False)
+        # Schedule periodic cleanup
+        config.cleanup_processor = task.LoopingCall(cleanup.periodic_cleanup)
+        config.cleanup_processor.start(config.cleanup_timer, now=False)
 
-    # Schedule batch checking
-    batching.message_batch_processor = task.LoopingCall(batching.process_message_batch)
-    batching.message_batch_processor.start(config.message_batch_timer, now=False)
+        # Add a five-minute timer to check for task completion, because Koji
+        # does not always send out an AMQP message as expected
+        listener.task_check_processor = task.LoopingCall(listener.check_tasks)
+        listener.task_check_processor.start(config.task_check_timer, now=False)
 
-    # Schedule periodic status page and run it once at startup
-    config.status_processor = task.LoopingCall(status.create_status_page)
-    config.status_processor.start(config.status_timer, now=True)
+        # Start listening for Fedora Messages
+        fedora_messaging.api.twisted_consume(listener.message_handler)
 
-    # Schedule periodic cleanup
-    config.cleanup_processor = task.LoopingCall(cleanup.periodic_cleanup)
-    config.cleanup_processor.start(config.cleanup_timer, now=False)
+        logger.info("Starting HTTP server")
+        reactor.listenTCP(8080, web.setup_web_resources())
+        logger.info("HTTP server ready")
 
-    # Add a five-minute timer to check for task completion, because Koji
-    # does not always send out an AMQP message as expected
-    listener.task_check_processor = task.LoopingCall(listener.check_tasks)
-    listener.task_check_processor.start(config.task_check_timer, now=False)
-
-    # Start listening for Fedora Messages
-    fedora_messaging.api.twisted_consume(listener.message_handler)
-
-    logger.info("Starting HTTP server")
-    reactor.listenTCP(8080, web.setup_web_resources())
-    logger.info("HTTP server ready")
-
-    await config.terminator
+        await config.terminator
 
 
 if __name__ == "__main__":

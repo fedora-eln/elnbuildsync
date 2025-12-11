@@ -72,6 +72,7 @@ waitrepo_timeout = 20 * 60
 # Process state
 cleanup_processor = None
 status_processor = None
+tmpdir = None
 
 
 class ConfigError(Exception):
