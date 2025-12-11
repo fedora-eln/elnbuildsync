@@ -173,11 +173,20 @@ async def get_config_ref(url):
     :returns: Remote ref or None on error
     """
     scm = split_scmurl(url)
-    output = await twisted.internet.utils.getProcessOutput(
-        executable="git",
-        args=("ls-remote", "--heads", scm["link"], scm["ref"]),
-        errortoo=True,
-    )
+    logger.info(f"Getting config ref for {scm['link']} {scm['ref']}")
+
+    if scm["ref"]:
+        output = await twisted.internet.utils.getProcessOutput(
+            executable="/usr/bin/git",
+            args=("ls-remote", "--branches", scm["link"], scm["ref"]),
+            errortoo=True,
+        )
+    else:
+        output = await twisted.internet.utils.getProcessOutput(
+            executable="/usr/bin/git",
+            args=("ls-remote", "--branches", scm["link"]),
+            errortoo=True,
+        )
 
     if not output:
         scmref = scm["ref"]
