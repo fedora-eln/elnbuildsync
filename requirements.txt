@@ -1,6 +1,4 @@
 asyncpg
-backoff
-bodhi-client
 cachetools
 click >= 8
 fedora_messaging ~= 3.7.1
@@ -9,9 +7,9 @@ htmlmin
 koji
 legacy-cgi
 pytest >= 6.0
-pyyaml
 requests
 rpm
 sqlalchemy >= 2
 twisted >= 22
 txrequests
+pyyaml
