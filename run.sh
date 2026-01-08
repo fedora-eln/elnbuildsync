@@ -5,7 +5,7 @@ export TMPDIR=/var/tmp
 export KRB5CCNAME=FILE:${TMPDIR}/tgt
 
 echo "Running scheduler"
-(while true; do kinit -k -t /keytab/distrobaker.keytab distrobuildsync-eln/jenkins-continuous-infra.apps.ci.centos.org@FEDORAPROJECT.ORG; sleep 55m; done) &
+(while true; do kinit -k -t /keytab/distrobaker.keytab eln-buildsync@FEDORAPROJECT.ORG; sleep 55m; done) &
 
 sleep 3
 
