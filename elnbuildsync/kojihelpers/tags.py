@@ -93,6 +93,8 @@ def _tag_builds_thread(tag, build_ids):
 
 async def untag_builds(tag, builds):
     await deferToThread(_untag_builds_thread, tag, builds)
+    logger.debug(f"Untagged {len(builds)} builds from {tag}")
+    return
 
 
 def _untag_builds_thread(tag, build_ids):
