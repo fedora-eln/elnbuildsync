@@ -21,7 +21,7 @@ import logging
 
 from fedora_messaging.message import Message as FedoraMessage
 
-from twisted.internet.threads import deferToThread
+from .kojihelpers.connection import call_koji
 
 from . import batching
 from . import config
@@ -40,7 +40,7 @@ async def periodic_cleanup():
     desired_pkg_names = set(config.comps["rpms"].keys())
 
     # Get the list of packages currently tagged into the destination tag
-    latest_tagged_dest_pkgs = await deferToThread(
+    latest_tagged_dest_pkgs = await call_koji(
         bsys.listTagged, config.main["build"]["target"], latest=True
     )
 
@@ -55,7 +55,7 @@ async def periodic_cleanup():
     )
 
     # Get the complete list of builds tagged into the destination tag
-    all_tagged_dest_pkgs = await deferToThread(
+    all_tagged_dest_pkgs = await call_koji(
         bsys.listTagged, config.main["build"]["target"], latest=False
     )
     all_tagged_dest_nvrs = set([pkg["nvr"] for pkg in all_tagged_dest_pkgs])

@@ -21,12 +21,10 @@ import koji
 import logging
 
 from .errors import InfoUnavailableError, IneligibleBuildError
-from .connection import get_buildsys
+from .connection import get_buildsys, call_koji
 from .. import config
 from .. import listener
-from twisted.internet import reactor
 from twisted.internet.defer import DeferredList
-from twisted.internet.threads import deferToThread
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +62,7 @@ async def get_buildinfo(which_bsys, build_id, **kwargs):
     bsys = get_buildsys(which_bsys)
 
     try:
-        buildinfo = await deferToThread(bsys.getBuild, build_id, **kwargs)
+        buildinfo = await call_koji(bsys.getBuild, build_id, **kwargs)
     except koji.GenericError as e:
         logger.exception(f"Could not retrieve information for build {build_id}")
         raise InfoUnavailableError(
@@ -78,7 +76,7 @@ async def get_taskinfo(which_bsys, task_id, **kwargs):
     bsys = get_buildsys(which_bsys)
 
     try:
-        taskinfo = await deferToThread(bsys.getTaskInfo, task_id, **kwargs)
+        taskinfo = await call_koji(bsys.getTaskInfo, task_id, **kwargs)
     except koji.GenericError as e:
         logger.exception(f"Could not retrieve information for task {task_id}")
         raise InfoUnavailableError(
@@ -94,7 +92,7 @@ async def get_taskinfo(which_bsys, task_id, **kwargs):
         return taskinfo
 
     try:
-        children = await deferToThread(
+        children = await call_koji(
             bsys.getTaskChildren, task_id, request=True, strict=True
         )
     except koji.GenericError as e:
@@ -115,9 +113,7 @@ async def get_taskinfo(which_bsys, task_id, **kwargs):
         for child in children:
             if child["method"] == "buildSRPMFromSCM":
                 try:
-                    child["result"] = await deferToThread(
-                        bsys.getTaskResult, child["id"]
-                    )
+                    child["result"] = await call_koji(bsys.getTaskResult, child["id"])
                 except koji.GenericError as e:
                     raise InfoUnavailableError(
                         f"SRPM build failed for {task_id}"
@@ -139,7 +135,7 @@ async def perform_builds(target, scm_urls, scratch=False, fail_fast=False):
 
 
 async def start_builds(target, scm_urls, scratch=False, fail_fast=False):
-    task_index = await deferToThread(
+    task_index = await call_koji(
         _start_builds_thread, target, scm_urls, scratch, fail_fast
     )
     return task_index
@@ -202,8 +198,8 @@ async def wait_for_tasks(task_ids, timeout=config.task_timeout):
 async def cancel_task(task_id):
     logger.debug(f"Canceling task {task_id}")
     try:
-        bsys = await deferToThread(get_buildsys, "destination")
-        await deferToThread(bsys.cancelTask, task_id, recurse=True)
+        bsys = get_buildsys("destination")
+        await call_koji(bsys.cancelTask, task_id, recurse=True)
     except Exception as e:
         # Cancellation is best-effort
         logger.critical(f"Could not cancel task {task_id}. Ignoring.")

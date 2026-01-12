@@ -17,6 +17,7 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
+import backoff
 import git
 import json
 import logging
@@ -274,6 +275,7 @@ async def get_distro_packages(
     return {"rpms": merged_packages}
 
 
+@backoff.on_exception(backoff.expo, Exception, max_time=60)
 async def get_rawhide_tag():
     """
     Queries Bodhi for the current tag associated with Rawhide

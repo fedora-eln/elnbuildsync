@@ -27,7 +27,6 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from enum import Enum, auto
 import htmlmin
-from twisted.internet.threads import deferToThread
 from twisted.web.template import (
     Element,
     flattenString,
@@ -37,6 +36,7 @@ from twisted.web.template import (
 
 from . import config
 from . import kojihelpers
+from .kojihelpers.connection import call_koji
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ async def create_status_page():
 
         try:
             # Look up packages tagged into the tag associated with the target
-            tagged_pkgs = await deferToThread(
+            tagged_pkgs = await call_koji(
                 bsys.listTagged, config.main["build"]["target"], latest=True
             )
         except koji.GenericError as e:
@@ -102,7 +102,7 @@ async def create_status_page():
         koji_url = kojihelpers.connection.get_koji_url()
 
         # Get the list of packages that DBS has built.
-        built_packages = await deferToThread(
+        built_packages = await call_koji(
             bsys.listBuilds, userID=username, queryOpts={"order": "start_ts"}
         )
         for build in built_packages:
