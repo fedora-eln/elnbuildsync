@@ -46,8 +46,8 @@ async def get_scmurl(build_id):
     try:
         buildinfo = await get_buildinfo("source", build_id)
     except Exception as e:
-        logger.critical("Unexpected error retrieving SCM URL", exc_info=True)
-        reactor.stop()
+        logger.exception("Unexpected error retrieving SCM URL")
+        raise
     logger.debug(f"Buildinfo: {buildinfo}")
 
     logger.debug(f"Retrieved SCM URL: {buildinfo['source']}")
