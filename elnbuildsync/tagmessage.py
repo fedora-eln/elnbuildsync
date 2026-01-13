@@ -20,7 +20,6 @@
 import logging
 
 from fedora_messaging.message import Message as FedoraMessage
-from twisted.internet.threads import deferToThread
 
 from elnbuildsync import db_models
 from .decorators import as_deferred

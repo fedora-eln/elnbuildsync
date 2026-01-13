@@ -17,12 +17,15 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
+import backoff
 import koji
 import logging
 import time
 
 from cachetools import cached, TTLCache
 from enum import auto, Enum
+from requests.exceptions import RequestException
+from twisted.internet.threads import deferToThread
 
 from .. import config
 
@@ -121,3 +124,16 @@ def get_buildsys(which, force_login=False):
 def get_koji_url():
     cfg = koji.read_config(profile_name=config.main["destination"]["profile"])
     return cfg["weburl"]
+
+
+# Wrap the call to koji in a backoff decorator to handle transient errors
+# and give up on 400-499 errors.
+@backoff.on_exception(
+    backoff.expo,
+    RequestException,
+    giveup=lambda e: 400 <= e.response.status_code < 500,
+    max_time=60,
+)
+@backoff.on_exception(backoff.expo, Exception, max_time=60)
+async def call_koji(method, *args, **kwargs):
+    return await deferToThread(method, *args, **kwargs)

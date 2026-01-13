@@ -95,6 +95,7 @@ def main(log_level, dry_run, lull_time, config_url, config_file, db_pw_file, unt
     for handler in logging.root.handlers:
         handler.addFilter(log_filter)
     logger.debug("Debug logging enabled")
+    logging.getLogger('backoff').addHandler(logging.StreamHandler())
 
     config.dry_run = dry_run
     config.do_untagging = untagging

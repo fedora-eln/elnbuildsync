@@ -22,7 +22,7 @@ from cachetools import cached, LRUCache
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred
 from twisted.internet.defer import TimeoutError as DeferredTimeoutError
-from twisted.internet.threads import deferToThread
+from .connection import call_koji
 
 from .. import kojihelpers
 from .connection import get_buildsys
@@ -49,7 +49,7 @@ async def prepare_side_tag(base_tag, initial_build_ids=list()):
     downstream_koji = get_buildsys("destination")
     # Trigger the creation of the side-tag
     logger.info(f"Creating side tag from {base_tag}")
-    side_tag_info = await deferToThread(downstream_koji.createSideTag, base_tag)
+    side_tag_info = await call_koji(downstream_koji.createSideTag, base_tag)
     side_tag_name = side_tag_info["name"]
 
     logger.debug(f"Side {side_tag_name} created.")
@@ -64,7 +64,7 @@ async def prepare_side_tag(base_tag, initial_build_ids=list()):
 
 
 async def tag_builds(tag, builds):
-    task_index = await deferToThread(_tag_builds_thread, tag, builds)
+    task_index = await call_koji(_tag_builds_thread, tag, builds)
     logger.debug(f"Tagged {len(builds)} builds into {tag}")
     return task_index
 
@@ -92,7 +92,7 @@ def _tag_builds_thread(tag, build_ids):
 
 
 async def untag_builds(tag, builds):
-    await deferToThread(_untag_builds_thread, tag, builds)
+    await call_koji(_untag_builds_thread, tag, builds)
     logger.debug(f"Untagged {len(builds)} builds from {tag}")
     return
 
@@ -111,7 +111,7 @@ async def get_tags_for_target(target):
     Returns: buildroot_tag, destination_tag
     """
 
-    buildroot_tag, destination_tag = await deferToThread(
+    buildroot_tag, destination_tag = await call_koji(
         _get_tags_for_target_thread, target
     )
 
@@ -127,7 +127,7 @@ def _get_tags_for_target_thread(target):
 
 
 async def remove_side_tag(side_tag):
-    await deferToThread(_remove_side_tag_thread, side_tag)
+    await call_koji(_remove_side_tag_thread, side_tag)
 
 
 def _remove_side_tag_thread(side_tag):

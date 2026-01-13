@@ -25,7 +25,7 @@ from queue import Queue, Empty
 
 from fedora_messaging.message import Message as FedoraMessage
 
-from twisted.internet.threads import deferToThread
+from .kojihelpers.connection import call_koji
 
 from . import config
 from . import kojihelpers
@@ -98,7 +98,7 @@ async def rebuild_from_components(components):
     )
 
     src_tag = config.main["trigger"]["rpms"]
-    latest_tagged_rawhide_pkgs = await deferToThread(
+    latest_tagged_rawhide_pkgs = await call_koji(
         bsys.listTagged, src_tag, latest=True, inherit=True
     )
     latest_tagged_rawhide_table = {
@@ -109,7 +109,7 @@ async def rebuild_from_components(components):
         _,
         dest_tag,
     ) = await kojihelpers.tags.get_tags_for_target(config.main["build"]["target"])
-    latest_tagged_eln_pkgs = await deferToThread(
+    latest_tagged_eln_pkgs = await call_koji(
         bsys.listTagged, dest_tag, latest=True, inherit=True
     )
     latest_tagged_eln_table = {pkg["name"]: pkg for pkg in latest_tagged_eln_pkgs}
