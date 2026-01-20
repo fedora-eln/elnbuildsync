@@ -76,19 +76,19 @@ def message_handler(msg):
                 raise Drop()
 
         elif msg.topic.endswith("buildsys.task.state.change"):
-            # Are we looking for this build?
+            # Are we looking for this task?
             task_id = msg.body["id"]
             if task_id in state.active_tasks:
                 if msg.body["new"] in ("FREE", "OPEN", "ASSIGNED"):
                     logger.debug(
-                        f"Build {task_id} ({msg.body['info']['request']}) is {msg.body['new']}"
+                        f"Task {task_id} ({msg.body['info']['request']}) is {msg.body['new']}"
                     )
                     raise Drop()
 
                 elif msg.body["new"] == "CLOSED":
                     # Successful build
                     logger.info(
-                        f"Build {task_id} ({msg.body['info']['request']}) completed successfully"
+                        f"Task {task_id} ({msg.body['info']['request']}) completed successfully"
                     )
                     reactor.callLater(
                         0, fire_callback, state.active_tasks[task_id], msg.body
@@ -96,7 +96,7 @@ def message_handler(msg):
 
                 else:
                     # It either failed or was canceled. Call the errback
-                    logger.info(f"Build {task_id} failed.")
+                    logger.info(f"Task {task_id} failed.")
                     reactor.callLater(
                         0, fire_errback, state.active_tasks[task_id], msg.body
                     )
@@ -169,7 +169,7 @@ async def check_tasks():
             if taskinfo["state"] == koji.TASK_STATES["CLOSED"]:
                 # Task is finished.
                 logger.info(
-                    f"Build {task} ({taskinfo['request'][0]}) completed successfully"
+                    f"Task {task} ({taskinfo['request'][0]}) completed successfully"
                 )
                 reactor.callLater(0, fire_callback, state.active_tasks[task], taskinfo)
                 # Stop watching this task ID
@@ -185,13 +185,13 @@ async def check_tasks():
 
             else:
                 # It either failed or was canceled. Call the errback
-                logger.info(f"Build task {task} failed.")
+                logger.info(f"Task {task} failed.")
                 reactor.callLater(0, fire_errback, state.active_tasks[task], taskinfo)
                 # Stop watching this task ID
                 remove_tasks.append(task)
         except Exception as e:
             # Log any failures so we don't block future checks.
-            logger.critical(f"Unexpected failure in {task}")
+            logger.critical(f"Unexpected failure in task {task}")
             logger.exception(e)
 
             # Call cancel() on the Deferred before we remove it
