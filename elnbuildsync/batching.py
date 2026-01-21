@@ -51,41 +51,47 @@ class ComponentNotFoundError(Exception):
 async def process_message_batch():
     global running
     tag_messages = list()
-    while True:
-        try:
-            fedora_tag_message = message_queue.get_nowait()
-
-            tag_message = await TagMessage(fedora_tag_message).async_init()
-
-            tag_messages.append(tag_message)
-        except Empty as e:
-            break
-
-    if not tag_messages:
-        # Nothing to do here
-        return
-
-    # Create Batch object
-    running = True
-    batch = await RebuildBatch(
-        target=config.main["build"]["target"],
-        tag_messages=tag_messages,
-        scratch=config.main["build"]["scratch"],
-        fail_fast=config.main["build"]["fail_fast"],
-    ).async_init()
-
-    # Run the batch.
-    # IMPORTANT: this must complete before other batches are started. A large
-    # number of packages may queue up in this time, but they will be processed
-    # as a single batch.
     try:
-        await batch.run()
+        while True:
+            try:
+                fedora_tag_message = message_queue.get_nowait()
+
+                tag_message = await TagMessage(fedora_tag_message).async_init()
+
+                tag_messages.append(tag_message)
+            except Empty as e:
+                break
+
+        if not tag_messages:
+            # Nothing to do here
+            return
+
+        # Create Batch object
+        running = True
+        batch = await RebuildBatch(
+            target=config.main["build"]["target"],
+            tag_messages=tag_messages,
+            scratch=config.main["build"]["scratch"],
+            fail_fast=config.main["build"]["fail_fast"],
+        ).async_init()
+
+        # Run the batch.
+        # IMPORTANT: this must complete before other batches are started. A large
+        # number of packages may queue up in this time, but they will be processed
+        # as a single batch.
+        try:
+            await batch.run()
+        except Exception as e:
+            # If something goes unrecoverably wrong here, always log it and skip
+            # to the next batch.
+            logger.exception(e)
+        finally:
+            running = False
     except Exception as e:
-        # If something goes unrecoverably wrong here, always log it and skip
-        # to the next batch.
+        # We need to catch all exceptions here. If we allow them to bubble up,
+        # they will cause the entire process to fall into an infinite traceback
+        # loop.
         logger.exception(e)
-    finally:
-        running = False
 
 
 async def rebuild_from_components(components):
