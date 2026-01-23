@@ -36,109 +36,131 @@ logger = logging.getLogger(__name__)
 task_check_processor = None
 
 
+def _handle_repo_init(msg):
+    """Handle buildsys.repo.init messages for repositories we are waiting on."""
+    tag = msg.body["tag"]
+
+    if tag in kojihelpers.awaiting_repo_init:
+        logger.info(f"repo {tag} has started regenerating")
+        for deferred in kojihelpers.awaiting_repo_init[tag]:
+            # Enqueue the callbacks onto the reactor so we aren't
+            # blocking handling new messages
+            reactor.callLater(0, fire_callback, deferred, tag)
+
+        # Remove it from the awaited list
+        del kojihelpers.awaiting_repo_init[tag]
+        return
+
+    else:
+        logger.debug(f"Unknown repository tag {msg.body['tag']}, ignoring.")
+        raise Drop()
+
+
+def _handle_repo_done(msg):
+    """Handle buildsys.repo.done messages for repositories we are waiting on."""
+    tag = msg.body["tag"]
+
+    if tag in kojihelpers.awaited_repos:
+        logger.info(f"Repo {tag} has regenerated")
+        for deferred in kojihelpers.awaited_repos[tag]:
+            # Enqueue the callbacks onto the reactor so we aren't
+            # blocking handling new messages
+            reactor.callLater(0, fire_callback, deferred, tag)
+
+        # Remove it from the awaited list
+        del kojihelpers.awaited_repos[tag]
+        return
+
+    else:
+        logger.debug(f"Unknown repository tag {msg.body['tag']}, ignoring.")
+        raise Drop()
+
+
+def _handle_task_state_change(msg):
+    """Handle buildsys.task.state.change messages for tasks we are tracking."""
+    task_id = msg.body["id"]
+
+    if task_id in state.active_tasks:
+        if msg.body["new"] in ("FREE", "OPEN", "ASSIGNED"):
+            logger.debug(
+                f"Task {task_id} ({msg.body['info']['request']}) is {msg.body['new']}"
+            )
+            raise Drop()
+
+        elif msg.body["new"] == "CLOSED":
+            # Successful build
+            logger.info(
+                f"Task {task_id} ({msg.body['info']['request']}) completed successfully"
+            )
+            reactor.callLater(
+                0, fire_callback, state.active_tasks[task_id], msg.body
+            )
+
+        else:
+            # It either failed or was canceled. Call the errback
+            logger.info(f"Task {task_id} failed.")
+            reactor.callLater(
+                0, fire_errback, state.active_tasks[task_id], msg.body
+            )
+
+        del state.active_tasks[task_id]
+        return
+
+    else:
+        # Ignore messages from unrelated builds
+        logger.debug(f"Unknown task_id {task_id}. Ignoring.")
+        raise Drop()
+
+
+def _handle_tag(msg):
+    """Handle buildsys.tag messages to trigger rebuilds."""
+    tag = msg.body["tag"]
+
+    if tag != config.main["trigger"]["rpms"]:
+        logger.debug(f"Message tag {tag} not configured as a trigger, ignoring.")
+        raise Drop()
+
+    # Check whether this component is meaningful to us
+    if not config.is_eligible("rpms", msg.body["name"]):
+        raise Drop()
+
+    # If we are currently processing a batch or are in a "paused" state,
+    # Nack() the message so it will stay in the queue and not get lost if
+    # we crash/restart.
+    if batching.running or config.is_paused():
+        raise Nack()
+
+    logger.info(f"Triggering rebuild on trigger tag {config.main['trigger']['rpms']}")
+
+    # This is a component we care about, so add it to the queue
+    batching.message_batch_processor.reset()
+
+    # TODO: We also need to save the list of pending messages to the DB
+    # so they aren't lost if we restart. It's okay to block this thread
+    # for this purpose.
+    logger.debug(f"Adding {msg.body['name']} to the next batch.")
+    batching.message_queue.put(msg)
+
+
 def message_handler(msg):
     logger.debug(f"Received {msg.topic}: UUID {msg.id}")
     try:
-        # Listen for repositories we are waiting on.
         if msg.topic.endswith("buildsys.repo.init"):
-            tag = msg.body["tag"]
-
-            if tag in kojihelpers.awaiting_repo_init:
-                logger.info(f"repo {tag} has started regenerating")
-                for deferred in kojihelpers.awaiting_repo_init[tag]:
-                    # Enqueue the callbacks onto the reactor so we aren't
-                    # blocking handling new messages
-                    reactor.callLater(0, fire_callback, deferred, tag)
-
-                # Remove it from the awaited list
-                del kojihelpers.awaiting_repo_init[tag]
-                return
-
-            else:
-                logger.debug(f"Unknown repository tag {msg.body['tag']}, ignoring.")
-                raise Drop()
+            _handle_repo_init(msg)
 
         elif msg.topic.endswith("buildsys.repo.done"):
-            tag = msg.body["tag"]
-            if tag in kojihelpers.awaited_repos:
-                logger.info(f"Repo {tag} has regenerated")
-                for deferred in kojihelpers.awaited_repos[tag]:
-                    # Enqueue the callbacks onto the reactor so we aren't
-                    # blocking handling new messages
-                    reactor.callLater(0, fire_callback, deferred, tag)
-
-                # Remove it from the awaited list
-                del kojihelpers.awaited_repos[tag]
-                return
-
-            else:
-                logger.debug(f"Unknown repository tag {msg.body['tag']}, ignoring.")
-                raise Drop()
+            _handle_repo_done(msg)
 
         elif msg.topic.endswith("buildsys.task.state.change"):
-            # Are we looking for this task?
-            task_id = msg.body["id"]
-            if task_id in state.active_tasks:
-                if msg.body["new"] in ("FREE", "OPEN", "ASSIGNED"):
-                    logger.debug(
-                        f"Task {task_id} ({msg.body['info']['request']}) is {msg.body['new']}"
-                    )
-                    raise Drop()
+            _handle_task_state_change(msg)
 
-                elif msg.body["new"] == "CLOSED":
-                    # Successful build
-                    logger.info(
-                        f"Task {task_id} ({msg.body['info']['request']}) completed successfully"
-                    )
-                    reactor.callLater(
-                        0, fire_callback, state.active_tasks[task_id], msg.body
-                    )
+        elif msg.topic.endswith("buildsys.tag"):
+            _handle_tag(msg)
 
-                else:
-                    # It either failed or was canceled. Call the errback
-                    logger.info(f"Task {task_id} failed.")
-                    reactor.callLater(
-                        0, fire_errback, state.active_tasks[task_id], msg.body
-                    )
-
-                del state.active_tasks[task_id]
-                return
-
-            else:
-                # Ignore messages from unrelated builds
-                logger.debug(f"Unknown task_id {task_id}. Ignoring.")
-                raise Drop()
-
-        if not msg.topic.endswith("buildsys.tag"):
-            # Ignore any non-tagging messages
+        else:
+            # Ignore any unhandled message topics
             logger.debug(f"Unable to handle {msg.topic} topics, ignoring.")
             raise Drop()
-
-        tag = msg.body["tag"]
-        if tag != config.main["trigger"]["rpms"]:
-            logger.debug(f"Message tag {tag} not configured as a trigger, ignoring.")
-            raise Drop()
-
-        # Check whether this component is meaningful to us
-        if not config.is_eligible("rpms", msg.body["name"]):
-            raise Drop()
-
-        # If we are currently processing a batch or are in a "paused" state,
-        # Nack() the message so it will stay in the queue and not get lost if
-        # we crash/restart.
-        if batching.running or config.is_paused():
-            raise Nack()
-
-        logger.info(f"Triggering rebuild on tag {tag}")
-
-        # This is a component we care about, so add it to the queue
-        batching.message_batch_processor.reset()
-
-        # TODO: We also need to save the list of pending messages to the DB
-        # so they aren't lost if we restart. It's okay to block this thread
-        # for this purpose.
-        logger.debug(f"Adding {msg.body['name']} to the next batch.")
-        batching.message_queue.put(msg)
 
     except Drop as e:
         # Tell the AMQP server that we're ignoring this message
