@@ -56,12 +56,29 @@ async def prepare_side_tag(base_tag, initial_build_ids=list()):
     logger.debug(f"Side {side_tag_name} created.")
 
     if initial_build_ids:
-        task_index = tag_builds(
-            side_tag_name, initial_build_ids
+        # Convert builds to nvrs to make logging easier
+        buildinfos = await kojihelpers.builds.get_multi_buildinfo(
+            "destination", initial_build_ids
         )
-        await kojihelpers.builds.wait_for_tasks(
-            task_index.values(), timeout=config.tag_timeout
-        )
+        nvrs = [buildinfo["nvr"] for buildinfo in buildinfos.values()]
+
+        # Tag the builds
+        # We'll ignore the task index here, since we're actually going to
+        # monitor the tag, rather than the tasks.
+        _ = await tag_builds(side_tag_name, nvrs)
+
+        # Wait for the builds to appear in the tag
+        results = await wait_for_nvrs_in_tag(side_tag_name, nvrs)
+        for success, value in results:
+            if success:
+                logger.info(f"Build {value} tagged into {side_tag_name}")
+            else:
+                # The most likely scenario here is that the tagging timed out,
+                # so we'll just proceed. Failures here are not really
+                # recoverable. Log and continue.
+                logger.error(
+                    f"Build failed to tag into {side_tag_name}", exc_info=value
+                )
 
     return side_tag_name
 
@@ -122,7 +139,6 @@ def _untag_builds_thread(tag, build_ids):
         logger.info(f"Untagging {len(build_ids)} builds from {tag}")
         for build_id in build_ids:
             mc.untagBuild(tag, build_id, strict=False)
-
 
 
 async def get_tags_for_target(target):
