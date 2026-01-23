@@ -55,7 +55,9 @@ async def prepare_side_tag(base_tag, initial_build_ids=list()):
     logger.debug(f"Side {side_tag_name} created.")
 
     if initial_build_ids:
-        task_index = await tag_builds(side_tag_name, initial_build_ids)
+        task_index = tag_builds(
+            side_tag_name, initial_build_ids
+        )
         await kojihelpers.builds.wait_for_tasks(
             task_index.values(), timeout=config.tag_timeout
         )
@@ -104,6 +106,7 @@ def _untag_builds_thread(tag, build_ids):
         logger.info(f"Untagging {len(build_ids)} builds from {tag}")
         for build_id in build_ids:
             mc.untagBuild(tag, build_id, strict=False)
+
 
 
 async def get_tags_for_target(target):
