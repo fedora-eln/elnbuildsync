@@ -112,10 +112,17 @@ def _handle_tag(msg):
     """Handle buildsys.tag messages to trigger rebuilds."""
     tag = msg.body["tag"]
 
-    if tag != config.main["trigger"]["rpms"]:
-        logger.debug(f"Message tag {tag} not configured as a trigger, ignoring.")
-        raise Drop()
+    if tag == config.main["trigger"]["rpms"]:
+        return _handle_trigger_tag(msg)
 
+    elif tag in state.pending_nvr_tags.keys():
+        return _handle_awaited_tag(msg)
+
+    logger.debug(f"Message tag {tag} not configured as a trigger, ignoring.")
+    raise Drop()
+
+
+def _handle_trigger_tag(msg):
     # Check whether this component is meaningful to us
     if not config.is_eligible("rpms", msg.body["name"]):
         raise Drop()
@@ -136,6 +143,20 @@ def _handle_tag(msg):
     # for this purpose.
     logger.debug(f"Adding {msg.body['name']} to the next batch.")
     batching.message_queue.put(msg)
+
+
+def _handle_awaited_tag(msg):
+    """Handle buildsys.tag messages to trigger rebuilds."""
+    tag = msg.body["tag"]
+
+    nvr = f"{msg.body['name']}-{msg.body['version']}-{msg.body['release']}"
+
+    try:
+        deferred = state.pending_nvr_tags.pop(tag, nvr)
+        reactor.callLater(0, fire_callback, deferred, nvr)
+    except KeyError as e:
+        logger.debug(f"NVR {nvr} not found in tag {tag}, ignoring.")
+        raise Drop()
 
 
 def message_handler(msg):
@@ -250,6 +271,32 @@ def register_task_id(task_id, timeout=config.task_timeout):
     state.active_tasks[task_id].addErrback(cancel_timed_out_task, task_id)
 
     return state.active_tasks[task_id]
+
+
+def register_nvr_tag(
+    tag: str, nvr: str, timeout: float = config.tag_timeout
+) -> Deferred:
+    """
+    Register an NVR to watch for appearance in a specific tag.
+
+    Creates a Deferred that will be called when the NVR appears in the tag.
+
+    Args:
+        tag: The tag name to watch
+        nvr: The NVR to wait for
+        timeout: Timeout in seconds (defaults to config.task_timeout)
+
+    Returns:
+        A Deferred that will be called when the NVR appears in the tag
+    """
+    logger.debug(f"Registering NVR {nvr} for tag {tag}")
+
+    deferred = Deferred()
+    deferred.addTimeout(timeout, reactor)
+
+    state.pending_nvr_tags.push(tag, nvr, deferred)
+
+    return deferred
 
 
 def cancel_timed_out_task(failure, task_id):

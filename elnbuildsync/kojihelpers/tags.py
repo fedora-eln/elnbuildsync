@@ -20,11 +20,12 @@ import logging
 
 from cachetools import cached, LRUCache
 from twisted.internet import reactor
-from twisted.internet.defer import Deferred
+from twisted.internet.defer import DeferredList
 from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 from .connection import call_koji
 
 from .. import kojihelpers
+from .. import listener
 from .connection import get_buildsys
 
 from .. import config
@@ -151,3 +152,34 @@ async def remove_side_tag(side_tag):
 def _remove_side_tag_thread(side_tag):
     bsys = kojihelpers.connection.get_buildsys("destination")
     bsys.removeSideTag(side_tag)
+
+
+async def wait_for_nvrs_in_tag(tag, nvrs):
+    """
+    Wait for a list of nvrs to appear in a tag.
+
+    :params str tag: The tag name to wait for
+    :params list nvrs: The list of nvrs to wait for
+    :return list: A list of results
+    """
+    logger.info(f"Waiting for {len(nvrs)} nvrs to appear in tag {tag}")
+
+    deferreds = list()
+    for nvr in nvrs:
+        deferred = listener.register_nvr_tag(tag, nvr, timeout=config.tag_timeout)
+        deferreds.append(deferred)
+
+    result = await DeferredList(deferreds, consumeErrors=True)
+    return result
+
+async def get_nvrs_from_tag(tag):
+    """
+
+    Get the list of builds tagged into a tag.
+
+    :params str tag: The tag name to get builds from
+    :return dict: A dictionary of nvr -> buildinfo
+    """
+    bsys = kojihelpers.connection.get_buildsys("destination")
+    builds = await call_koji(bsys.listTagged, tag, latest=False, inherit=True)
+    return {build["nvr"]: build for build in builds}
