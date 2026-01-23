@@ -243,6 +243,7 @@ async def check_tasks():
     for task in remove_tasks:
         del state.active_tasks[task]
 
+
 async def check_tags():
     remove_nvrs = dict[str, set[str]]()
     for tag in state.pending_nvr_tags.keys():

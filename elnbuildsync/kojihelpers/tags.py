@@ -188,9 +188,9 @@ async def wait_for_nvrs_in_tag(tag, nvrs):
     result = await DeferredList(deferreds, consumeErrors=True)
     return result
 
+
 async def get_nvrs_from_tag(tag):
     """
-
     Get the list of builds tagged into a tag.
 
     :params str tag: The tag name to get builds from
