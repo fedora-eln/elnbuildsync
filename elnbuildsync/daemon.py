@@ -155,6 +155,10 @@ async def _main(reactor, db_pw_file, config_url=None, config_file=None) -> None:
         listener.task_check_processor = task.LoopingCall(listener.check_tasks)
         listener.task_check_processor.start(config.task_check_timer, now=False)
 
+        # Schedule periodic tag checking
+        listener.tag_check_processor = task.LoopingCall(listener.check_tags)
+        listener.tag_check_processor.start(config.tag_check_timer, now=False)
+
         # Start listening for Fedora Messages
         fedora_messaging.api.twisted_consume(listener.message_handler)
 

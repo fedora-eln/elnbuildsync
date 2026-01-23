@@ -19,6 +19,7 @@
 
 import koji
 import logging
+
 from . import batching
 from . import config
 
@@ -241,6 +242,29 @@ async def check_tasks():
 
     for task in remove_tasks:
         del state.active_tasks[task]
+
+async def check_tags():
+    remove_nvrs = dict[str, set[str]]()
+    for tag in state.pending_nvr_tags.keys():
+        remove_nvrs[tag] = set()
+        # Create a dictionary of nvrs and deferreds for the tag
+        nvrs_and_deferreds = dict()
+        for nvr, deferred in state.pending_nvr_tags.get_nvrs_from_tag(tag):
+            nvrs_and_deferreds[nvr] = deferred
+
+        # Get the complete list of builds tagged into the tag
+        builds = await kojihelpers.tags.get_nvrs_from_tag(tag)
+
+        # Iterate over the builds and check if they are in the set of NVRs
+        # and call the deferred if they are.
+        for nvr in builds.keys():
+            if nvr in nvrs_and_deferreds:
+                reactor.callLater(0, fire_callback, nvrs_and_deferreds[nvr], nvr)
+                remove_nvrs[tag].add(nvr)
+
+    for tag in remove_nvrs.keys():
+        for nvr in remove_nvrs[tag]:
+            state.pending_nvr_tags.pop(tag, nvr)
 
 
 def fire_callback(deferred, *data):
