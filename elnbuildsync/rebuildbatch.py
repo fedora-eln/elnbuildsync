@@ -264,7 +264,7 @@ class RebuildBatch:
         ]
         await DeferredList(batches, consumeErrors=True)
 
-    @backoff.on_exception(backoff.expo, Exception, max_time=60)
+    @backoff.on_exception(backoff.expo, Exception, max_time=900)
     def _submit_bodhi_update(self, update_tag: str) -> None:
         try:
             # Submitting a Bodhi update is infrequent-enough that it doesn't
