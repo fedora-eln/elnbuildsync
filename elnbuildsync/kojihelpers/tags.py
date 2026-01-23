@@ -65,13 +65,28 @@ async def prepare_side_tag(base_tag, initial_build_ids=list()):
     return side_tag_name
 
 
-async def tag_builds(tag, builds):
-    task_index = await call_koji(_tag_builds_thread, tag, builds)
-    logger.debug(f"Tagged {len(builds)} builds into {tag}")
+async def tag_builds(tag, build_ids):
+    """
+    Tag a list of builds into a tag.
+
+    :params str tag: The tag name to tag into
+    :params list build_ids: The list of nvrs or build IDs to tag
+    :return dict: A dictionary of task_id -> Koji vcall
+    """
+    task_index = await call_koji(_tag_builds_thread, tag, build_ids)
+    logger.debug(f"Tagged {len(build_ids)} builds into {tag}")
+
     return task_index
 
 
 def _tag_builds_thread(tag, build_ids):
+    """
+    Tag a list of nvrs into a tag.
+
+    :params str tag: The tag name to tag into
+    :params list build_ids: The list of nvrs or build IDs to tag
+    :return dict: A dictionary of task_id -> Koji vcall
+    """
     downstream_koji = get_buildsys("destination")
     build_vcalls = dict()
 
