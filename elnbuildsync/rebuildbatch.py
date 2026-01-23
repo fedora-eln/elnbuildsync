@@ -222,7 +222,26 @@ class RebuildBatch:
                 logger.info(f"Not tagging scratch-build of {nvr} into {self._dest_tag}")
 
         else:
+            # Submit Bodhi updates for the builds
+            # This will create the side-tag and submit the Bodhi updates
+            # from it.
             await self._create_and_submit_bodhi_updates(build_nvrs)
+
+            # Wait for the Bodhi update to make it to stable by verifying
+            # that all the builds are tagged into the stable tag.
+            results = await kojihelpers.tags.wait_for_nvrs_in_tag(
+                self.target, build_nvrs
+            )
+            for success, value in results:
+                if success:
+                    logger.info(f"Build {value} tagged into {self.target}")
+                else:
+                    # The most likely scenario here is that the tagging timed out,
+                    # so we'll just proceed. Failures here are not really
+                    # recoverable. Log and continue.
+                    logger.error(
+                        f"Build failed to tag into {self.target}", exc_info=value
+                    )
 
         # Remove the side-tag where we performed the rebuilds.
         # The update tag will be automatically removed when the Bodhi update
