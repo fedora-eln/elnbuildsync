@@ -215,7 +215,7 @@ def fire_callback(deferred, *data):
 
 def fire_errback(deferred, *data):
     try:
-        deferred.errback(kojihelpers.errors.BuildFailedError(*data))
+        deferred.errback(kojihelpers.errors.TaskFailedError(*data))
     except AlreadyCalledError as e:
         # Most likely due to a timeout, so ignore it
         logger.exception(e)
@@ -247,8 +247,8 @@ def cancel_timed_out_task(failure, task_id):
     # nothing we can do to recover from that anyway.
     reactor.callLater(0, _do_cancelation, task_id)
 
-    # Raise a BuildTimeoutError with the task_id
-    raise kojihelpers.errors.BuildTimeoutError({"id": task_id})
+    # Raise a TaskTimeoutError with the task_id
+    raise kojihelpers.errors.TaskTimeoutError({"id": task_id})
 
 
 def _do_cancelation(task_id):

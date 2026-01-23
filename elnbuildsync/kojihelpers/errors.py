@@ -29,9 +29,9 @@ class IneligibleBuildError(KojiHelperBaseError):
     pass
 
 
-class BuildFailedError(KojiHelperBaseError):
+class TaskFailedError(KojiHelperBaseError):
     pass
 
 
-class BuildTimeoutError(BuildFailedError):
+class TaskTimeoutError(TaskFailedError):
     pass
