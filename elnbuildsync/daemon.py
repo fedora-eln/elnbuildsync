@@ -110,6 +110,10 @@ def main(log_level, dry_run, lull_time, config_url, config_file, db_pw_file, unt
 
 
 async def _main(reactor, db_pw_file, config_url=None, config_file=None) -> None:
+    await _main_impl(reactor, db_pw_file, config_url, config_file)
+
+
+async def _main_impl(reactor, db_pw_file, config_url=None, config_file=None) -> None:
     config.terminator = Deferred()
     with tempfile.TemporaryDirectory(prefix="elnbuildsync-") as cdir:
         config.tmpdir = cdir

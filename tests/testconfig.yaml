@@ -16,8 +16,30 @@ configuration:
     profile: koji
     mbs: https://mbs.fedoraproject.org
   trigger:
-    rpms: rawhide
+    rpms: eln-test-tag
     modules: f40-modular
+
+  # OpenID Connect authentication configuration
+  # Uses Fedora tinystage test OIDC server for development/testing
+  # See: https://github.com/fedora-infra/tiny-stage
+  open_id_connect:
+    # Tinystage Ipsilon Authorization endpoint
+    auth_url: "https://ipsilon.tinystage.test/idp/openidc/Authorization"
+    # Client credentials (register with tinystage)
+    client_id: "YOUR_CLIENT_ID"
+    client_secret: "YOUR_CLIENT_SECRET"
+    # Token endpoint for exchanging authorization code
+    token_endpoint: "https://ipsilon.tinystage.test/idp/openidc/Token"
+    # UserInfo endpoint for fetching user details and groups
+    userinfo_endpoint: "https://ipsilon.tinystage.test/idp/openidc/UserInfo"
+    # OAuth2 scopes to request (groups scope required for authorization)
+    scopes:
+      - openid
+      - profile
+      - https://id.fedoraproject.org/scope/groups
+    # Users must be a member of at least one of these groups to access /trigger
+    admin_groups:
+      - eln
   build:
     prefix: git+https://src.fedoraproject.org
     target: eln
