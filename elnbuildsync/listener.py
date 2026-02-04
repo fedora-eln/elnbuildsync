@@ -1,5 +1,5 @@
 # This file is part of ELNBuildSync
-# Copyright (C) 2023  Stephen Gallagher <sgallagh@redhat.com>
+# Copyright (C) 2023-2026 Stephen Gallagher <sgallagh@redhat.com>
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
