@@ -199,73 +199,83 @@ def message_handler(msg):
 
 
 async def check_tasks():
-    remove_tasks = list()
-    for task in state.active_tasks.keys():
+    # Snapshot task IDs before awaiting to avoid issues with dict changing
+    # during iteration. Don't store Deferred references across await points.
+    watched_tasks = list(state.active_tasks.keys())
+
+    for task in watched_tasks:
         try:
             taskinfo = await kojihelpers.builds.get_taskinfo(
                 "destination", task, request=True
             )
+
+            # Atomically pop the task and claim ownership of the Deferred.
+            # If a message handler already claimed it during the await, skip.
+            deferred = state.active_tasks.pop(task, None)
+            if deferred is None:
+                # Already handled by a message handler
+                continue
 
             if taskinfo["state"] == koji.TASK_STATES["CLOSED"]:
                 # Task is finished.
                 logger.info(
                     f"Task {task} ({taskinfo['request'][0]}) completed successfully"
                 )
-                reactor.callLater(0, fire_callback, state.active_tasks[task], taskinfo)
-                # Stop watching this task ID
-                remove_tasks.append(task)
+                reactor.callLater(0, fire_callback, deferred, taskinfo)
 
             elif taskinfo["state"] in (
                 koji.TASK_STATES["FREE"],
                 koji.TASK_STATES["OPEN"],
                 koji.TASK_STATES["ASSIGNED"],
             ):
-                # Still processing; ignore it
+                # Still processing; put it back and continue
+                state.active_tasks[task] = deferred
                 continue
 
             else:
                 # It either failed or was canceled. Call the errback
                 logger.info(f"Task {task} failed.")
-                reactor.callLater(0, fire_errback, state.active_tasks[task], taskinfo)
-                # Stop watching this task ID
-                remove_tasks.append(task)
+                reactor.callLater(0, fire_errback, deferred, taskinfo)
+
         except Exception as e:
             # Log any failures so we don't block future checks.
             logger.critical(f"Unexpected failure in task {task}")
             logger.exception(e)
 
-            # Call cancel() on the Deferred before we remove it
-            reactor.callLater(0, state.active_tasks[task].cancel)
-
-            # Stop tracking this task so we don't continue failing on it
-            remove_tasks.append(task)
-
-    for task in remove_tasks:
-        del state.active_tasks[task]
+            # Try to claim the Deferred and cancel it
+            deferred = state.active_tasks.pop(task, None)
+            if deferred is not None:
+                reactor.callLater(0, deferred.cancel)
 
 
 async def check_tags():
-    remove_nvrs = dict[str, set[str]]()
-    for tag in state.pending_nvr_tags.keys():
-        remove_nvrs[tag] = set()
-        # Create a dictionary of nvrs and deferreds for the tag
-        nvrs_and_deferreds = dict()
-        for nvr, deferred in state.pending_nvr_tags.get_nvrs_from_tag(tag):
-            nvrs_and_deferreds[nvr] = deferred
+    # Snapshot the tag keys to avoid issues with dict changing during iteration
+    for tag in list(state.pending_nvr_tags.keys()):
+        # Collect only NVR names (not Deferreds) before the await.
+        # This avoids holding Deferred references across the yield point,
+        # which could lead to duplicate callbacks if a message handler
+        # claims the same Deferred during the await.
+        watched_nvrs = {nvr for nvr, _ in state.pending_nvr_tags.get_nvrs_from_tag(tag)}
+
+        if not watched_nvrs:
+            continue
 
         # Get the complete list of builds tagged into the tag
         builds = await kojihelpers.tags.get_nvrs_from_tag(tag)
 
-        # Iterate over the builds and check if they are in the set of NVRs
-        # and call the deferred if they are.
+        # For each build we're watching, atomically pop and fire callback.
+        # If pop raises KeyError, a message handler already claimed it.
         for nvr in builds.keys():
-            if nvr in nvrs_and_deferreds:
-                reactor.callLater(0, fire_callback, nvrs_and_deferreds[nvr], nvr)
-                remove_nvrs[tag].add(nvr)
-
-    for tag in remove_nvrs.keys():
-        for nvr in remove_nvrs[tag]:
-            state.pending_nvr_tags.pop(tag, nvr)
+            if nvr in watched_nvrs:
+                try:
+                    deferred = state.pending_nvr_tags.pop(tag, nvr)
+                    reactor.callLater(0, fire_callback, deferred, nvr)
+                except KeyError:
+                    # Already claimed by a message handler
+                    # We will just log this and avoid calling the callback again
+                    logger.debug(
+                        f"NVR {nvr} already handled by a message handler, ignoring."
+                    )
 
 
 def fire_callback(deferred, *data):
