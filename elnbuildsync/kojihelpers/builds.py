@@ -1,5 +1,5 @@
 # This file is part of ELNBuildSync
-# Copyright (C) 2023  Stephen Gallagher <sgallagh@redhat.com>
+# Copyright (C) 2023-2026 Stephen Gallagher <sgallagh@redhat.com>
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -70,6 +70,44 @@ async def get_buildinfo(which_bsys, build_id, **kwargs):
         ) from e
 
     return buildinfo
+
+
+def _get_multi_buildinfo_thread(which_bsys, build_ids, **kwargs):
+    bsys = get_buildsys(which_bsys)
+    build_vcalls = dict()
+
+    with bsys.multicall(batch=config.koji_batch) as mc:
+        for build_id in build_ids:
+            build_vcalls[build_id] = mc.getBuild(build_id, **kwargs)
+
+    results = dict()
+    for build_id, vcall in build_vcalls.items():
+        results[build_id] = vcall.result
+
+    return results
+
+
+async def get_multi_buildinfo(which_bsys, build_ids, **kwargs):
+    """
+    Get information about multiple builds using multicall
+
+    :param which_bsys: Which build system to query ("source" or "destination")
+    :param build_ids: List of build IDs to retrieve
+    :param kwargs: Additional arguments passed to getBuild
+    :returns: A dictionary mapping build_id -> buildinfo dict
+    """
+    if not build_ids:
+        return dict()
+
+    try:
+        results = await call_koji(
+            _get_multi_buildinfo_thread, which_bsys, build_ids, **kwargs
+        )
+    except koji.GenericError as e:
+        logger.exception(f"Could not retrieve information for builds {build_ids}")
+        raise InfoUnavailableError(f"Could not retrieve information for builds") from e
+
+    return results
 
 
 async def get_taskinfo(which_bsys, task_id, **kwargs):

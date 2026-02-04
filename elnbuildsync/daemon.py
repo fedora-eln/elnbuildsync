@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 # This file is part of ELNBuildSync
-# Copyright (C) 2023  Stephen Gallagher <sgallagh@redhat.com>
+# Copyright (C) 2023-2026 Stephen Gallagher <sgallagh@redhat.com>
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -95,7 +95,7 @@ def main(log_level, dry_run, lull_time, config_url, config_file, db_pw_file, unt
     for handler in logging.root.handlers:
         handler.addFilter(log_filter)
     logger.debug("Debug logging enabled")
-    logging.getLogger('backoff').addHandler(logging.StreamHandler())
+    logging.getLogger("backoff").addHandler(logging.StreamHandler())
 
     config.dry_run = dry_run
     config.do_untagging = untagging
@@ -154,6 +154,10 @@ async def _main(reactor, db_pw_file, config_url=None, config_file=None) -> None:
         # does not always send out an AMQP message as expected
         listener.task_check_processor = task.LoopingCall(listener.check_tasks)
         listener.task_check_processor.start(config.task_check_timer, now=False)
+
+        # Schedule periodic tag checking
+        listener.tag_check_processor = task.LoopingCall(listener.check_tags)
+        listener.tag_check_processor.start(config.tag_check_timer, now=False)
 
         # Start listening for Fedora Messages
         fedora_messaging.api.twisted_consume(listener.message_handler)

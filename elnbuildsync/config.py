@@ -1,5 +1,5 @@
 # This file is part of ELNBuildSync
-# Copyright (C) 2023  Stephen Gallagher <sgallagh@redhat.com>
+# Copyright (C) 2023-2026 Stephen Gallagher <sgallagh@redhat.com>
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -51,6 +51,7 @@ config_timer = 15 * 60  # 15 minutes
 cleanup_timer = 12 * 60 * 60  # 12 hours
 status_timer = 10 * 60  # 10 minutes
 task_check_timer = 5 * 60  # 5 minutes
+tag_check_timer = 5 * 60  # 5 minutes
 task_timeout = 24 * 60 * 60  # 24 hours
 tag_timeout = 1 * 60 * 60  # 1 hour
 message_batch_timer = 60  # 1 minute

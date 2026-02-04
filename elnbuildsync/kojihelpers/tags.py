@@ -1,5 +1,5 @@
 # This file is part of ELNBuildSync
-# Copyright (C) 2023  Stephen Gallagher <sgallagh@redhat.com>
+# Copyright (C) 2023-2026 Stephen Gallagher <sgallagh@redhat.com>
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,11 +20,12 @@ import logging
 
 from cachetools import cached, LRUCache
 from twisted.internet import reactor
-from twisted.internet.defer import Deferred
+from twisted.internet.defer import DeferredList
 from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 from .connection import call_koji
 
 from .. import kojihelpers
+from .. import listener
 from .connection import get_buildsys
 
 from .. import config
@@ -55,21 +56,55 @@ async def prepare_side_tag(base_tag, initial_build_ids=list()):
     logger.debug(f"Side {side_tag_name} created.")
 
     if initial_build_ids:
-        task_index = await tag_builds(side_tag_name, initial_build_ids)
-        await kojihelpers.builds.wait_for_tasks(
-            task_index.values(), timeout=config.tag_timeout
+        # Convert builds to nvrs to make logging easier
+        buildinfos = await kojihelpers.builds.get_multi_buildinfo(
+            "destination", initial_build_ids
         )
+        nvrs = [buildinfo["nvr"] for buildinfo in buildinfos.values()]
+
+        # Tag the builds
+        # We'll ignore the task index here, since we're actually going to
+        # monitor the tag, rather than the tasks.
+        _ = await tag_builds(side_tag_name, nvrs)
+
+        # Wait for the builds to appear in the tag
+        results = await wait_for_nvrs_in_tag(side_tag_name, nvrs)
+        for success, value in results:
+            if success:
+                logger.info(f"Build {value} tagged into {side_tag_name}")
+            else:
+                # The most likely scenario here is that the tagging timed out,
+                # so we'll just proceed. Failures here are not really
+                # recoverable. Log and continue.
+                logger.error(
+                    f"Build failed to tag into {side_tag_name}", exc_info=value
+                )
 
     return side_tag_name
 
 
-async def tag_builds(tag, builds):
-    task_index = await call_koji(_tag_builds_thread, tag, builds)
-    logger.debug(f"Tagged {len(builds)} builds into {tag}")
+async def tag_builds(tag, build_ids):
+    """
+    Tag a list of builds into a tag.
+
+    :params str tag: The tag name to tag into
+    :params list build_ids: The list of nvrs or build IDs to tag
+    :return dict: A dictionary of task_id -> Koji vcall
+    """
+    task_index = await call_koji(_tag_builds_thread, tag, build_ids)
+    logger.debug(f"Tagged {len(build_ids)} builds into {tag}")
+
     return task_index
 
 
 def _tag_builds_thread(tag, build_ids):
+    """
+    Tag a list of nvrs into a tag.
+
+    :params str tag: The tag name to tag into
+    :params list build_ids: The list of nvrs or build IDs to tag
+    :return dict: A dictionary of task_id -> Koji vcall
+    """
     downstream_koji = get_buildsys("destination")
     build_vcalls = dict()
 
@@ -133,3 +168,34 @@ async def remove_side_tag(side_tag):
 def _remove_side_tag_thread(side_tag):
     bsys = kojihelpers.connection.get_buildsys("destination")
     bsys.removeSideTag(side_tag)
+
+
+async def wait_for_nvrs_in_tag(tag, nvrs):
+    """
+    Wait for a list of nvrs to appear in a tag.
+
+    :params str tag: The tag name to wait for
+    :params list nvrs: The list of nvrs to wait for
+    :return list: A list of results
+    """
+    logger.info(f"Waiting for {len(nvrs)} nvrs to appear in tag {tag}")
+
+    deferreds = list()
+    for nvr in nvrs:
+        deferred = listener.register_nvr_tag(tag, nvr, timeout=config.tag_timeout)
+        deferreds.append(deferred)
+
+    result = await DeferredList(deferreds, consumeErrors=True)
+    return result
+
+
+async def get_nvrs_from_tag(tag):
+    """
+    Get the list of builds tagged into a tag.
+
+    :params str tag: The tag name to get builds from
+    :return dict: A dictionary of nvr -> buildinfo
+    """
+    bsys = kojihelpers.connection.get_buildsys("destination")
+    builds = await call_koji(bsys.listTagged, tag, latest=False, inherit=True)
+    return {build["nvr"]: build for build in builds}
