@@ -228,6 +228,37 @@ class TriggerBuildResource(Resource):
         request.setHeader("Content-Type", "text/html; charset=utf-8")
         request.setHeader("Cache-Control", "no-cache")
 
+        # Optional: show authorization token for use with curl (Bearer header)
+        show_token = request.args.get(b"show_token", [b""])[0] in (
+            b"1",
+            b"true",
+            b"yes",
+        )
+        token_block = ""
+        if show_token:
+            session_id = auth.get_bearer_token(request) or auth.get_session_cookie(
+                request
+            )
+            if session_id:
+                trigger_url = _get_base_url(request) + "/trigger"
+                curl_example = (
+                    f'curl -X POST -H "Content-Type: application/json" '
+                    f'-H "Authorization: Bearer {session_id}" '
+                    f'-d \'["bash", "glibc"]\' {trigger_url}'
+                )
+                token_block = f"""
+<h2>Authorization token for curl</h2>
+<p>Use this token in the <code>Authorization: Bearer</code> header:</p>
+<pre style="background:#f5f5f5; padding: 0.5em; overflow-x: auto;">{session_id}</pre>
+<h2>Example curl command</h2>
+<pre style="background:#f5f5f5; padding: 0.5em; overflow-x: auto;">{curl_example}</pre>
+<p><a href="/trigger">Hide token</a></p>
+"""
+            else:
+                token_block = "<p>Could not determine session token.</p>"
+        else:
+            token_block = '<p><a href="/trigger?show_token=1">Display authorization token for curl</a></p>'
+
         html = f"""<!DOCTYPE html>
 <html>
 <head><title>ELN Build Trigger</title></head>
@@ -236,6 +267,7 @@ class TriggerBuildResource(Resource):
 <p>Logged in as: <strong>{user["username"]}</strong></p>
 <p>Groups: {", ".join(user["groups"])}</p>
 <p>To trigger builds, POST a JSON array of component names to this endpoint.</p>
+{token_block}
 <p><a href="/logout">Logout</a></p>
 </body>
 </html>"""
@@ -354,6 +386,9 @@ async def _check_request_auth(request):
     """
     Check if the request is authenticated.
 
+    Accepts either the session cookie or Authorization: Bearer <session_id>
+    (the session ID can be used as a Bearer token for curl/API usage).
+
     Returns:
         dict with user info if authenticated, None otherwise.
         When auth is not configured, returns anonymous user dict.
@@ -361,7 +396,7 @@ async def _check_request_auth(request):
     if not auth.is_auth_enabled():
         return {"username": "anonymous", "groups": []}
 
-    session_id = auth.get_session_cookie(request)
+    session_id = auth.get_bearer_token(request) or auth.get_session_cookie(request)
     if not session_id:
         return None
 

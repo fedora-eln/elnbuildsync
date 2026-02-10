@@ -344,6 +344,30 @@ def get_session_cookie(request) -> Optional[str]:
     return None
 
 
+def get_bearer_token(request) -> Optional[str]:
+    """
+    Extract the Bearer token from the Authorization header.
+
+    The same session ID used as a cookie can be passed as a Bearer token
+    for API usage (e.g. curl).
+
+    Args:
+        request: Twisted web request object
+
+    Returns:
+        The token string or None if no Bearer authorization is present
+    """
+    authz = request.getHeader("Authorization")
+    if not authz:
+        return None
+    if isinstance(authz, bytes):
+        authz = authz.decode("utf-8")
+    prefix = "Bearer "
+    if authz.startswith(prefix):
+        return authz[len(prefix) :].strip()
+    return None
+
+
 def set_session_cookie(request, session_id: str, secure: bool = True):
     """
     Set the session cookie on the response.
