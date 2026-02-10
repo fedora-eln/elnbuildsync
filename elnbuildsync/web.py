@@ -49,8 +49,8 @@ alive = True
 
 class RootResource(Resource):
     def getChild(self, name, request):
-        if name == "":
-            return self
+        if name == b"":
+            return Redirect(b"/status.html")
         return Resource.getChild(self, name, request)
 
 
