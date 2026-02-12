@@ -66,9 +66,7 @@ async def create_status_page():
             component for component in sorted(config.comps["rpms"], key=str.lower)
         ]
 
-        bsys = kojihelpers.connection.get_buildsys(
-            kojihelpers.connection.BuildSystemType.destination
-        )
+        bsys = kojihelpers.connection.get_buildsys()
 
         try:
             # Self-identify

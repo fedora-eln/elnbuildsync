@@ -205,9 +205,7 @@ async def check_tasks():
 
     for task in watched_tasks:
         try:
-            taskinfo = await kojihelpers.builds.get_taskinfo(
-                "destination", task, request=True
-            )
+            taskinfo = await kojihelpers.builds.get_taskinfo(task, request=True)
 
             # Atomically pop the task and claim ownership of the Deferred.
             # If a message handler already claimed it during the await, skip.

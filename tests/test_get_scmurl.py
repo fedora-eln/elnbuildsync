@@ -40,9 +40,7 @@ logger = logging.getLogger(__name__)
 @inlineCallbacks
 def test_get_scmurl():
     try:
-        buildinfo = yield elnbuildsync.kojihelpers.builds.get_buildinfo(
-            "source", 2229572
-        )
+        buildinfo = yield elnbuildsync.kojihelpers.builds.get_buildinfo(2229572)
     except Exception as e:
         logger.critical(f"Buildinfo lookup failed", exc_info=True)
         reactor.stop()

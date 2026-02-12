@@ -377,40 +377,38 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
     n = dict()
     if "configuration" in y:
         cnf = y["configuration"]
-        for k in ("source", "destination"):
-            if k in cnf:
-                n[k] = dict()
-                if "scm" in cnf[k]:
-                    n[k]["scm"] = str(cnf[k]["scm"])
-                else:
-                    raise ConfigError("%s.scm missing.", k)
+        if "build_system" not in cnf:
+            raise ConfigError("build_system missing.")
+        k = "build_system"
+        n[k] = dict()
+        if "scm" in cnf[k]:
+            n[k]["scm"] = str(cnf[k]["scm"])
+        else:
+            raise ConfigError("%s.scm missing.", k)
 
-                if "cache" in cnf[k]:
-                    n[k]["cache"] = dict()
-                    for kc in ("url", "cgi", "path"):
-                        if kc in cnf[k]["cache"]:
-                            n[k]["cache"][kc] = str(cnf[k]["cache"][kc])
-                        else:
-                            raise ConfigError(
-                                "%s.cache.%s missing.",
-                                k,
-                                kc,
-                            )
+        if "cache" in cnf[k]:
+            n[k]["cache"] = dict()
+            for kc in ("url", "cgi", "path"):
+                if kc in cnf[k]["cache"]:
+                    n[k]["cache"][kc] = str(cnf[k]["cache"][kc])
                 else:
-                    raise ConfigError("%s.cache missing.", k)
+                    raise ConfigError(
+                        "%s.cache.%s missing.",
+                        k,
+                        kc,
+                    )
+        else:
+            raise ConfigError("%s.cache missing.", k)
 
-                if "profile" in cnf[k]:
-                    n[k]["profile"] = str(cnf[k]["profile"])
-                else:
-                    raise ConfigError("%s.profile missing.", k)
+        if "profile" in cnf[k]:
+            n[k]["profile"] = str(cnf[k]["profile"])
+        else:
+            raise ConfigError("%s.profile missing.", k)
 
-                if "mbs" in cnf[k]:
-                    n[k]["mbs"] = cnf[k]["mbs"]
-                else:
-                    raise ConfigError("%s.mbs missing.", k)
-
-            else:
-                raise ConfigError("%s missing.", k)
+        if "mbs" in cnf[k]:
+            n[k]["mbs"] = cnf[k]["mbs"]
+        else:
+            raise ConfigError("%s.mbs missing.", k)
 
         if "trigger" in cnf:
             n["trigger"] = dict()

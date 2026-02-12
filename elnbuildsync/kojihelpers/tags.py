@@ -47,7 +47,7 @@ async def prepare_side_tag(base_tag, initial_build_ids=list()):
     the repo is ready for use.
     """
 
-    downstream_koji = get_buildsys("destination")
+    downstream_koji = get_buildsys()
     # Trigger the creation of the side-tag
     logger.info(f"Creating side tag from {base_tag}")
     side_tag_info = await call_koji(downstream_koji.createSideTag, base_tag)
@@ -57,9 +57,7 @@ async def prepare_side_tag(base_tag, initial_build_ids=list()):
 
     if initial_build_ids:
         # Convert builds to nvrs to make logging easier
-        buildinfos = await kojihelpers.builds.get_multi_buildinfo(
-            "destination", initial_build_ids
-        )
+        buildinfos = await kojihelpers.builds.get_multi_buildinfo(initial_build_ids)
         nvrs = [buildinfo["nvr"] for buildinfo in buildinfos.values()]
 
         # Tag the builds
@@ -105,7 +103,7 @@ def _tag_builds_thread(tag, build_ids):
     :params list build_ids: The list of nvrs or build IDs to tag
     :return dict: A dictionary of task_id -> Koji vcall
     """
-    downstream_koji = get_buildsys("destination")
+    downstream_koji = get_buildsys()
     build_vcalls = dict()
 
     try:
@@ -133,7 +131,7 @@ async def untag_builds(tag, builds):
 
 
 def _untag_builds_thread(tag, build_ids):
-    downstream_koji = get_buildsys("destination")
+    downstream_koji = get_buildsys()
 
     with downstream_koji.multicall(batch=config.koji_batch) as mc:
         logger.info(f"Untagging {len(build_ids)} builds from {tag}")
@@ -155,7 +153,7 @@ async def get_tags_for_target(target):
 
 @cached(cache=LRUCache(maxsize=4))
 def _get_tags_for_target_thread(target):
-    bsys = kojihelpers.connection.get_buildsys("destination")
+    bsys = kojihelpers.connection.get_buildsys()
     targetinfo = bsys.getBuildTarget(target)
     logger.debug(f"Target info: {targetinfo}")
     return targetinfo["build_tag_name"], targetinfo["dest_tag_name"]
@@ -166,7 +164,7 @@ async def remove_side_tag(side_tag):
 
 
 def _remove_side_tag_thread(side_tag):
-    bsys = kojihelpers.connection.get_buildsys("destination")
+    bsys = kojihelpers.connection.get_buildsys()
     bsys.removeSideTag(side_tag)
 
 
@@ -196,6 +194,6 @@ async def get_nvrs_from_tag(tag):
     :params str tag: The tag name to get builds from
     :return dict: A dictionary of nvr -> buildinfo
     """
-    bsys = kojihelpers.connection.get_buildsys("destination")
+    bsys = kojihelpers.connection.get_buildsys()
     builds = await call_koji(bsys.listTagged, tag, latest=False, inherit=True)
     return {build["nvr"]: build for build in builds}

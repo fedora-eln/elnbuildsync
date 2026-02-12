@@ -42,7 +42,7 @@ async def get_scmurl(build_id):
 
     logger.debug(f"Retrieving SCM URL for {build_id}")
     try:
-        buildinfo = await get_buildinfo("source", build_id)
+        buildinfo = await get_buildinfo(build_id)
     except Exception as e:
         logger.exception("Unexpected error retrieving SCM URL")
         raise
@@ -52,14 +52,14 @@ async def get_scmurl(build_id):
     return buildinfo["source"]
 
 
-async def get_buildinfo(which_bsys, build_id, **kwargs):
+async def get_buildinfo(build_id, **kwargs):
     """
     Get all information about a particular build
 
     :param build_id: The ID of the build (likely retrieved from a tagging message)
     :returns: A dictionary of information about the build
     """
-    bsys = get_buildsys(which_bsys)
+    bsys = get_buildsys()
 
     try:
         buildinfo = await call_koji(bsys.getBuild, build_id, **kwargs)
@@ -72,8 +72,8 @@ async def get_buildinfo(which_bsys, build_id, **kwargs):
     return buildinfo
 
 
-def _get_multi_buildinfo_thread(which_bsys, build_ids, **kwargs):
-    bsys = get_buildsys(which_bsys)
+def _get_multi_buildinfo_thread(build_ids, **kwargs):
+    bsys = get_buildsys()
     build_vcalls = dict()
 
     with bsys.multicall(batch=config.koji_batch) as mc:
@@ -87,11 +87,10 @@ def _get_multi_buildinfo_thread(which_bsys, build_ids, **kwargs):
     return results
 
 
-async def get_multi_buildinfo(which_bsys, build_ids, **kwargs):
+async def get_multi_buildinfo(build_ids, **kwargs):
     """
     Get information about multiple builds using multicall
 
-    :param which_bsys: Which build system to query ("source" or "destination")
     :param build_ids: List of build IDs to retrieve
     :param kwargs: Additional arguments passed to getBuild
     :returns: A dictionary mapping build_id -> buildinfo dict
@@ -100,9 +99,7 @@ async def get_multi_buildinfo(which_bsys, build_ids, **kwargs):
         return dict()
 
     try:
-        results = await call_koji(
-            _get_multi_buildinfo_thread, which_bsys, build_ids, **kwargs
-        )
+        results = await call_koji(_get_multi_buildinfo_thread, build_ids, **kwargs)
     except koji.GenericError as e:
         logger.exception(f"Could not retrieve information for builds {build_ids}")
         raise InfoUnavailableError(f"Could not retrieve information for builds") from e
@@ -110,8 +107,8 @@ async def get_multi_buildinfo(which_bsys, build_ids, **kwargs):
     return results
 
 
-async def get_taskinfo(which_bsys, task_id, **kwargs):
-    bsys = get_buildsys(which_bsys)
+async def get_taskinfo(task_id, **kwargs):
+    bsys = get_buildsys()
 
     try:
         taskinfo = await call_koji(bsys.getTaskInfo, task_id, **kwargs)
@@ -180,7 +177,7 @@ async def start_builds(target, scm_urls, scratch=False, fail_fast=False):
 
 
 def _start_builds_thread(target, scm_urls, scratch=False, fail_fast=False):
-    bsys = get_buildsys("destination")
+    bsys = get_buildsys()
     build_vcalls = dict()
     try:
         with bsys.multicall(batch=config.koji_batch) as mc:
@@ -236,7 +233,7 @@ async def wait_for_tasks(task_ids, timeout=config.task_timeout):
 async def cancel_task(task_id):
     logger.debug(f"Canceling task {task_id}")
     try:
-        bsys = get_buildsys("destination")
+        bsys = get_buildsys()
         await call_koji(bsys.cancelTask, task_id, recurse=True)
     except Exception as e:
         # Cancellation is best-effort

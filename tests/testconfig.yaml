@@ -1,13 +1,5 @@
 configuration:
-  source:
-    scm: https://src.fedoraproject.org
-    cache:
-      url: https://src.fedoraproject.org/repo/pkgs
-      cgi: https://src.fedoraproject.org/repo/pkgs/upload.cgi
-      path: "%(name)s/%(filename)s/%(hashtype)s/%(hash)s/%(filename)s"
-    profile: koji
-    mbs: https://mbs.fedoraproject.org
-  destination:
+  build_system:
     scm: https://src.fedoraproject.org
     cache:
       url: https://src.fedoraproject.org/repo/pkgs

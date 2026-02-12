@@ -58,9 +58,9 @@ def test_config_file(requests_mock):
         sys.exit(128)
 
     assert elnbuildsync.config.main
-    assert "destination" in elnbuildsync.config.main
-    assert "profile" in elnbuildsync.config.main["destination"]
-    assert elnbuildsync.config.main["destination"]["profile"] == "stg"
+    assert "build_system" in elnbuildsync.config.main
+    assert "profile" in elnbuildsync.config.main["build_system"]
+    assert elnbuildsync.config.main["build_system"]["profile"] == "koji"
 
     assert "trigger" in elnbuildsync.config.main
     assert "rpms" in elnbuildsync.config.main["trigger"]
