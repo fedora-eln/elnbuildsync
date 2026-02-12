@@ -28,6 +28,13 @@ classifiers = [
 [project.scripts]
 elnbuildsync = "elnbuildsync:main"
 
+[project.optional-dependencies]
+test = ["pytest>=7", "pytest-asyncio>=0.21"]
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+asyncio_mode = "auto"
+testpaths = ["tests"]
 
 [build-system]
 requires = ["setuptools >= 40.6.0", "wheel"]
