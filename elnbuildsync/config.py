@@ -311,6 +311,180 @@ async def get_rawhide_tag():
     return stable_tag
 
 
+def _parse_open_id_connect(oidc_raw):
+    """Parse OpenID Connect configuration. Returns None if disabled, else a dict.
+    Raises ConfigError on invalid or missing required fields.
+    """
+    if oidc_raw is False:
+        logger.info(
+            "OpenID Connect explicitly disabled - /trigger endpoint unprotected"
+        )
+        return None
+    oidc = oidc_raw
+    default_scopes = [
+        "openid",
+        "profile",
+        "https://id.fedoraproject.org/scope/groups",
+    ]
+    required_fields = [
+        "auth_url",
+        "client_id",
+        "client_secret",
+        "token_endpoint",
+        "admin_groups",
+    ]
+    for field in required_fields:
+        if field not in oidc:
+            raise ConfigError(f"open_id_connect.{field} missing.")
+    result = {
+        "auth_url": str(oidc["auth_url"]),
+        "client_id": str(oidc["client_id"]),
+        "client_secret": str(oidc["client_secret"]),
+        "token_endpoint": str(oidc["token_endpoint"]),
+        "userinfo_endpoint": str(oidc.get("userinfo_endpoint", "")),
+        "scopes": list(oidc.get("scopes", default_scopes)),
+        "admin_groups": list(oidc["admin_groups"]),
+    }
+    logger.info(
+        "OpenID Connect authentication enabled; admin groups: %s",
+        result["admin_groups"],
+    )
+    return result
+
+
+def _parse_build(cnf_build):
+    """Parse build configuration. Returns dict with target, scratch, fail_fast."""
+    if "target" not in cnf_build:
+        raise ConfigError("build.target missing.")
+    result = {"target": str(cnf_build["target"])}
+    if "scratch" in cnf_build:
+        result["scratch"] = bool(cnf_build["scratch"])
+    else:
+        logger.warning(
+            "Configuration warning: build.scratch not defined, assuming false."
+        )
+        result["scratch"] = False
+    if "fail_fast" in cnf_build:
+        result["fail_fast"] = bool(cnf_build["fail_fast"])
+    else:
+        logger.warning(
+            "Configuration warning: build.fail_fast not defined, assuming false."
+        )
+        result["fail_fast"] = False
+    return result
+
+
+def _parse_control(cnf_control):
+    """Parse control configuration. Returns dict with pause, strict, db, etc."""
+    result = dict()
+    for k in ("pause", "strict"):
+        if k in cnf_control:
+            result[k] = bool(cnf_control[k])
+        else:
+            raise ConfigError(f"control.{k} missing.")
+
+    result["update_batch_size"] = 0
+    if "update_batch_size" in cnf_control:
+        try:
+            result["update_batch_size"] = int(cnf_control["update_batch_size"])
+        except ValueError:
+            raise ConfigError("control.update_batch_size must be an integer")
+
+    result["autopackagelist"] = None
+    if "autopackagelist" in cnf_control:
+        result["autopackagelist"] = cnf_control["autopackagelist"]
+
+    result["skip_tag"] = {"rpms": set(), "modules": set()}
+    if "skip_tag" in cnf_control:
+        for cns in ("rpms", "modules"):
+            if cns in cnf_control["skip_tag"]:
+                result["skip_tag"][cns].update(cnf_control["skip_tag"][cns])
+
+    result["exclude"] = {"rpms": set(), "modules": set()}
+    if "exclude" in cnf_control:
+        for cns in ("rpms", "modules"):
+            if cns in cnf_control["exclude"]:
+                result["exclude"][cns].update(cnf_control["exclude"][cns])
+
+    try:
+        result["db"] = cnf_control["db"]
+    except KeyError as e:
+        logger.exception(e)
+        raise ConfigError("Missing database configuration")
+
+    for cns in ("rpms", "modules"):
+        if result["exclude"][cns]:
+            logger.info(
+                "Excluding %d component(s) from the %s namespace.",
+                len(result["exclude"][cns]),
+                cns,
+            )
+        else:
+            logger.info(
+                "Not excluding any components from the %s namespace.",
+                cns,
+            )
+    result["ordering"] = {"rpms": dict(), "modules": dict()}
+    if "ordering" in cnf_control:
+        for cns in ("rpms", "modules"):
+            if cns in cnf_control["ordering"]:
+                result["ordering"][cns].update(cnf_control["ordering"][cns])
+    return result
+
+
+def _parse_defaults(cnf_defaults):
+    """Parse defaults configuration. Returns dict with cache, rpms, modules."""
+    result = dict()
+    for dk in ("cache", "rpms", "modules"):
+        if dk in cnf_defaults:
+            result[dk] = dict()
+            for dkk in ("source", "destination"):
+                if dkk in cnf_defaults[dk]:
+                    result[dk][dkk] = str(cnf_defaults[dk][dkk])
+                else:
+                    logger.error(
+                        "Configuration error: defaults.%s.%s missing.",
+                        dk,
+                        dkk,
+                    )
+        else:
+            raise ConfigError(f"defaults.{dk} missing.")
+    return result
+
+
+def _parse_configuration_block(cnf):
+    """Parse the full configuration block (no rawhide resolution, no components).
+    Returns dict n with koji_profile, trigger_tag, open_id_connect, build, control, defaults.
+    """
+    if "koji_profile" not in cnf:
+        raise ConfigError("koji_profile missing.")
+    n = {"koji_profile": str(cnf["koji_profile"])}
+
+    if "trigger_tag" not in cnf:
+        raise ConfigError("trigger_tag missing.")
+    n["trigger_tag"] = str(cnf["trigger_tag"])
+
+    if "open_id_connect" not in cnf:
+        raise ConfigError(
+            "open_id_connect missing. Set open_id_connect: false to disable authentication."
+        )
+    n["open_id_connect"] = _parse_open_id_connect(cnf["open_id_connect"])
+
+    if "build" not in cnf:
+        raise ConfigError("build missing.")
+    n["build"] = _parse_build(cnf["build"])
+
+    if "control" not in cnf:
+        raise ConfigError("control missing.")
+    n["control"] = _parse_control(cnf["control"])
+
+    if "defaults" not in cnf:
+        raise ConfigError("defaults missing.")
+    n["defaults"] = _parse_defaults(cnf["defaults"])
+
+    return n
+
+
 # FIXME: This needs even more error checking, e.g.
 #         - check if blocks are actual dictionaries
 #         - check if certain values are what we expect
@@ -374,184 +548,21 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
             logger.info(e)
             raise ConfigError(f"Could not parse {config_file}.")
 
-    n = dict()
-    if "configuration" in y:
-        cnf = y["configuration"]
-        if "koji_profile" not in cnf:
-            raise ConfigError("koji_profile missing.")
-        n["koji_profile"] = str(cnf["koji_profile"])
-
-        if "trigger_tag" not in cnf:
-            raise ConfigError("trigger_tag missing.")
-        n["trigger_tag"] = str(cnf["trigger_tag"])
-
-        # Parse OpenID Connect configuration (mandatory unless explicitly disabled)
-        if "open_id_connect" not in cnf:
-            raise ConfigError(
-                "open_id_connect missing. Set open_id_connect: false to disable authentication."
-            )
-        oidc_raw = cnf["open_id_connect"]
-        if oidc_raw is False:
-            n["open_id_connect"] = None
-            logger.info(
-                "OpenID Connect explicitly disabled - /trigger endpoint unprotected"
-            )
-        else:
-            oidc = oidc_raw
-            # Default scopes for Fedora OIDC (groups scope required for authorization)
-            default_scopes = [
-                "openid",
-                "profile",
-                "https://id.fedoraproject.org/scope/groups",
-            ]
-            required_fields = [
-                "auth_url",
-                "client_id",
-                "client_secret",
-                "token_endpoint",
-                "admin_groups",
-            ]
-            for field in required_fields:
-                if field not in oidc:
-                    raise ConfigError(f"open_id_connect.{field} missing.")
-            n["open_id_connect"] = {
-                "auth_url": str(oidc["auth_url"]),
-                "client_id": str(oidc["client_id"]),
-                "client_secret": str(oidc["client_secret"]),
-                "token_endpoint": str(oidc["token_endpoint"]),
-                "userinfo_endpoint": str(oidc.get("userinfo_endpoint", "")),
-                "scopes": list(oidc.get("scopes", default_scopes)),
-                "admin_groups": list(oidc["admin_groups"]),
-            }
-            logger.info(
-                "OpenID Connect authentication enabled; admin groups: %s",
-                n["open_id_connect"]["admin_groups"],
-            )
-
-        # Handle auto-configuration of the trigger for Rawhide
-        if n["trigger_tag"] == "rawhide":
-            n["trigger_tag"] = await get_rawhide_tag()
-            logger.info(f"Detected rawhide tag {n['trigger_tag']}")
-
-        if "build" in cnf:
-            n["build"] = dict()
-            if "target" not in cnf["build"]:
-                raise ConfigError("build.target missing.")
-            n["build"]["target"] = str(cnf["build"]["target"])
-
-            if "scratch" in cnf["build"]:
-                n["build"]["scratch"] = bool(cnf["build"]["scratch"])
-            else:
-                logger.warning(
-                    "Configuration warning: build.scratch not defined, assuming false."
-                )
-                n["build"]["scratch"] = False
-            if "fail_fast" in cnf["build"]:
-                n["build"]["fail_fast"] = bool(cnf["build"]["fail_fast"])
-            else:
-                logger.warning(
-                    "Configuration warning: build.fail_fast not defined, assuming false."
-                )
-                n["build"]["fail_fast"] = False
-        else:
-            raise ConfigError("build missing.")
-
-        if "control" in cnf:
-            n["control"] = dict()
-            for k in ("pause", "strict"):
-                if k in cnf["control"]:
-                    n["control"][k] = bool(cnf["control"][k])
-                else:
-                    raise ConfigError("control.%s missing.", k)
-
-            # If update_batch_size is not set, set it to 0 (unlimited batch
-            # size)
-            n["control"]["update_batch_size"] = 0
-            if "update_batch_size" in cnf["control"]:
-                try:
-                    n["control"]["update_batch_size"] = int(
-                        cnf["control"]["update_batch_size"]
-                    )
-                except ValueError:
-                    raise ConfigError("control.update_batch_size must be an integer")
-
-            n["control"]["autopackagelist"] = None
-            if "autopackagelist" in cnf["control"]:
-                n["control"]["autopackagelist"] = cnf["control"]["autopackagelist"]
-
-            n["control"]["skip_tag"] = {"rpms": set(), "modules": set()}
-            if "skip_tag" in cnf["control"]:
-                for cns in ("rpms", "modules"):
-                    if cns in cnf["control"]["skip_tag"]:
-                        n["control"]["skip_tag"][cns].update(
-                            cnf["control"]["skip_tag"][cns]
-                        )
-
-            n["control"]["exclude"] = {"rpms": set(), "modules": set()}
-            if "exclude" in cnf["control"]:
-                for cns in ("rpms", "modules"):
-                    if cns in cnf["control"]["exclude"]:
-                        n["control"]["exclude"][cns].update(
-                            cnf["control"]["exclude"][cns]
-                        )
-
-            try:
-                n["control"]["db"] = cnf["control"]["db"]
-            except KeyError as e:
-                logger.exception(e)
-                raise ConfigError("Missing database configuration")
-
-            for cns in ("rpms", "modules"):
-                if n["control"]["exclude"]["rpms"]:
-                    logger.info(
-                        "Excluding %d component(s) from the %s namespace.",
-                        len(n["control"]["exclude"][cns]),
-                        cns,
-                    )
-                else:
-                    logger.info(
-                        "Not excluding any components from the %s namespace.",
-                        cns,
-                    )
-            n["control"]["ordering"] = {"rpms": dict(), "modules": dict()}
-            if "ordering" in cnf["control"]:
-                for cns in ("rpms", "modules"):
-                    if cns in cnf["control"]["ordering"]:
-                        n["control"]["ordering"][cns].update(
-                            cnf["control"]["ordering"][cns]
-                        )
-        else:
-            raise ConfigError("control missing.")
-
-        if "defaults" in cnf:
-            n["defaults"] = dict()
-            for dk in ("cache", "rpms", "modules"):
-                if dk in cnf["defaults"]:
-                    n["defaults"][dk] = dict()
-                    for dkk in ("source", "destination"):
-                        if dkk in cnf["defaults"][dk]:
-                            n["defaults"][dk][dkk] = str(cnf["defaults"][dk][dkk])
-                        else:
-                            logger.error(
-                                "Configuration error: defaults.%s.%s missing.",
-                                dk,
-                                dkk,
-                            )
-                else:
-                    raise ConfigError("defaults.%s missing.", dk)
-
-        else:
-            raise ConfigError("defaults missing.")
-
-    else:
+    if "configuration" not in y:
         raise ConfigError("The required configuration block is missing.")
+    cnf = y["configuration"]
+    n = _parse_configuration_block(cnf)
+
+    if n["trigger_tag"] == "rawhide":
+        n["trigger_tag"] = await get_rawhide_tag()
+        logger.info(f"Detected rawhide tag {n['trigger_tag']}")
 
     components = 0
     nc = {"rpms": dict(), "modules": dict()}
     if "components" in y or "autopackagelist" in n["control"]:
         cnf = {}
 
-        if "autopackagelist" in n["control"]:
+        if n["control"].get("autopackagelist"):
             resolver = DEFAULT_CONTENT_RESOLVER
             views = list()
 
