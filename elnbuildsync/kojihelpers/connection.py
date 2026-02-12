@@ -50,7 +50,7 @@ def get_buildsys():
         logger.critical("DistroBuildSync is not configured, aborting.")
         raise BuildSysUnavailable
 
-    profile = config.main["build_system"]["profile"]
+    profile = config.main["koji_profile"]
     logger.debug(
         'Initializing the koji instance with the "%s" profile.',
         profile,
@@ -92,7 +92,7 @@ def get_buildsys():
 
 
 def get_koji_url():
-    cfg = koji.read_config(profile_name=config.main["build_system"]["profile"])
+    cfg = koji.read_config(profile_name=config.main["koji_profile"])
     return cfg["weburl"]
 
 

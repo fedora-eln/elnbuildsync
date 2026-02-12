@@ -377,22 +377,13 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
     n = dict()
     if "configuration" in y:
         cnf = y["configuration"]
-        if "build_system" not in cnf:
-            raise ConfigError("build_system missing.")
-        if "profile" not in cnf["build_system"]:
-            raise ConfigError("build_system.profile missing.")
-        n["build_system"] = {"profile": str(cnf["build_system"]["profile"])}
+        if "koji_profile" not in cnf:
+            raise ConfigError("koji_profile missing.")
+        n["koji_profile"] = str(cnf["koji_profile"])
 
-        if "trigger" in cnf:
-            n["trigger"] = dict()
-            for k in ("rpms", "modules"):
-                if k in cnf["trigger"]:
-                    n["trigger"][k] = str(cnf["trigger"][k])
-                else:
-                    raise ConfigError("trigger.%s missing.", k)
-
-        else:
-            raise ConfigError("trigger missing.")
+        if "trigger_tag" not in cnf:
+            raise ConfigError("trigger_tag missing.")
+        n["trigger_tag"] = str(cnf["trigger_tag"])
 
         # Parse OpenID Connect configuration (mandatory unless explicitly disabled)
         if "open_id_connect" not in cnf:
@@ -438,17 +429,15 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
             )
 
         # Handle auto-configuration of the trigger for Rawhide
-        if n["trigger"]["rpms"] == "rawhide":
-            n["trigger"]["rpms"] = await get_rawhide_tag()
-            logger.info(f"Detected rawhide tag {n['trigger']['rpms']}")
+        if n["trigger_tag"] == "rawhide":
+            n["trigger_tag"] = await get_rawhide_tag()
+            logger.info(f"Detected rawhide tag {n['trigger_tag']}")
 
         if "build" in cnf:
             n["build"] = dict()
-            for k in ("prefix", "target", "platform"):
-                if k in cnf["build"]:
-                    n["build"][k] = str(cnf["build"][k])
-                else:
-                    raise ConfigError("build.%s missing.", k)
+            if "target" not in cnf["build"]:
+                raise ConfigError("build.target missing.")
+            n["build"]["target"] = str(cnf["build"]["target"])
 
             if "scratch" in cnf["build"]:
                 n["build"]["scratch"] = bool(cnf["build"]["scratch"])
@@ -467,20 +456,9 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
         else:
             raise ConfigError("build missing.")
 
-        if "git" in cnf:
-            n["git"] = dict()
-            for k in ("author", "email", "message"):
-                if k in cnf["git"]:
-                    n["git"][k] = str(cnf["git"][k])
-                else:
-                    raise ConfigError("git.%s missing.", k)
-
-        else:
-            raise ConfigError("git missing.")
-
         if "control" in cnf:
             n["control"] = dict()
-            for k in ("build", "merge", "pause", "strict"):
+            for k in ("pause", "strict"):
                 if k in cnf["control"]:
                     n["control"][k] = bool(cnf["control"][k])
                 else:

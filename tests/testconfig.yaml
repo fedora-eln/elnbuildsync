@@ -1,9 +1,6 @@
 configuration:
-  build_system:
-    profile: koji
-  trigger:
-    rpms: eln-test-tag
-    modules: f40-modular
+  koji_profile: koji
+  trigger_tag: f40
 
   # OpenID Connect authentication configuration
   # Uses Fedora tinystage test OIDC server for development/testing
@@ -27,23 +24,10 @@ configuration:
     admin_groups:
       - eln
   build:
-    prefix: git+https://src.fedoraproject.org
     target: eln
-    platform: platform:eln
     scratch: true
     fail_fast: true
-  git:
-    author: DistroBaker
-    email: osci-list@redhat.com
-    message: |
-      Merged update from upstream sources
-
-      This is an automated DistroBaker update from upstream sources.
-      If you do not know what this is about or would like to opt out,
-      contact the OSCI team.
   control:
-    build: true
-    merge: false
     pause: false
     strict: true
     update_batch_size: 750

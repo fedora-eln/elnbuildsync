@@ -58,13 +58,11 @@ def test_config_file(requests_mock):
         sys.exit(128)
 
     assert elnbuildsync.config.main
-    assert "build_system" in elnbuildsync.config.main
-    assert "profile" in elnbuildsync.config.main["build_system"]
-    assert elnbuildsync.config.main["build_system"]["profile"] == "koji"
+    assert "koji_profile" in elnbuildsync.config.main
+    assert elnbuildsync.config.main["koji_profile"] == "koji"
 
-    assert "trigger" in elnbuildsync.config.main
-    assert "rpms" in elnbuildsync.config.main["trigger"]
-    assert elnbuildsync.config.main["trigger"]["rpms"] == "f40"
+    assert "trigger_tag" in elnbuildsync.config.main
+    assert elnbuildsync.config.main["trigger_tag"] == "f40"
 
     assert "build" in elnbuildsync.config.main
     assert "target" in elnbuildsync.config.main["build"]

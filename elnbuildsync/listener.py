@@ -113,7 +113,7 @@ def _handle_tag(msg):
     """Handle buildsys.tag messages to trigger rebuilds."""
     tag = msg.body["tag"]
 
-    if tag == config.main["trigger"]["rpms"]:
+    if tag == config.main["trigger_tag"]:
         return _handle_trigger_tag(msg)
 
     elif tag in state.pending_nvr_tags.keys():
@@ -134,7 +134,7 @@ def _handle_trigger_tag(msg):
     if batching.running or config.is_paused():
         raise Nack()
 
-    logger.info(f"Triggering rebuild on trigger tag {config.main['trigger']['rpms']}")
+    logger.info(f"Triggering rebuild on trigger tag {config.main['trigger_tag']}")
 
     # This is a component we care about, so add it to the queue
     batching.message_batch_processor.reset()
