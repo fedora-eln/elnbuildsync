@@ -2,11 +2,18 @@
     <html>
         <head>
             <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.css"/>
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@patternfly/patternfly/patternfly.css"/>
+            <style>
+                #builds tbody tr:hover {
+                    background-color: var(--pf-t--global--background--color--secondary--default, #f2f2f2);
+                }
+            </style>
 
             <title>ELN Rebuild Status</title>
         </head>
         <body>
-            <h1>ELN Rebuild Status</h1>
+            <main id="main-content" role="main" style="padding: 1.5rem; max-width: 100%; min-height: 100%; box-sizing: border-box;">
+                <h1 class="pf-v6-c-title pf-m-4xl">ELN Rebuild Status</h1>
             <script type="text/javascript" src="https://cdn.datatables.net/v/dt/jq-3.6.0/dt-1.12.1/fh-3.2.4/rg-1.2.0/datatables.min.js"></script>
             <script>
                 $(document).ready(function () {
@@ -48,25 +55,25 @@
                 });
             </script>
             <p t:render="header">Updated at <t:slot name="update_time"/></p>
-            <table id="builds" class="display compact" style="width:100%">
+            <table id="builds" class="pf-v6-c-table pf-m-compact" style="width:100%" role="grid" aria-label="ELN rebuild build status">
                 <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>View</th>
-                        <th>Status</th>
-                        <th>Koji Task</th>
-                        <th>Detail</th>
-                        <th>NVR</th>
-                        <th>Current in ELN</th>
-                        <th>Build Time</th>
+                    <tr class="pf-v6-c-table__thead pf-v6-c-table__tr">
+                        <th class="pf-v6-c-table__th">Name</th>
+                        <th class="pf-v6-c-table__th">View</th>
+                        <th class="pf-v6-c-table__th">Status</th>
+                        <th class="pf-v6-c-table__th">Koji Task</th>
+                        <th class="pf-v6-c-table__th">Detail</th>
+                        <th class="pf-v6-c-table__th">NVR</th>
+                        <th class="pf-v6-c-table__th">Current in ELN</th>
+                        <th class="pf-v6-c-table__th">Build Time</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr t:render="builds">
-                        <td><t:slot name="name"/></td>
-                        <td><t:slot name="view"/></td>
-                        <td><t:slot name="state"/></td>
-                        <td>
+                    <tr t:render="builds" class="pf-v6-c-table__tbody pf-v6-c-table__tr">
+                        <td class="pf-v6-c-table__td" data-label="Name"><t:slot name="name"/></td>
+                        <td class="pf-v6-c-table__td" data-label="View"><t:slot name="view"/></td>
+                        <td class="pf-v6-c-table__td" data-label="Status"><t:slot name="state"/></td>
+                        <td class="pf-v6-c-table__td" data-label="Koji Task">
                             <a>
                                 <t:attr name="href">
                                     <t:slot name="task_url"/>
@@ -74,25 +81,26 @@
                                 <t:slot name="task"/>
                             </a>
                         </td>
-                        <td><t:slot name="detail"/></td>
-                        <td><t:slot name="nvr"/></td>
-                        <td><t:slot name="tagged_build"/></td>
-                        <td><t:slot name="build_time"/></td>
+                        <td class="pf-v6-c-table__td" data-label="Detail"><t:slot name="detail"/></td>
+                        <td class="pf-v6-c-table__td" data-label="NVR"><t:slot name="nvr"/></td>
+                        <td class="pf-v6-c-table__td" data-label="Current in ELN"><t:slot name="tagged_build"/></td>
+                        <td class="pf-v6-c-table__td" data-label="Build Time"><t:slot name="build_time"/></td>
                     </tr>
                 </tbody>
-                <tfooter>
-                    <tr>
-                        <th>Name</th>
-                        <th>View</th>
-                        <th>Status</th>
-                        <th>Koji Task</th>
-                        <th>Detail</th>
-                        <th>NVR</th>
-                        <th>Current in ELN</th>
-                        <th>Build Time</th>
+                <tfoot>
+                    <tr class="pf-v6-c-table__tfoot pf-v6-c-table__tr">
+                        <th class="pf-v6-c-table__th">Name</th>
+                        <th class="pf-v6-c-table__th">View</th>
+                        <th class="pf-v6-c-table__th">Status</th>
+                        <th class="pf-v6-c-table__th">Koji Task</th>
+                        <th class="pf-v6-c-table__th">Detail</th>
+                        <th class="pf-v6-c-table__th">NVR</th>
+                        <th class="pf-v6-c-table__th">Current in ELN</th>
+                        <th class="pf-v6-c-table__th">Build Time</th>
                     </tr>
-                </tfooter>
+                </tfoot>
             </table>
+            </main>
         </body>
     </html>
 </ul>

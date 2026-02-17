@@ -423,6 +423,49 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
         else:
             raise ConfigError("trigger missing.")
 
+        # Parse OpenID Connect configuration (mandatory unless explicitly disabled)
+        if "open_id_connect" not in cnf:
+            raise ConfigError(
+                "open_id_connect missing. Set open_id_connect: false to disable authentication."
+            )
+        oidc_raw = cnf["open_id_connect"]
+        if oidc_raw is False:
+            n["open_id_connect"] = None
+            logger.info(
+                "OpenID Connect explicitly disabled - /trigger endpoint unprotected"
+            )
+        else:
+            oidc = oidc_raw
+            # Default scopes for Fedora OIDC (groups scope required for authorization)
+            default_scopes = [
+                "openid",
+                "profile",
+                "https://id.fedoraproject.org/scope/groups",
+            ]
+            required_fields = [
+                "auth_url",
+                "client_id",
+                "client_secret",
+                "token_endpoint",
+                "admin_groups",
+            ]
+            for field in required_fields:
+                if field not in oidc:
+                    raise ConfigError(f"open_id_connect.{field} missing.")
+            n["open_id_connect"] = {
+                "auth_url": str(oidc["auth_url"]),
+                "client_id": str(oidc["client_id"]),
+                "client_secret": str(oidc["client_secret"]),
+                "token_endpoint": str(oidc["token_endpoint"]),
+                "userinfo_endpoint": str(oidc.get("userinfo_endpoint", "")),
+                "scopes": list(oidc.get("scopes", default_scopes)),
+                "admin_groups": list(oidc["admin_groups"]),
+            }
+            logger.info(
+                "OpenID Connect authentication enabled; admin groups: %s",
+                n["open_id_connect"]["admin_groups"],
+            )
+
         # Handle auto-configuration of the trigger for Rawhide
         if n["trigger"]["rpms"] == "rawhide":
             n["trigger"]["rpms"] = await get_rawhide_tag()

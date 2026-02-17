@@ -16,11 +16,16 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
+from datetime import datetime, timezone
+
 from sqlalchemy import ForeignKey
+from sqlalchemy import JSON
+from sqlalchemy import DateTime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
@@ -34,8 +39,44 @@ from .decorators import as_deferred
 async_session: async_sessionmaker[AsyncSession]
 
 
+def _utc_now():
+    """Return current UTC time as timezone-aware datetime (for DB defaults)."""
+    return datetime.now(timezone.utc)
+
+
 class Base(DeclarativeBase):
     pass
+
+
+class DBUserSession(Base):
+    """
+    Stores authenticated user sessions for OpenID Connect authentication.
+
+    Sessions are created after successful OIDC authentication and are used
+    to validate subsequent requests to protected endpoints (e.g., /trigger).
+    """
+
+    __tablename__ = "user_sessions"
+
+    # Secure random session ID (64 hex characters = 256 bits)
+    session_id: Mapped[str] = mapped_column(primary_key=True)
+
+    # The authenticated user's username (from OIDC 'nickname' or 'sub' claim)
+    username: Mapped[str] = mapped_column(nullable=False)
+
+    # The user's group memberships at time of authentication (JSON array)
+    # Used to verify authorization without re-fetching from OIDC provider
+    groups: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+    # When the session was created (timezone-aware UTC)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utc_now
+    )
+
+    # When the session expires (timezone-aware UTC)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 class DBTagMessage(Base):
@@ -161,7 +202,7 @@ class DBRebuildTask(Base):
 async def init_db(db_url, echo=False):
     global async_session
 
-    engine = create_async_engine(db_url, echo=echo)
+    engine = create_async_engine(db_url, echo=echo, poolclass=NullPool)
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

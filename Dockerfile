@@ -55,5 +55,8 @@ USER 1001
 # Needs for kerberos
 ENV KRB5CCNAME=FILE:/tmp/tgt
 
+# Allow overriding the config file location
+ENV EBS_CONFIG_URL=https://gitlab.com/redhat/centos-stream/ci-cd/distrosync/distrobuildsync-config.git#main
+
 EXPOSE 8080
 CMD ["/bin/sh", "run.sh"]

@@ -18,10 +18,12 @@ export LD_PRELOAD=libnss_wrapper.so
 export NSS_WRAPPER_PASSWD=${passwd_output_dir}/passwd
 export NSS_WRAPPER_GROUP=/etc/group
 
-if [ -z $DBS_CFG_BRANCH ]; then
-export CONFIG_URL="https://gitlab.com/redhat/centos-stream/ci-cd/distrosync/distrobuildsync-config.git"
-else
-export CONFIG_URL="https://gitlab.com/redhat/centos-stream/ci-cd/distrosync/distrobuildsync-config.git#$DBS_CFG_BRANCH"
+if [ -z "${EBS_CONFIG_URL}" ]; then
+  if [ -z "${EBS_CONFIG_BRANCH}" ]; then
+    export EBS_CONFIG_URL="https://gitlab.com/redhat/centos-stream/ci-cd/distrosync/distrobuildsync-config.git"
+  else
+    export EBS_CONFIG_URL="https://gitlab.com/redhat/centos-stream/ci-cd/distrosync/distrobuildsync-config.git#${EBS_CONFIG_BRANCH}"
+  fi
 fi
 
 echo "EXECUTING klist"
@@ -44,7 +46,7 @@ pip install -r requirements.txt
 export FEDORA_MESSAGING_CONF=/etc/fedora-messaging/config.toml
 
 python3 -c "from elnbuildsync import main; main()" \
-  --config-url $CONFIG_URL \
+  --config-url $EBS_CONFIG_URL \
   --db-pw-file /db_pw/ebs-db-pw \
   $EXTRA_ARGS
 
