@@ -44,7 +44,7 @@ async def periodic_cleanup():
 
     # Get the list of packages currently tagged into the destination tag
     latest_tagged_dest_pkgs = await call_koji(
-        bsys.listTagged, config.main["build"]["target"], latest=True
+        bsys.listTagged, config.main["koji"]["build_target"], latest=True
     )
 
     # Get the list of up-to-date packages in the destination tag
@@ -59,7 +59,7 @@ async def periodic_cleanup():
 
     # Get the complete list of builds tagged into the destination tag
     all_tagged_dest_pkgs = await call_koji(
-        bsys.listTagged, config.main["build"]["target"], latest=False
+        bsys.listTagged, config.main["koji"]["build_target"], latest=False
     )
     all_tagged_dest_nvrs = set([pkg["nvr"] for pkg in all_tagged_dest_pkgs])
 
@@ -70,7 +70,9 @@ async def periodic_cleanup():
         logger.info("{} builds to untag:".format(len(nvrs_to_untag)))
         for nvr in sorted(nvrs_to_untag):
             logger.info(f"Untagging {nvr}")
-        kojihelpers.tags.untag_builds(config.main["build"]["target"], nvrs_to_untag)
+        kojihelpers.tags.untag_builds(
+            config.main["koji"]["build_target"], nvrs_to_untag
+        )
 
     # Packages in the desired list but not in the tag should be built
     latest_tagged_dest_pkg_names = {pkg["name"] for pkg in latest_tagged_dest_pkgs}

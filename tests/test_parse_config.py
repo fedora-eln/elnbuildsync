@@ -29,10 +29,11 @@ import elnbuildsync.config as config_mod
 from elnbuildsync.config import (
     ConfigError,
     UnknownRefError,
-    _parse_build,
+    _parse_bodhi,
     _parse_configuration_block,
     _parse_control,
     _parse_defaults,
+    _parse_koji,
     _parse_open_id_connect,
     get_config_ref,
     get_order,
@@ -92,28 +93,58 @@ class TestParseOpenIdConnect:
         assert result["scopes"] == ["openid", "custom"]
 
 
-class TestParseBuild:
-    def test_minimal_target_only(self):
-        result = _parse_build({"target": "eln"})
-        assert result["target"] == "eln"
-        assert result["scratch"] is False
+class TestParseKoji:
+    def test_minimal_required_only(self):
+        result = _parse_koji(
+            {"profile": "koji", "trigger_tag": "f40", "build_target": "eln"}
+        )
+        assert result["profile"] == "koji"
+        assert result["trigger_tag"] == "f40"
+        assert result["build_target"] == "eln"
+        assert result["scratch_build"] is False
         assert result["fail_fast"] is False
 
-    def test_scratch_and_fail_fast_true(self):
-        result = _parse_build(
+    def test_scratch_build_and_fail_fast_true(self):
+        result = _parse_koji(
             {
-                "target": "eln",
-                "scratch": True,
+                "profile": "koji",
+                "trigger_tag": "f40",
+                "build_target": "eln",
+                "scratch_build": True,
                 "fail_fast": True,
             }
         )
-        assert result["target"] == "eln"
-        assert result["scratch"] is True
+        assert result["profile"] == "koji"
+        assert result["trigger_tag"] == "f40"
+        assert result["build_target"] == "eln"
+        assert result["scratch_build"] is True
         assert result["fail_fast"] is True
 
-    def test_missing_target_raises(self):
-        with pytest.raises(ConfigError, match="build.target missing"):
-            _parse_build({})
+    def test_missing_profile_raises(self):
+        with pytest.raises(ConfigError, match="koji.profile missing"):
+            _parse_koji({"trigger_tag": "f40", "build_target": "eln"})
+
+    def test_missing_trigger_tag_raises(self):
+        with pytest.raises(ConfigError, match="koji.trigger_tag missing"):
+            _parse_koji({"profile": "koji", "build_target": "eln"})
+
+    def test_missing_build_target_raises(self):
+        with pytest.raises(ConfigError, match="koji.build_target missing"):
+            _parse_koji({"profile": "koji", "trigger_tag": "f40"})
+
+
+class TestParseBodhi:
+    def test_default_batch_size_zero(self):
+        result = _parse_bodhi({})
+        assert result["batch_size"] == 0
+
+    def test_custom_batch_size(self):
+        result = _parse_bodhi({"batch_size": 750})
+        assert result["batch_size"] == 750
+
+    def test_invalid_batch_size_raises(self):
+        with pytest.raises(ConfigError, match="bodhi.batch_size must be an integer"):
+            _parse_bodhi({"batch_size": "not-an-int"})
 
 
 # Minimal valid control config
@@ -136,15 +167,10 @@ class TestParseControl:
         assert result["pause"] is False
         assert result["strict"] is True
         assert result["db"] == MINIMAL_CONTROL["db"]
-        assert result["update_batch_size"] == 0
         assert result["autopackagelist"] is None
         assert result["skip_tag"] == {"rpms": set(), "modules": set()}
         assert result["exclude"] == {"rpms": set(), "modules": set()}
         assert result["ordering"] == {"rpms": {}, "modules": {}}
-
-    def test_update_batch_size(self):
-        result = _parse_control({**MINIMAL_CONTROL, "update_batch_size": 750})
-        assert result["update_batch_size"] == 750
 
     def test_skip_tag_exclude_ordering_autopackagelist(self):
         result = _parse_control(
@@ -172,12 +198,6 @@ class TestParseControl:
     def test_missing_db_raises(self):
         with pytest.raises(ConfigError, match="Missing database configuration"):
             _parse_control({k: v for k, v in MINIMAL_CONTROL.items() if k != "db"})
-
-    def test_invalid_update_batch_size_raises(self):
-        with pytest.raises(
-            ConfigError, match="control.update_batch_size must be an integer"
-        ):
-            _parse_control({**MINIMAL_CONTROL, "update_batch_size": "not-an-int"})
 
 
 # Minimal valid defaults config
@@ -214,10 +234,15 @@ def _minimal_cnf(open_id_connect=None):
     if open_id_connect is None:
         open_id_connect = MINIMAL_OIDC
     return {
-        "koji_profile": "koji",
-        "trigger_tag": "f40",
+        "koji": {
+            "profile": "koji",
+            "trigger_tag": "f40",
+            "build_target": "eln",
+            "scratch_build": False,
+            "fail_fast": False,
+        },
+        "bodhi": {"batch_size": 0},
         "open_id_connect": open_id_connect,
-        "build": {"target": "eln", "scratch": False, "fail_fast": False},
         "control": MINIMAL_CONTROL,
         "defaults": MINIMAL_DEFAULTS,
     }
@@ -227,11 +252,12 @@ class TestParseConfigurationBlock:
     def test_full_valid_cnf_returns_n(self):
         cnf = _minimal_cnf()
         n = _parse_configuration_block(cnf)
-        assert n["koji_profile"] == "koji"
-        assert n["trigger_tag"] == "f40"
+        assert n["koji"]["profile"] == "koji"
+        assert n["koji"]["trigger_tag"] == "f40"
+        assert n["koji"]["build_target"] == "eln"
+        assert n["bodhi"]["batch_size"] == 0
         assert n["open_id_connect"] is not None
         assert n["open_id_connect"]["auth_url"] == MINIMAL_OIDC["auth_url"]
-        assert n["build"]["target"] == "eln"
         assert n["control"]["pause"] is False
         assert n["defaults"]["cache"]["source"] == "%(component)s"
 
@@ -240,28 +266,34 @@ class TestParseConfigurationBlock:
         n = _parse_configuration_block(cnf)
         assert n["open_id_connect"] is None
 
-    def test_missing_koji_profile_raises(self):
+    def test_missing_koji_raises(self):
         cnf = _minimal_cnf()
-        del cnf["koji_profile"]
-        with pytest.raises(ConfigError, match="koji_profile missing"):
+        del cnf["koji"]
+        with pytest.raises(ConfigError, match="koji missing"):
             _parse_configuration_block(cnf)
 
-    def test_missing_trigger_tag_raises(self):
+    def test_missing_koji_profile_raises(self):
         cnf = _minimal_cnf()
-        del cnf["trigger_tag"]
-        with pytest.raises(ConfigError, match="trigger_tag missing"):
+        del cnf["koji"]["profile"]
+        with pytest.raises(ConfigError, match="koji.profile missing"):
+            _parse_configuration_block(cnf)
+
+    def test_missing_koji_trigger_tag_raises(self):
+        cnf = _minimal_cnf()
+        del cnf["koji"]["trigger_tag"]
+        with pytest.raises(ConfigError, match="koji.trigger_tag missing"):
+            _parse_configuration_block(cnf)
+
+    def test_missing_bodhi_raises(self):
+        cnf = _minimal_cnf()
+        del cnf["bodhi"]
+        with pytest.raises(ConfigError, match="bodhi missing"):
             _parse_configuration_block(cnf)
 
     def test_missing_open_id_connect_raises(self):
         cnf = _minimal_cnf()
         del cnf["open_id_connect"]
         with pytest.raises(ConfigError, match="open_id_connect missing"):
-            _parse_configuration_block(cnf)
-
-    def test_missing_build_raises(self):
-        cnf = _minimal_cnf()
-        del cnf["build"]
-        with pytest.raises(ConfigError, match="build missing"):
             _parse_configuration_block(cnf)
 
     def test_missing_control_raises(self):
@@ -280,13 +312,15 @@ class TestParseConfigurationBlock:
 # Minimal YAML for load_config integration test (no components, no autopackagelist)
 MINIMAL_LOAD_CONFIG_YAML = """
 configuration:
-  koji_profile: koji
-  trigger_tag: f40
-  open_id_connect: false
-  build:
-    target: eln
-    scratch: false
+  koji:
+    profile: koji
+    trigger_tag: f40
+    build_target: eln
+    scratch_build: false
     fail_fast: false
+  bodhi:
+    batch_size: 0
+  open_id_connect: false
   control:
     pause: false
     strict: true
@@ -335,10 +369,11 @@ class TestLoadConfig:
                         mock_rawhide.assert_not_called()
                         mock_distro.assert_not_called()
             assert config_mod.main is not None
-            assert config_mod.main["koji_profile"] == "koji"
-            assert config_mod.main["trigger_tag"] == "f40"
+            assert config_mod.main["koji"]["profile"] == "koji"
+            assert config_mod.main["koji"]["trigger_tag"] == "f40"
+            assert config_mod.main["koji"]["build_target"] == "eln"
+            assert config_mod.main["bodhi"]["batch_size"] == 0
             assert config_mod.main["open_id_connect"] is None
-            assert config_mod.main["build"]["target"] == "eln"
             assert config_mod.comps is not None
             assert config_mod.comps["rpms"] == {}
             assert config_mod.comps["modules"] == {}
@@ -374,7 +409,7 @@ class TestLoadConfig:
                         new_callable=AsyncMock,
                     ):
                         await load_config(config_file=path, db_pw="testpw")
-            assert config_mod.main["trigger_tag"] == "f41"
+            assert config_mod.main["koji"]["trigger_tag"] == "f41"
             mock_get.assert_called_once()
         finally:
             os.unlink(path)

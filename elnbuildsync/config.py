@@ -352,25 +352,42 @@ def _parse_open_id_connect(oidc_raw):
     return result
 
 
-def _parse_build(cnf_build):
-    """Parse build configuration. Returns dict with target, scratch, fail_fast."""
-    if "target" not in cnf_build:
-        raise ConfigError("build.target missing.")
-    result = {"target": str(cnf_build["target"])}
-    if "scratch" in cnf_build:
-        result["scratch"] = bool(cnf_build["scratch"])
+def _parse_koji(cnf_koji):
+    """Parse koji configuration. Returns dict with profile, trigger_tag, build_target, scratch_build, fail_fast."""
+    if "profile" not in cnf_koji:
+        raise ConfigError("koji.profile missing.")
+    result = {"profile": str(cnf_koji["profile"])}
+    if "trigger_tag" not in cnf_koji:
+        raise ConfigError("koji.trigger_tag missing.")
+    result["trigger_tag"] = str(cnf_koji["trigger_tag"])
+    if "build_target" not in cnf_koji:
+        raise ConfigError("koji.build_target missing.")
+    result["build_target"] = str(cnf_koji["build_target"])
+    if "scratch_build" in cnf_koji:
+        result["scratch_build"] = bool(cnf_koji["scratch_build"])
     else:
         logger.warning(
-            "Configuration warning: build.scratch not defined, assuming false."
+            "Configuration warning: koji.scratch_build not defined, assuming false."
         )
-        result["scratch"] = False
-    if "fail_fast" in cnf_build:
-        result["fail_fast"] = bool(cnf_build["fail_fast"])
+        result["scratch_build"] = False
+    if "fail_fast" in cnf_koji:
+        result["fail_fast"] = bool(cnf_koji["fail_fast"])
     else:
         logger.warning(
-            "Configuration warning: build.fail_fast not defined, assuming false."
+            "Configuration warning: koji.fail_fast not defined, assuming false."
         )
         result["fail_fast"] = False
+    return result
+
+
+def _parse_bodhi(cnf_bodhi):
+    """Parse bodhi configuration. Returns dict with batch_size."""
+    result = {"batch_size": 0}
+    if "batch_size" in cnf_bodhi:
+        try:
+            result["batch_size"] = int(cnf_bodhi["batch_size"])
+        except ValueError:
+            raise ConfigError("bodhi.batch_size must be an integer")
     return result
 
 
@@ -382,13 +399,6 @@ def _parse_control(cnf_control):
             result[k] = bool(cnf_control[k])
         else:
             raise ConfigError(f"control.{k} missing.")
-
-    result["update_batch_size"] = 0
-    if "update_batch_size" in cnf_control:
-        try:
-            result["update_batch_size"] = int(cnf_control["update_batch_size"])
-        except ValueError:
-            raise ConfigError("control.update_batch_size must be an integer")
 
     result["autopackagelist"] = None
     if "autopackagelist" in cnf_control:
@@ -454,25 +464,21 @@ def _parse_defaults(cnf_defaults):
 
 def _parse_configuration_block(cnf):
     """Parse the full configuration block (no rawhide resolution, no components).
-    Returns dict n with koji_profile, trigger_tag, open_id_connect, build, control, defaults.
+    Returns dict n with koji, bodhi, open_id_connect, control, defaults.
     """
-    if "koji_profile" not in cnf:
-        raise ConfigError("koji_profile missing.")
-    n = {"koji_profile": str(cnf["koji_profile"])}
+    if "koji" not in cnf:
+        raise ConfigError("koji missing.")
+    n = {"koji": _parse_koji(cnf["koji"])}
 
-    if "trigger_tag" not in cnf:
-        raise ConfigError("trigger_tag missing.")
-    n["trigger_tag"] = str(cnf["trigger_tag"])
+    if "bodhi" not in cnf:
+        raise ConfigError("bodhi missing.")
+    n["bodhi"] = _parse_bodhi(cnf["bodhi"])
 
     if "open_id_connect" not in cnf:
         raise ConfigError(
             "open_id_connect missing. Set open_id_connect: false to disable authentication."
         )
     n["open_id_connect"] = _parse_open_id_connect(cnf["open_id_connect"])
-
-    if "build" not in cnf:
-        raise ConfigError("build missing.")
-    n["build"] = _parse_build(cnf["build"])
 
     if "control" not in cnf:
         raise ConfigError("control missing.")
@@ -553,9 +559,9 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
     cnf = y["configuration"]
     n = _parse_configuration_block(cnf)
 
-    if n["trigger_tag"] == "rawhide":
-        n["trigger_tag"] = await get_rawhide_tag()
-        logger.info(f"Detected rawhide tag {n['trigger_tag']}")
+    if n["koji"]["trigger_tag"] == "rawhide":
+        n["koji"]["trigger_tag"] = await get_rawhide_tag()
+        logger.info(f"Detected rawhide tag {n['koji']['trigger_tag']}")
 
     components = 0
     nc = {"rpms": dict(), "modules": dict()}

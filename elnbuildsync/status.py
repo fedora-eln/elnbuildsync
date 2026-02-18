@@ -83,7 +83,7 @@ async def create_status_page():
         try:
             # Look up packages tagged into the tag associated with the target
             tagged_pkgs = await call_koji(
-                bsys.listTagged, config.main["build"]["target"], latest=True
+                bsys.listTagged, config.main["koji"]["build_target"], latest=True
             )
         except koji.GenericError as e:
             logger.exception(

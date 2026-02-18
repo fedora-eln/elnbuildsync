@@ -255,7 +255,7 @@ class RebuildBatch:
         def _build_batch_generator(
             build_nvrs: list[str],
         ) -> Generator[list[str], None, None]:
-            batch_size = config.main["control"]["update_batch_size"]
+            batch_size = config.main["bodhi"]["batch_size"]
             if batch_size == 0:
                 yield build_nvrs
                 return

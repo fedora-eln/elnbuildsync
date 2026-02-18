@@ -1,7 +1,12 @@
 configuration:
-  koji_profile: koji
-  trigger_tag: f40
-
+  koji:
+    profile: koji
+    trigger_tag: f40
+    build_target: eln
+    scratch_build: true
+    fail_fast: true
+  bodhi:
+    batch_size: 750
   # OpenID Connect authentication configuration
   # Uses Fedora tinystage test OIDC server for development/testing
   # See: https://github.com/fedora-infra/tiny-stage
@@ -23,14 +28,9 @@ configuration:
     # Users must be a member of at least one of these groups to access /trigger
     admin_groups:
       - eln
-  build:
-    target: eln
-    scratch: true
-    fail_fast: true
   control:
     pause: false
     strict: true
-    update_batch_size: 750
     db:
       host: localhost
       port: 5432
