@@ -119,7 +119,7 @@ async def rebuild_from_components(components):
     latest_tagged_eln_table = {pkg["name"]: pkg for pkg in latest_tagged_eln_pkgs}
 
     for component in components:
-        if config.is_eligible("rpms", component):
+        if config.is_eligible(component):
             try:
                 if component in latest_tagged_rawhide_table:
                     if component in latest_tagged_eln_table:

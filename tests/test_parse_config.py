@@ -201,23 +201,23 @@ class TestParseControl:
         assert result["pause"] is False
         assert result["strict"] is True
         assert result["autopackagelist"] is None
-        assert result["skip_tag"] == {"rpms": set(), "modules": set()}
-        assert result["exclude"] == {"rpms": set(), "modules": set()}
-        assert result["ordering"] == {"rpms": {}, "modules": {}}
+        assert result["skip_tag"] == set()
+        assert result["exclude"] == set()
+        assert result["ordering"] == {}
 
     def test_skip_tag_exclude_ordering_autopackagelist(self):
         result = _parse_control(
             {
                 **MINIMAL_CONTROL,
-                "skip_tag": {"rpms": ["^kernel$"], "modules": set()},
-                "exclude": {"rpms": ["^foo$"], "modules": set()},
-                "ordering": {"rpms": {"^ocaml$": 0}, "modules": {}},
+                "skip_tag": ["^kernel$"],
+                "exclude": ["^foo$"],
+                "ordering": {"^ocaml$": 0},
                 "autopackagelist": {"view": "eln"},
             }
         )
-        assert result["skip_tag"]["rpms"] == {"^kernel$"}
-        assert result["exclude"]["rpms"] == {"^foo$"}
-        assert result["ordering"]["rpms"] == {"^ocaml$": 0}
+        assert result["skip_tag"] == {"^kernel$"}
+        assert result["exclude"] == {"^foo$"}
+        assert result["ordering"] == {"^ocaml$": 0}
         assert result["autopackagelist"] == {"view": "eln"}
 
     def test_missing_pause_raises(self):
@@ -231,25 +231,16 @@ class TestParseControl:
 
 # Minimal valid defaults config
 MINIMAL_DEFAULTS = {
-    "cache": {"source": "%(component)s", "destination": "%(component)s"},
-    "rpms": {
-        "source": "%(component)s.git#rawhide",
-        "destination": "%(component)s.git#rawhide",
-    },
-    "modules": {
-        "source": "%(component)s.git#%(stream)s",
-        "destination": "%(component)s.git#%(stream)s",
-    },
+    "source": "%(component)s.git#rawhide",
+    "destination": "%(component)s.git#rawhide",
 }
 
 
 class TestParseDefaults:
     def test_valid_defaults(self):
         result = _parse_defaults(MINIMAL_DEFAULTS)
-        assert result["cache"]["source"] == "%(component)s"
-        assert result["cache"]["destination"] == "%(component)s"
-        assert result["rpms"]["source"] == "%(component)s.git#rawhide"
-        assert result["modules"]["destination"] == "%(component)s.git#%(stream)s"
+        assert result["source"] == "%(component)s.git#rawhide"
+        assert result["destination"] == "%(component)s.git#rawhide"
 
     def test_missing_section_raises(self):
         for key in MINIMAL_DEFAULTS:
@@ -292,7 +283,7 @@ class TestParseConfigurationBlock:
         assert n["open_id_connect"] is not None
         assert n["open_id_connect"]["auth_url"] == MINIMAL_OIDC["auth_url"]
         assert n["control"]["pause"] is False
-        assert n["defaults"]["cache"]["source"] == "%(component)s"
+        assert n["defaults"]["source"] == "%(component)s.git#rawhide"
 
     def test_oidc_disabled(self):
         cnf = _minimal_cnf(open_id_connect=False)
@@ -370,15 +361,8 @@ configuration:
     pause: false
     strict: true
   defaults:
-    cache:
-      source: "%(component)s"
-      destination: "%(component)s"
-    rpms:
-      source: "%(component)s.git#rawhide"
-      destination: "%(component)s.git#rawhide"
-    modules:
-      source: "%(component)s.git#%(stream)s"
-      destination: "%(component)s.git#%(stream)s"
+    source: "%(component)s.git#rawhide"
+    destination: "%(component)s.git#rawhide"
 """
 
 
@@ -414,8 +398,7 @@ class TestLoadConfig:
             assert config_mod.main["bodhi"]["batch_size"] == 0
             assert config_mod.main["open_id_connect"] is None
             assert config_mod.comps is not None
-            assert config_mod.comps["rpms"] == {}
-            assert config_mod.comps["modules"] == {}
+            assert config_mod.comps == {}
         finally:
             os.unlink(path)
 
@@ -608,12 +591,12 @@ class TestIsEligible:
             {
                 "control": {
                     "strict": True,
-                    "exclude": {"rpms": set(), "modules": set()},
+                    "exclude": set(),
                 },
             },
         )
-        monkeypatch.setattr(config_mod, "comps", {"rpms": {"ipa": {}}, "modules": {}})
-        assert is_eligible("rpms", "kernel") is False
+        monkeypatch.setattr(config_mod, "comps", {"ipa": {}})
+        assert is_eligible("kernel") is False
 
     def test_strict_and_comp_in_comps_returns_true(self, monkeypatch):
         monkeypatch.setattr(
@@ -622,12 +605,12 @@ class TestIsEligible:
             {
                 "control": {
                     "strict": True,
-                    "exclude": {"rpms": set(), "modules": set()},
+                    "exclude": set(),
                 },
             },
         )
-        monkeypatch.setattr(config_mod, "comps", {"rpms": {"ipa": {}}, "modules": {}})
-        assert is_eligible("rpms", "ipa") is True
+        monkeypatch.setattr(config_mod, "comps", {"ipa": {}})
+        assert is_eligible("ipa") is True
 
     def test_exclude_pattern_matches_returns_false(self, monkeypatch):
         monkeypatch.setattr(
@@ -636,12 +619,12 @@ class TestIsEligible:
             {
                 "control": {
                     "strict": False,
-                    "exclude": {"rpms": {"^kernel$"}, "modules": set()},
+                    "exclude": {"^kernel$"},
                 },
             },
         )
-        monkeypatch.setattr(config_mod, "comps", {"rpms": {}, "modules": {}})
-        assert is_eligible("rpms", "kernel") is False
+        monkeypatch.setattr(config_mod, "comps", {})
+        assert is_eligible("kernel") is False
 
     def test_not_excluded_returns_true(self, monkeypatch):
         monkeypatch.setattr(
@@ -650,12 +633,12 @@ class TestIsEligible:
             {
                 "control": {
                     "strict": False,
-                    "exclude": {"rpms": set(), "modules": set()},
+                    "exclude": set(),
                 },
             },
         )
-        monkeypatch.setattr(config_mod, "comps", {"rpms": {}, "modules": {}})
-        assert is_eligible("rpms", "ipa") is True
+        monkeypatch.setattr(config_mod, "comps", {})
+        assert is_eligible("ipa") is True
 
 
 class TestSkipTag:
@@ -665,11 +648,11 @@ class TestSkipTag:
             "main",
             {
                 "control": {
-                    "skip_tag": {"rpms": {"^kernel$"}, "modules": set()},
+                    "skip_tag": {"^kernel$"},
                 },
             },
         )
-        assert skip_tag("rpms", "kernel") is True
+        assert skip_tag("kernel") is True
 
     def test_no_match_returns_false(self, monkeypatch):
         monkeypatch.setattr(
@@ -677,11 +660,11 @@ class TestSkipTag:
             "main",
             {
                 "control": {
-                    "skip_tag": {"rpms": set(), "modules": set()},
+                    "skip_tag": set(),
                 },
             },
         )
-        assert skip_tag("rpms", "ipa") is False
+        assert skip_tag("ipa") is False
 
 
 class TestGetOrder:
@@ -691,14 +674,11 @@ class TestGetOrder:
             "main",
             {
                 "control": {
-                    "ordering": {
-                        "rpms": {"^ocaml$": 0},
-                        "modules": {},
-                    },
+                    "ordering": {"^ocaml$": 0},
                 },
             },
         )
-        assert get_order("rpms", "ocaml") == 0
+        assert get_order("ocaml") == 0
 
     def test_no_pattern_returns_1000(self, monkeypatch):
         monkeypatch.setattr(
@@ -706,11 +686,11 @@ class TestGetOrder:
             "main",
             {
                 "control": {
-                    "ordering": {"rpms": {}, "modules": {}},
+                    "ordering": {},
                 },
             },
         )
-        assert get_order("rpms", "ipa") == 1000
+        assert get_order("ipa") == 1000
 
 
 class TestIsPaused:

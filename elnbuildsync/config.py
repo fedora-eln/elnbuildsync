@@ -425,53 +425,34 @@ def _parse_control(cnf_control):
     if "autopackagelist" in cnf_control:
         result["autopackagelist"] = cnf_control["autopackagelist"]
 
-    result["skip_tag"] = {"rpms": set(), "modules": set()}
+    result["skip_tag"] = set()
     if "skip_tag" in cnf_control:
-        for cns in ("rpms", "modules"):
-            if cns in cnf_control["skip_tag"]:
-                result["skip_tag"][cns].update(cnf_control["skip_tag"][cns])
+        result["skip_tag"].update(cnf_control["skip_tag"])
 
-    result["exclude"] = {"rpms": set(), "modules": set()}
+    result["exclude"] = set()
     if "exclude" in cnf_control:
-        for cns in ("rpms", "modules"):
-            if cns in cnf_control["exclude"]:
-                result["exclude"][cns].update(cnf_control["exclude"][cns])
+        result["exclude"].update(cnf_control["exclude"])
 
-    for cns in ("rpms", "modules"):
-        if result["exclude"][cns]:
-            logger.info(
-                "Excluding %d component(s) from the %s namespace.",
-                len(result["exclude"][cns]),
-                cns,
-            )
-        else:
-            logger.info(
-                "Not excluding any components from the %s namespace.",
-                cns,
-            )
-    result["ordering"] = {"rpms": dict(), "modules": dict()}
+    if result["exclude"]:
+        logger.info(
+            "Excluding %d component(s).",
+            len(result["exclude"]),
+        )
+    else:
+        logger.info("Not excluding any components.")
+
+    result["ordering"] = dict()
     if "ordering" in cnf_control:
-        for cns in ("rpms", "modules"):
-            if cns in cnf_control["ordering"]:
-                result["ordering"][cns].update(cnf_control["ordering"][cns])
+        result["ordering"].update(cnf_control["ordering"])
     return result
 
 
 def _parse_defaults(cnf_defaults):
-    """Parse defaults configuration. Returns dict with cache, rpms, modules."""
+    """Parse defaults configuration. Returns dict with source, destination."""
     result = dict()
-    for dk in ("cache", "rpms", "modules"):
+    for dk in ("source", "destination"):
         if dk in cnf_defaults:
-            result[dk] = dict()
-            for dkk in ("source", "destination"):
-                if dkk in cnf_defaults[dk]:
-                    result[dk][dkk] = str(cnf_defaults[dk][dkk])
-                else:
-                    logger.error(
-                        "Configuration error: defaults.%s.%s missing.",
-                        dk,
-                        dkk,
-                    )
+            result[dk] = str(cnf_defaults[dk])
         else:
             raise ConfigError(f"defaults.{dk} missing.")
     return result
@@ -583,7 +564,7 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
         logger.info(f"Detected rawhide tag {n['koji']['trigger_tag']}")
 
     components = 0
-    nc = {"rpms": dict(), "modules": dict()}
+    nc = {}
     if "components" in y or "autopackagelist" in n["control"]:
         cnf = {}
 
@@ -601,59 +582,35 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
                     n["control"]["autopackagelist"]["view"],
                 ]
 
-            cnf = await get_distro_packages(
-                distro_url=resolver,
-                distro_view=views,
-            )
+            cnf = (
+                await get_distro_packages(
+                    distro_url=resolver,
+                    distro_view=views,
+                )
+            )["rpms"]
 
         if "components" in y:
-            if "rpms" in cnf:
-                cnf["rpms"].update(y["components"]["rpms"])
-            if "modules" in cnf:
-                cnf["modules"].update(y["components"]["modules"])
+            cnf.update(y["components"])
 
-        for k in ("rpms", "modules"):
-            if k in cnf:
-                for p in cnf[k].keys():
-                    components += 1
-                    if k in cnf and p in cnf[k]:
-                        nc[k][p] = cnf[k][p]
-                    else:
-                        nc[k][p] = dict()
-                    cname = p
-                    sname = ""
-                    if k == "modules":
-                        ms = split_module(p)
-                        cname = ms["name"]
-                        sname = ms["stream"]
-                    nc[k][p]["source"] = n["defaults"][k]["source"] % {
-                        "component": cname,
-                        "stream": sname,
-                    }
-                    nc[k][p]["destination"] = n["defaults"][k]["destination"] % {
-                        "component": cname,
-                        "stream": sname,
-                    }
-                    nc[k][p]["cache"] = {
-                        "source": n["defaults"]["cache"]["source"]
-                        % {"component": cname, "stream": sname},
-                        "destination": n["defaults"]["cache"]["destination"]
-                        % {"component": cname, "stream": sname},
-                    }
-                    if cnf[k][p] is None:
-                        cnf[k][p] = dict()
-                    for ck in ("source", "destination", "target"):
-                        if ck in cnf[k][p]:
-                            nc[k][p][ck] = str(cnf[k][p][ck])
-                    if "cache" in cnf[k][p]:
-                        for ck in ("source", "destination"):
-                            if ck in cnf[k][p]["cache"]:
-                                nc[k][p]["cache"][ck] = str(cnf[k][p]["cache"][ck])
-            logger.info(
-                "Found %d configured component(s) in the %s namespace.",
-                len(nc[k]),
-                k,
-            )
+        for p in cnf:
+            components += 1
+            pcfg = cnf[p] if cnf[p] is not None else {}
+            if isinstance(pcfg, dict):
+                nc[p] = dict(pcfg)
+            else:
+                nc[p] = dict()
+            nc[p]["source"] = n["defaults"]["source"] % {
+                "component": p,
+                "stream": "",
+            }
+            nc[p]["destination"] = n["defaults"]["destination"] % {
+                "component": p,
+                "stream": "",
+            }
+            for ck in ("source", "destination", "target"):
+                if ck in pcfg:
+                    nc[p][ck] = str(pcfg[ck])
+        logger.info("Found %d configured component(s).", len(nc))
     if n["control"]["strict"]:
         logger.info(
             "Running in the strict mode.  Only configured components will be processed."
@@ -693,32 +650,32 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
             raise ConfigError("Missing database configuration (db block)")
 
 
-def is_eligible(ns, comp):
+def is_eligible(comp):
     # Check whether this component is meaningful to us
-    if config.main["control"]["strict"] and comp not in config.comps[ns]:
+    if config.main["control"]["strict"] and comp not in config.comps:
         logger.debug(f"{comp} is not an approved component, ignoring")
         return False
 
-    for pattern in config.main["control"]["exclude"][ns]:
+    for pattern in config.main["control"]["exclude"]:
         if re.search(pattern, comp):
-            logger.debug(f"{ns}/{comp} is on the exclude list, skipping")
+            logger.debug(f"{comp} is on the exclude list, skipping")
             return False
 
     return True
 
 
-def skip_tag(ns, comp):
-    for pattern in config.main["control"]["skip_tag"][ns]:
+def skip_tag(comp):
+    for pattern in config.main["control"]["skip_tag"]:
         if re.search(pattern, comp):
-            logger.debug(f"{ns}/{comp} is on the skip_tag list, building immediately")
+            logger.debug(f"{comp} is on the skip_tag list, building immediately")
             return True
     return False
 
 
-def get_order(ns, comp):
-    for pattern in config.main["control"]["ordering"][ns]:
+def get_order(comp):
+    for pattern in config.main["control"]["ordering"]:
         if re.search(pattern, comp):
-            return config.main["control"]["ordering"][ns][pattern]
+            return config.main["control"]["ordering"][pattern]
 
     # If we don't have a specific pattern, return a high number (1000)
     # so we always build them late in the cycle

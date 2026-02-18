@@ -40,7 +40,7 @@ async def periodic_cleanup():
     bsys = kojihelpers.connection.get_buildsys()
 
     # We have the set of desired packages from Content Resolver
-    desired_pkg_names = set(config.comps["rpms"].keys())
+    desired_pkg_names = set(config.comps.keys())
 
     # Get the list of packages currently tagged into the destination tag
     latest_tagged_dest_pkgs = await call_koji(

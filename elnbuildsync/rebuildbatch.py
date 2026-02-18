@@ -87,7 +87,7 @@ class RebuildBatch:
         for tag_message in self._unprocessed_tag_messages:
             await self.add_tag_message(tag_message)
 
-            if not config.skip_tag("rpms", tag_message.component):
+            if not config.skip_tag(tag_message.component):
                 build_ids.append(tag_message.get_build_id())
 
         (
@@ -186,7 +186,7 @@ class RebuildBatch:
         # Get the SCM URLs and order them
         all_tag_messages = defaultdict(list)
         for tag_message in self.tag_messages.values():
-            order = config.get_order("rpms", tag_message.component)
+            order = config.get_order(tag_message.component)
             all_tag_messages[order].append(tag_message)
 
         all_successes = dict()
