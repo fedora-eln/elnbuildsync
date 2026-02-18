@@ -183,11 +183,6 @@ def _start_builds_thread(target, scm_urls, scratch=False, fail_fast=False):
         with bsys.multicall(batch=config.koji_batch) as mc:
             logger.debug(f"Starting {len(scm_urls)} tasks")
             for scmurl in scm_urls:
-                if not config.is_eligible:
-                    raise IneligibleBuildError(
-                        f"{scmurl} is ineligible to be built for {target}"
-                    )
-
                 logger.debug(f"Building {scmurl}")
                 build_vcalls[scmurl] = mc.build(
                     scmurl,
