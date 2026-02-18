@@ -30,10 +30,10 @@ from elnbuildsync.config import (
     ConfigError,
     UnknownRefError,
     _parse_bodhi,
+    _parse_components,
     _parse_configuration_block,
     _parse_control,
     _parse_db,
-    _parse_defaults,
     _parse_koji,
     _parse_open_id_connect,
     get_config_ref,
@@ -191,7 +191,6 @@ class TestParseDb:
 # Minimal valid control config (no db; db is top-level)
 MINIMAL_CONTROL = {
     "pause": False,
-    "strict": True,
 }
 
 
@@ -199,54 +198,26 @@ class TestParseControl:
     def test_minimal_required(self):
         result = _parse_control(MINIMAL_CONTROL)
         assert result["pause"] is False
-        assert result["strict"] is True
-        assert result["autopackagelist"] is None
         assert result["skip_tag"] == set()
         assert result["exclude"] == set()
         assert result["ordering"] == {}
 
-    def test_skip_tag_exclude_ordering_autopackagelist(self):
+    def test_skip_tag_exclude_ordering(self):
         result = _parse_control(
             {
                 **MINIMAL_CONTROL,
                 "skip_tag": ["^kernel$"],
                 "exclude": ["^foo$"],
                 "ordering": {"^ocaml$": 0},
-                "autopackagelist": {"view": "eln"},
             }
         )
         assert result["skip_tag"] == {"^kernel$"}
         assert result["exclude"] == {"^foo$"}
         assert result["ordering"] == {"^ocaml$": 0}
-        assert result["autopackagelist"] == {"view": "eln"}
 
     def test_missing_pause_raises(self):
         with pytest.raises(ConfigError, match="control.pause missing"):
             _parse_control({k: v for k, v in MINIMAL_CONTROL.items() if k != "pause"})
-
-    def test_missing_strict_raises(self):
-        with pytest.raises(ConfigError, match="control.strict missing"):
-            _parse_control({k: v for k, v in MINIMAL_CONTROL.items() if k != "strict"})
-
-
-# Minimal valid defaults config
-MINIMAL_DEFAULTS = {
-    "source": "%(component)s.git#rawhide",
-    "destination": "%(component)s.git#rawhide",
-}
-
-
-class TestParseDefaults:
-    def test_valid_defaults(self):
-        result = _parse_defaults(MINIMAL_DEFAULTS)
-        assert result["source"] == "%(component)s.git#rawhide"
-        assert result["destination"] == "%(component)s.git#rawhide"
-
-    def test_missing_section_raises(self):
-        for key in MINIMAL_DEFAULTS:
-            bad = {k: v for k, v in MINIMAL_DEFAULTS.items() if k != key}
-            with pytest.raises(ConfigError, match=f"defaults.{key} missing"):
-                _parse_defaults(bad)
 
 
 def _minimal_cnf(open_id_connect=None):
@@ -265,7 +236,6 @@ def _minimal_cnf(open_id_connect=None):
         "db": MINIMAL_DB,
         "open_id_connect": open_id_connect,
         "control": MINIMAL_CONTROL,
-        "defaults": MINIMAL_DEFAULTS,
     }
 
 
@@ -283,7 +253,6 @@ class TestParseConfigurationBlock:
         assert n["open_id_connect"] is not None
         assert n["open_id_connect"]["auth_url"] == MINIMAL_OIDC["auth_url"]
         assert n["control"]["pause"] is False
-        assert n["defaults"]["source"] == "%(component)s.git#rawhide"
 
     def test_oidc_disabled(self):
         cnf = _minimal_cnf(open_id_connect=False)
@@ -332,14 +301,172 @@ class TestParseConfigurationBlock:
         with pytest.raises(ConfigError, match="control missing"):
             _parse_configuration_block(cnf)
 
-    def test_missing_defaults_raises(self):
-        cnf = _minimal_cnf()
-        del cnf["defaults"]
-        with pytest.raises(ConfigError, match="defaults missing"):
-            _parse_configuration_block(cnf)
+
+class TestParseComponents:
+    @pytest.mark.asyncio
+    async def test_autopackagelist_only(self):
+        with patch(
+            "elnbuildsync.config.get_distro_packages",
+            new_callable=AsyncMock,
+            return_value={
+                "pkg1": {"upstream_name": "pkg1", "downstream_name": "pkg1"},
+                "pkg2": {"upstream_name": "pkg2", "downstream_name": "pkg2"},
+            },
+        ):
+            result = await _parse_components(
+                {"autopackagelist": {"view": "eln", "source": "source"}}
+            )
+        assert result["downstream_components"] == {
+            "pkg1": {"upstream_name": "pkg1", "downstream_name": "pkg1"},
+            "pkg2": {"upstream_name": "pkg2", "downstream_name": "pkg2"},
+        }
+        assert result["upstream_components"] == {
+            "pkg1": {"upstream_name": "pkg1", "downstream_name": "pkg1"},
+            "pkg2": {"upstream_name": "pkg2", "downstream_name": "pkg2"},
+        }
+
+    @pytest.mark.asyncio
+    async def test_autopackagelist_view_list(self):
+        with patch(
+            "elnbuildsync.config.get_distro_packages",
+            new_callable=AsyncMock,
+            return_value={},
+        ):
+            result = await _parse_components(
+                {
+                    "autopackagelist": {
+                        "view": ["eln", "eln-extras"],
+                        "source": "source",
+                    }
+                }
+            )
+        assert result["downstream_components"] == {}
+        assert result["upstream_components"] == {}
+
+    @pytest.mark.asyncio
+    async def test_autopackagelist_missing_view_raises(self):
+        with pytest.raises(
+            ConfigError, match="components.autopackagelist.view missing"
+        ):
+            await _parse_components({"autopackagelist": {"source": "source"}})
+
+    @pytest.mark.asyncio
+    async def test_autopackagelist_missing_source_raises(self):
+        with pytest.raises(
+            ConfigError, match="components.autopackagelist.source missing"
+        ):
+            await _parse_components({"autopackagelist": {"view": "eln"}})
+
+    @pytest.mark.asyncio
+    async def test_autopackagelist_entry_missing_upstream_name_raises(self):
+        with patch(
+            "elnbuildsync.config.get_distro_packages",
+            new_callable=AsyncMock,
+            return_value={
+                "pkg1": {"downstream_name": "pkg1"},
+            },
+        ):
+            with pytest.raises(
+                ConfigError,
+                match="components.autopackagelist entry 'pkg1' missing upstream_name",
+            ):
+                await _parse_components(
+                    {"autopackagelist": {"view": "eln", "source": "source"}}
+                )
+
+    @pytest.mark.asyncio
+    async def test_autopackagelist_entry_missing_downstream_name_raises(self):
+        with patch(
+            "elnbuildsync.config.get_distro_packages",
+            new_callable=AsyncMock,
+            return_value={
+                "pkg1": {"upstream_name": "pkg1"},
+            },
+        ):
+            with pytest.raises(
+                ConfigError,
+                match="components.autopackagelist entry 'pkg1' missing downstream_name",
+            ):
+                await _parse_components(
+                    {"autopackagelist": {"view": "eln", "source": "source"}}
+                )
+
+    @pytest.mark.asyncio
+    async def test_overrides_only(self):
+        result = await _parse_components({"overrides": {}})
+        assert result["downstream_components"] == {}
+        assert result["upstream_components"] == {}
+
+    @pytest.mark.asyncio
+    async def test_overrides_with_downstream_name(self):
+        result = await _parse_components(
+            {
+                "overrides": {
+                    "kernel": {"downstream_name": "kernel-rt"},
+                    "glibc": {},
+                }
+            }
+        )
+        assert (
+            result["downstream_components"]["kernel"]["downstream_name"] == "kernel-rt"
+        )
+        assert result["downstream_components"]["kernel"]["upstream_name"] == "kernel"
+        assert result["downstream_components"]["glibc"]["downstream_name"] == "glibc"
+        assert result["downstream_components"]["glibc"]["upstream_name"] == "glibc"
+        assert result["upstream_components"]["kernel"]["downstream_name"] == "kernel-rt"
+        assert result["upstream_components"]["glibc"]["downstream_name"] == "glibc"
+
+    @pytest.mark.asyncio
+    async def test_autopackagelist_and_overrides_merged(self):
+        """Overrides update/supplement comps from get_distro_packages."""
+        with patch(
+            "elnbuildsync.config.get_distro_packages",
+            new_callable=AsyncMock,
+            return_value={
+                "kernel": {"upstream_name": "kernel", "downstream_name": "kernel"},
+                "glibc": {"upstream_name": "glibc", "downstream_name": "glibc"},
+            },
+        ):
+            result = await _parse_components(
+                {
+                    "autopackagelist": {"view": "eln", "source": "source"},
+                    "overrides": {
+                        "kernel": {"downstream_name": "kernel-rt"},
+                    },
+                }
+            )
+        assert (
+            result["downstream_components"]["kernel"]["downstream_name"] == "kernel-rt"
+        )
+        assert result["downstream_components"]["kernel"]["upstream_name"] == "kernel"
+        assert "glibc" in result["downstream_components"]
+        assert "kernel" in result["upstream_components"]
+        assert "glibc" in result["upstream_components"]
+
+    @pytest.mark.asyncio
+    async def test_both_missing_raises(self):
+        with pytest.raises(
+            ConfigError,
+            match="At least one of components.autopackagelist or components.overrides must be present",
+        ):
+            await _parse_components({})
+
+    @pytest.mark.asyncio
+    async def test_overrides_not_dict_raises(self):
+        with pytest.raises(
+            ConfigError, match="components.overrides must be a dictionary"
+        ):
+            await _parse_components({"overrides": "not-a-dict"})
+
+    @pytest.mark.asyncio
+    async def test_overrides_child_not_dict_raises(self):
+        with pytest.raises(
+            ConfigError, match="components.overrides.kernel must be a dictionary"
+        ):
+            await _parse_components({"overrides": {"kernel": "not-a-dict"}})
 
 
-# Minimal YAML for load_config integration test (no components, no autopackagelist)
+# Minimal YAML for load_config integration test (components with overrides only, no autopackagelist)
 MINIMAL_LOAD_CONFIG_YAML = """
 configuration:
   koji:
@@ -359,10 +486,8 @@ configuration:
   open_id_connect: false
   control:
     pause: false
-    strict: true
-  defaults:
-    source: "%(component)s.git#rawhide"
-    destination: "%(component)s.git#rawhide"
+components:
+  overrides: {}
 """
 
 
@@ -398,7 +523,10 @@ class TestLoadConfig:
             assert config_mod.main["bodhi"]["batch_size"] == 0
             assert config_mod.main["open_id_connect"] is None
             assert config_mod.comps is not None
-            assert config_mod.comps == {}
+            assert "downstream_components" in config_mod.comps
+            assert "upstream_components" in config_mod.comps
+            assert config_mod.comps["downstream_components"] == {}
+            assert config_mod.comps["upstream_components"] == {}
         finally:
             os.unlink(path)
 
@@ -451,6 +579,42 @@ class TestLoadConfig:
         try:
             with pytest.raises(ConfigError, match="Could not parse"):
                 await load_config(config_file=path, db_pw="")
+        finally:
+            os.unlink(path)
+
+    @pytest.mark.asyncio
+    async def test_load_config_missing_components_raises(self):
+        yaml_no_components = """
+configuration:
+  koji:
+    profile: koji
+    trigger_tag: f40
+    build_target: eln
+    scratch_build: false
+    fail_fast: false
+  bodhi:
+    batch_size: 0
+  db:
+    host: localhost
+    port: 5432
+    name: testdb
+    driver: postgresql+asyncpg
+    user: testuser
+  open_id_connect: false
+  control:
+    pause: false
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write(yaml_no_components)
+            path = f.name
+        try:
+            with patch(
+                "elnbuildsync.config.deferToThread", side_effect=_fake_defer_to_thread
+            ):
+                with pytest.raises(
+                    ConfigError, match="required components block is missing"
+                ):
+                    await load_config(config_file=path, db_pw="testpw")
         finally:
             os.unlink(path)
 
@@ -584,47 +748,26 @@ class TestGetConfigRef:
 
 
 class TestIsEligible:
-    def test_strict_and_comp_not_in_comps_returns_false(self, monkeypatch):
-        monkeypatch.setattr(
-            config_mod,
-            "main",
-            {
-                "control": {
-                    "strict": True,
-                    "exclude": set(),
-                },
-            },
-        )
-        monkeypatch.setattr(config_mod, "comps", {"ipa": {}})
-        assert is_eligible("kernel") is False
-
-    def test_strict_and_comp_in_comps_returns_true(self, monkeypatch):
-        monkeypatch.setattr(
-            config_mod,
-            "main",
-            {
-                "control": {
-                    "strict": True,
-                    "exclude": set(),
-                },
-            },
-        )
-        monkeypatch.setattr(config_mod, "comps", {"ipa": {}})
-        assert is_eligible("ipa") is True
-
     def test_exclude_pattern_matches_returns_false(self, monkeypatch):
         monkeypatch.setattr(
             config_mod,
             "main",
             {
                 "control": {
-                    "strict": False,
                     "exclude": {"^kernel$"},
                 },
             },
         )
-        monkeypatch.setattr(config_mod, "comps", {})
-        assert is_eligible("kernel") is False
+        monkeypatch.setattr(
+            config_mod,
+            "comps",
+            {
+                "downstream_components": {"kernel": {}, "ipa": {}},
+                "upstream_components": {"kernel": {}, "ipa": {}},
+            },
+        )
+        assert is_eligible("kernel", is_downstream=True) is False
+        assert is_eligible("kernel", is_downstream=False) is False
 
     def test_not_excluded_returns_true(self, monkeypatch):
         monkeypatch.setattr(
@@ -632,13 +775,20 @@ class TestIsEligible:
             "main",
             {
                 "control": {
-                    "strict": False,
                     "exclude": set(),
                 },
             },
         )
-        monkeypatch.setattr(config_mod, "comps", {})
-        assert is_eligible("ipa") is True
+        monkeypatch.setattr(
+            config_mod,
+            "comps",
+            {
+                "downstream_components": {"kernel": {}, "ipa": {}},
+                "upstream_components": {"kernel": {}, "ipa": {}},
+            },
+        )
+        assert is_eligible("ipa", is_downstream=True) is True
+        assert is_eligible("ipa", is_downstream=False) is True
 
 
 class TestSkipTag:

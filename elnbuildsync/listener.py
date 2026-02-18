@@ -125,7 +125,7 @@ def _handle_tag(msg):
 
 def _handle_trigger_tag(msg):
     # Check whether this component is meaningful to us
-    if not config.is_eligible(msg.body["name"]):
+    if not config.is_eligible(msg.body["name"], is_downstream=False):
         raise Drop()
 
     # If we are currently processing a batch or are in a "paused" state,

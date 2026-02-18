@@ -229,6 +229,8 @@ class RebuildBatch:
 
             # Wait for the Bodhi update to make it to stable by verifying
             # that all the builds are tagged into the stable tag.
+            # TODO: This should have its own config option for the tag to wait for.
+            # Relying on the target matching the stable tag is not guaranteed to work.
             results = await kojihelpers.tags.wait_for_nvrs_in_tag(
                 self.target, build_nvrs
             )

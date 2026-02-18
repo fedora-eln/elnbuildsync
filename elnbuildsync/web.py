@@ -178,6 +178,7 @@ class TriggerBuildResource(Resource):
 
     Accepts a POST request containing a JSON list of components to rebuild for
     ELN. This endpoint requires authentication if OpenID Connect is configured.
+    The components are expected to be provided as their downstream names.
     """
 
     isLeaf = True
@@ -266,7 +267,7 @@ class TriggerBuildResource(Resource):
 <h1>ELN Build Trigger</h1>
 <p>Logged in as: <strong>{user["username"]}</strong></p>
 <p>Groups: {", ".join(user["groups"])}</p>
-<p>To trigger builds, POST a JSON array of component names to this endpoint.</p>
+<p>To trigger builds, POST a JSON array of downstream component names to this endpoint.</p>
 {token_block}
 <p><a href="/logout">Logout</a></p>
 </body>

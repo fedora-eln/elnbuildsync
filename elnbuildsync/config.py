@@ -81,6 +81,10 @@ class ConfigError(Exception):
     pass
 
 
+class UnknownComponentError(ConfigError):
+    pass
+
+
 class UnknownRefError(ConfigError):
     pass
 
@@ -245,7 +249,7 @@ async def get_distro_packages(
     if not which_source:
         which_source = ["source", "buildroot-source"]
 
-    merged_packages = dict()
+    packages = dict[str, dict[str, str]]()
 
     for view in reversed(distro_view):
         for this_source in reversed(which_source):
@@ -262,18 +266,19 @@ async def get_distro_packages(
             with Session() as session:
                 r = await session.get(url, allow_redirects=True)
                 for line in r.text.splitlines():
-                    merged_packages[line] = {
+                    packages[line] = {
                         "view": view,
-                        "content_type": this_source,
+                        "source": this_source,
+                        "upstream_name": line,
+                        "downstream_name": line,
                     }
 
     # There may be an empty line in the file, ignore it.
-    if "" in merged_packages:
-        del merged_packages[""]
+    packages.pop("", None)
 
-    logger.debug("Found a total of {} packages".format(len(merged_packages)))
+    logger.debug("Found a total of {} packages".format(len(packages)))
 
-    return {"rpms": merged_packages}
+    return packages
 
 
 @backoff.on_exception(backoff.expo, Exception, max_time=60)
@@ -413,17 +418,13 @@ def _parse_db(cnf_db):
 
 
 def _parse_control(cnf_control):
-    """Parse control configuration. Returns dict with pause, strict, etc."""
+    """Parse control configuration. Returns dict with pause, skip_tag, exclude, ordering, etc."""
     result = dict()
-    for k in ("pause", "strict"):
+    for k in ("pause",):
         if k in cnf_control:
             result[k] = bool(cnf_control[k])
         else:
             raise ConfigError(f"control.{k} missing.")
-
-    result["autopackagelist"] = None
-    if "autopackagelist" in cnf_control:
-        result["autopackagelist"] = cnf_control["autopackagelist"]
 
     result["skip_tag"] = set()
     if "skip_tag" in cnf_control:
@@ -447,20 +448,96 @@ def _parse_control(cnf_control):
     return result
 
 
-def _parse_defaults(cnf_defaults):
-    """Parse defaults configuration. Returns dict with source, destination."""
-    result = dict()
-    for dk in ("source", "destination"):
-        if dk in cnf_defaults:
-            result[dk] = str(cnf_defaults[dk])
-        else:
-            raise ConfigError(f"defaults.{dk} missing.")
-    return result
+async def _parse_components(cnf_components):
+    """Parse the components block (top-level). Requires at least one of autopackagelist or overrides.
+    When autopackagelist is present, calls get_distro_packages() and uses the returned dict as comps.
+    If overrides is present, updates/supplements comps with comps.update() semantics per component.
+    Returns dict with comps (dict), and autopackagelist (dict or None) for view/content_resolver.
+    """
+    if "autopackagelist" not in cnf_components and "overrides" not in cnf_components:
+        raise ConfigError(
+            "At least one of components.autopackagelist or components.overrides must be present."
+        )
+    apl = None
+    packages = set[str]()
+    if "autopackagelist" in cnf_components:
+        apl_raw = cnf_components["autopackagelist"]
+        if "view" not in apl_raw:
+            raise ConfigError("components.autopackagelist.view missing.")
+        if "source" not in apl_raw:
+            raise ConfigError("components.autopackagelist.source missing.")
+        apl = {
+            "view": apl_raw["view"]
+            if isinstance(apl_raw["view"], list)
+            else [apl_raw["view"]],
+            "source": apl_raw["source"]
+            if isinstance(apl_raw["source"], list)
+            else [apl_raw["source"]],
+            "content_resolver": apl_raw.get(
+                "content_resolver", DEFAULT_CONTENT_RESOLVER
+            ),
+        }
+        downstream_components = await get_distro_packages(
+            distro_url=apl["content_resolver"],
+            distro_view=apl["view"],
+            which_source=apl["source"],
+        )
+        for comp_name, comp_entry in downstream_components.items():
+            if not isinstance(comp_entry, dict):
+                raise ConfigError(
+                    f"components.autopackagelist entry '{comp_name}' must be a dictionary."
+                )
+            if "upstream_name" not in comp_entry:
+                raise ConfigError(
+                    f"components.autopackagelist entry '{comp_name}' missing upstream_name."
+                )
+            if "downstream_name" not in comp_entry:
+                raise ConfigError(
+                    f"components.autopackagelist entry '{comp_name}' missing downstream_name."
+                )
+    else:
+        downstream_components = {}
+    upstream_components = downstream_components.copy()
+
+    overrides = cnf_components.get("overrides", {})
+    if not isinstance(overrides, dict):
+        raise ConfigError("components.overrides must be a dictionary.")
+
+    for downstream_name, override_options in overrides.items():
+        if not isinstance(override_options, dict):
+            raise ConfigError(
+                f"components.overrides.{downstream_name} must be a dictionary"
+            )
+
+        upstream_name = override_options.get("upstream_name", downstream_name)
+
+        if downstream_name not in downstream_components:
+            downstream_components[downstream_name] = {
+                "view": "override",
+                "source": "override",
+                "upstream_name": upstream_name,
+                "downstream_name": downstream_name,
+            }
+        downstream_components[downstream_name].update(override_options)
+        downstream_components[downstream_name].setdefault(
+            "upstream_name", downstream_name
+        )
+        downstream_components[downstream_name].setdefault(
+            "downstream_name", downstream_name
+        )
+        upstream_components[upstream_name] = downstream_components[
+            downstream_name
+        ].copy()
+
+    return {
+        "downstream_components": downstream_components,
+        "upstream_components": upstream_components,
+    }
 
 
 def _parse_configuration_block(cnf):
     """Parse the full configuration block (no rawhide resolution, no components).
-    Returns dict n with koji, bodhi, db, open_id_connect, control, defaults.
+    Returns dict n with koji, bodhi, db, open_id_connect, control.
     """
     if "koji" not in cnf:
         raise ConfigError("koji missing.")
@@ -483,10 +560,6 @@ def _parse_configuration_block(cnf):
     if "control" not in cnf:
         raise ConfigError("control missing.")
     n["control"] = _parse_control(cnf["control"])
-
-    if "defaults" not in cnf:
-        raise ConfigError("defaults missing.")
-    n["defaults"] = _parse_defaults(cnf["defaults"])
 
     return n
 
@@ -556,76 +629,17 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
 
     if "configuration" not in y:
         raise ConfigError("The required configuration block is missing.")
+    if "components" not in y:
+        raise ConfigError("The required components block is missing.")
     cnf = y["configuration"]
     n = _parse_configuration_block(cnf)
+    nc = await _parse_components(y["components"])
+    logger.info("Found %d component(s).", len(nc["downstream_components"]))
 
     if n["koji"]["trigger_tag"] == "rawhide":
         n["koji"]["trigger_tag"] = await get_rawhide_tag()
         logger.info(f"Detected rawhide tag {n['koji']['trigger_tag']}")
 
-    components = 0
-    nc = {}
-    if "components" in y or "autopackagelist" in n["control"]:
-        cnf = {}
-
-        if n["control"].get("autopackagelist"):
-            resolver = DEFAULT_CONTENT_RESOLVER
-            views = list()
-
-            if "content_resolver" in n["control"]["autopackagelist"]:
-                resolver = n["control"]["autopackagelist"]["content_resolver"]
-
-            if type(n["control"]["autopackagelist"]["view"]) == list:
-                views = n["control"]["autopackagelist"]["view"]
-            else:
-                views = [
-                    n["control"]["autopackagelist"]["view"],
-                ]
-
-            cnf = (
-                await get_distro_packages(
-                    distro_url=resolver,
-                    distro_view=views,
-                )
-            )["rpms"]
-
-        if "components" in y:
-            cnf.update(y["components"])
-
-        for p in cnf:
-            components += 1
-            pcfg = cnf[p] if cnf[p] is not None else {}
-            if isinstance(pcfg, dict):
-                nc[p] = dict(pcfg)
-            else:
-                nc[p] = dict()
-            nc[p]["source"] = n["defaults"]["source"] % {
-                "component": p,
-                "stream": "",
-            }
-            nc[p]["destination"] = n["defaults"]["destination"] % {
-                "component": p,
-                "stream": "",
-            }
-            for ck in ("source", "destination", "target"):
-                if ck in pcfg:
-                    nc[p][ck] = str(pcfg[ck])
-        logger.info("Found %d configured component(s).", len(nc))
-    if n["control"]["strict"]:
-        logger.info(
-            "Running in the strict mode.  Only configured components will be processed."
-        )
-    else:
-        logger.info(
-            "Running in the non-strict mode.  All trigger components will be processed."
-        )
-    if not components:
-        if n["control"]["strict"]:
-            logger.warning(
-                "No components configured while running in the strict mode.  Nothing to do."
-            )
-        else:
-            logger.info("No components explicitly configured.")
     main = n
     comps = nc
 
@@ -650,10 +664,16 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
             raise ConfigError("Missing database configuration (db block)")
 
 
-def is_eligible(comp):
+def is_eligible(comp, is_downstream):
     # Check whether this component is meaningful to us
-    if config.main["control"]["strict"] and comp not in config.comps:
-        logger.debug(f"{comp} is not an approved component, ignoring")
+    if is_downstream:
+        component_list = config.comps["downstream_components"]
+    else:
+        component_list = config.comps["upstream_components"]
+    if comp not in component_list:
+        logger.debug(
+            f"{comp} is not an approved {'downstream' if is_downstream else 'upstream'} component, ignoring"
+        )
         return False
 
     for pattern in config.main["control"]["exclude"]:
@@ -684,3 +704,25 @@ def get_order(comp):
 
 def is_paused():
     return config.main["control"]["pause"]
+
+
+def get_upstream_name(downstream_component):
+    try:
+        return config.comps["downstream_components"][downstream_component][
+            "upstream_name"
+        ]
+    except KeyError:
+        raise UnknownComponentError(
+            f"Downstream component {downstream_component} not found"
+        )
+
+
+def get_downstream_name(upstream_component):
+    try:
+        return config.comps["upstream_components"][upstream_component][
+            "downstream_name"
+        ]
+    except KeyError:
+        raise UnknownComponentError(
+            f"Upstream component {upstream_component} not found"
+        )

@@ -36,10 +36,6 @@ configuration:
       - eln
   control:
     pause: false
-    strict: true
-    autopackagelist:
-        view: [ eln, eln-extras ]
-        content_resolver: https://tiny.distro.builders
     skip_tag:
       # This package defines the %{rhel} and %{eln} macros and we should not
       # ever tag the Fedora version into ELN
@@ -130,15 +126,13 @@ configuration:
       ^llvm[0-9\.]*$: 0
       ^clang[0-9\.]*$: 1
       ^fedora-repos.*$: 0
-  defaults:
-    source: "%(component)s.git#rawhide"
-    destination: "%(component)s.git#rawhide"
 components:
-  ipa:
-    source: freeipa.git
-  ipa-healthcheck:
-    source: freeipa-healthcheck.git
-  restore:
-    source: dump.git
-  rhel-system-roles:
-    source: linux-system-roles.git
+  autopackagelist:
+    view: [ eln, eln-extras ]
+    content_resolver: https://tiny.distro.builders
+  overrides:
+    # Some packages have a different name in ELN than in Fedora
+    ipa:
+      upstream_name: freeipa
+    # We can also add packages that are not in the autopackagelist
+    extrapackage: {}

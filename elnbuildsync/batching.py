@@ -94,7 +94,9 @@ async def process_message_batch():
         logger.exception(e)
 
 
-async def rebuild_from_components(components):
+async def rebuild_from_components(downstream_components):
+    """Takes an iterable of downstream component names and rebuilds them."""
+
     global message_batch_processor
     global message_queue
 
@@ -118,55 +120,64 @@ async def rebuild_from_components(components):
     )
     latest_tagged_eln_table = {pkg["name"]: pkg for pkg in latest_tagged_eln_pkgs}
 
-    for component in components:
-        if config.is_eligible(component):
+    for downstream_component in downstream_components:
+        if config.is_eligible(downstream_component, is_downstream=True):
+            upstream_component = config.get_upstream_name(downstream_component)
             try:
-                if component in latest_tagged_rawhide_table:
-                    if component in latest_tagged_eln_table:
+                if upstream_component in latest_tagged_rawhide_table:
+                    if downstream_component in latest_tagged_eln_table:
                         # Check whether the latest build in ELN is equal or newer than
                         # the latest build in Rawhide
                         rawhide_nvr = re.sub(
                             nodist_re_pattern,
                             "",
-                            latest_tagged_rawhide_table[component]["nvr"],
+                            latest_tagged_rawhide_table[upstream_component]["nvr"],
                         )
                         eln_nvr = re.sub(
                             nodist_re_pattern,
                             "",
-                            latest_tagged_eln_table[component]["nvr"],
+                            latest_tagged_eln_table[downstream_component]["nvr"],
                         )
                         ver_cmp = rpm.labelCompare(rawhide_nvr, eln_nvr)
 
                         if ver_cmp < 0:
                             # The ELN build is newer than the Rawhide build
-                            buildinfo = latest_tagged_eln_table[component]
+                            buildinfo = latest_tagged_eln_table[downstream_component]
                         elif ver_cmp > 0:
                             # The Rawhide build is newer than the ELN build
-                            buildinfo = latest_tagged_rawhide_table[component]
+                            buildinfo = latest_tagged_rawhide_table[upstream_component]
                         else:
                             # They have the same version, so check their creation times
                             rawhide_start_time = datetime.fromisoformat(
-                                latest_tagged_rawhide_table[component]["creation_time"]
+                                latest_tagged_rawhide_table[upstream_component][
+                                    "creation_time"
+                                ]
                             )
                             eln_start_time = datetime.fromisoformat(
-                                latest_tagged_eln_table[component]["creation_time"]
+                                latest_tagged_eln_table[downstream_component][
+                                    "creation_time"
+                                ]
                             )
 
                             if rawhide_start_time > eln_start_time:
-                                buildinfo = latest_tagged_rawhide_table[component]
+                                buildinfo = latest_tagged_rawhide_table[
+                                    upstream_component
+                                ]
                             else:
-                                buildinfo = latest_tagged_eln_table[component]
+                                buildinfo = latest_tagged_eln_table[
+                                    downstream_component
+                                ]
 
                     else:
                         # No ELN builds have occurred yet, so use Rawhide
-                        buildinfo = latest_tagged_rawhide_table[component]
+                        buildinfo = latest_tagged_rawhide_table[upstream_component]
 
-                elif component in latest_tagged_eln_table:
+                elif downstream_component in latest_tagged_eln_table:
                     # Component is probably renamed in RHEL, so use the latest ELN build
-                    buildinfo = latest_tagged_eln_table[component]
+                    buildinfo = latest_tagged_eln_table[downstream_component]
                 else:
-                    raise ComponentNotFoundError(
-                        f"No existing builds in either Rawhide or ELN for {component}"
+                    raise UnknownComponentError(
+                        f"No existing builds in either Rawhide or ELN for {downstream_component}"
                     )
 
                 # Fake up a FedoraMessage for the batching system
@@ -189,8 +200,12 @@ async def rebuild_from_components(components):
 
             except ComponentNotFoundError as e:
                 logger.exception(e)
-                logger.critical(f"Cannot determine commit ID to build {component}")
+                logger.critical(
+                    f"Cannot determine commit ID to build {downstream_component}"
+                )
             except Exception as e:
                 # Unexpected exception, log it so we don't crash
-                logger.critical(f"Unexpected error while handling {component}")
+                logger.critical(
+                    f"Unexpected error while handling {downstream_component}"
+                )
                 logger.exception(e)

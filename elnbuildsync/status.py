@@ -62,7 +62,12 @@ async def create_status_page():
         logger.info("Refreshing status page")
 
         # Get the list of desired package names
-        desired_pkgs = [component for component in sorted(config.comps, key=str.lower)]
+        desired_pkgs = [
+            component
+            for component in sorted(
+                config.comps["downstream_components"], key=str.lower
+            )
+        ]
 
         bsys = kojihelpers.connection.get_buildsys()
 
@@ -112,8 +117,8 @@ async def create_status_page():
                     _status_data[pname] = build
 
                 _status_data[pname]["view"] = (
-                    config.comps[pname]["view"]
-                    if "view" in config.comps[pname]
+                    config.comps["downstream_components"][pname]["view"]
+                    if "view" in config.comps["downstream_components"][pname]
                     else "UNKNOWN"
                 )
 

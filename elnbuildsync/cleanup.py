@@ -40,9 +40,11 @@ async def periodic_cleanup():
     bsys = kojihelpers.connection.get_buildsys()
 
     # We have the set of desired packages from Content Resolver
-    desired_pkg_names = set(config.comps.keys())
+    desired_pkg_names = set(config.comps["downstream_components"].keys())
 
     # Get the list of packages currently tagged into the destination tag
+    # TODO: This should have its own config option for the tag to clean up.
+    # Relying on the target matching the stable tag is not guaranteed to work.
     latest_tagged_dest_pkgs = await call_koji(
         bsys.listTagged, config.main["koji"]["build_target"], latest=True
     )
@@ -58,6 +60,8 @@ async def periodic_cleanup():
     )
 
     # Get the complete list of builds tagged into the destination tag
+    # TODO: This should have its own config option for the tag to clean up.
+    # Relying on the target matching the stable tag is not guaranteed to work.
     all_tagged_dest_pkgs = await call_koji(
         bsys.listTagged, config.main["koji"]["build_target"], latest=False
     )
@@ -66,13 +70,19 @@ async def periodic_cleanup():
     # Queue up the set of old builds to untag
     nvrs_to_untag = all_tagged_dest_nvrs - latest_tagged_dest_nvrs
 
-    if config.do_untagging and len(nvrs_to_untag) > 0:
+    if len(nvrs_to_untag) > 0:
         logger.info("{} builds to untag:".format(len(nvrs_to_untag)))
         for nvr in sorted(nvrs_to_untag):
-            logger.info(f"Untagging {nvr}")
-        kojihelpers.tags.untag_builds(
-            config.main["koji"]["build_target"], nvrs_to_untag
-        )
+            logger.info(f"\t{nvr}")
+
+        if config.do_untagging:
+            # TODO: This should have its own config option for the tag to clean up.
+            # Relying on the target matching the stable tag is not guaranteed to work.
+            kojihelpers.tags.untag_builds(
+                config.main["koji"]["build_target"], nvrs_to_untag
+            )
+        else:
+            logger.info("Untagging is disabled, skipping untagging.")
 
     # Packages in the desired list but not in the tag should be built
     latest_tagged_dest_pkg_names = {pkg["name"] for pkg in latest_tagged_dest_pkgs}
