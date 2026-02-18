@@ -7,6 +7,12 @@ configuration:
     fail_fast: true
   bodhi:
     batch_size: 750
+  db:
+    host: localhost
+    port: 5432
+    name: elnbuildsync
+    driver: postgresql+asyncpg
+    user: elnbuildsync
   # OpenID Connect authentication configuration
   # Uses Fedora tinystage test OIDC server for development/testing
   # See: https://github.com/fedora-infra/tiny-stage
@@ -31,13 +37,6 @@ configuration:
   control:
     pause: false
     strict: true
-    db:
-      host: localhost
-      port: 5432
-      name: elnbuildsync
-      driver: postgresql+asyncpg
-      user: elnbuildsync
-
     autopackagelist:
         view: [ eln, eln-extras ]
         content_resolver: https://tiny.distro.builders

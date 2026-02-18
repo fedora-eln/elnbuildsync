@@ -32,6 +32,7 @@ from elnbuildsync.config import (
     _parse_bodhi,
     _parse_configuration_block,
     _parse_control,
+    _parse_db,
     _parse_defaults,
     _parse_koji,
     _parse_open_id_connect,
@@ -147,17 +148,50 @@ class TestParseBodhi:
             _parse_bodhi({"batch_size": "not-an-int"})
 
 
-# Minimal valid control config
+# Minimal valid db config (all keys mandatory)
+MINIMAL_DB = {
+    "host": "localhost",
+    "port": 5432,
+    "name": "testdb",
+    "driver": "postgresql+asyncpg",
+    "user": "testuser",
+}
+
+
+class TestParseDb:
+    def test_valid_returns_parsed(self):
+        result = _parse_db(MINIMAL_DB)
+        assert result["host"] == "localhost"
+        assert result["port"] == 5432
+        assert result["name"] == "testdb"
+        assert result["driver"] == "postgresql+asyncpg"
+        assert result["user"] == "testuser"
+
+    def test_missing_host_raises(self):
+        with pytest.raises(ConfigError, match="db.host missing"):
+            _parse_db({k: v for k, v in MINIMAL_DB.items() if k != "host"})
+
+    def test_missing_port_raises(self):
+        with pytest.raises(ConfigError, match="db.port missing"):
+            _parse_db({k: v for k, v in MINIMAL_DB.items() if k != "port"})
+
+    def test_missing_name_raises(self):
+        with pytest.raises(ConfigError, match="db.name missing"):
+            _parse_db({k: v for k, v in MINIMAL_DB.items() if k != "name"})
+
+    def test_missing_driver_raises(self):
+        with pytest.raises(ConfigError, match="db.driver missing"):
+            _parse_db({k: v for k, v in MINIMAL_DB.items() if k != "driver"})
+
+    def test_missing_user_raises(self):
+        with pytest.raises(ConfigError, match="db.user missing"):
+            _parse_db({k: v for k, v in MINIMAL_DB.items() if k != "user"})
+
+
+# Minimal valid control config (no db; db is top-level)
 MINIMAL_CONTROL = {
     "pause": False,
     "strict": True,
-    "db": {
-        "driver": "postgresql+asyncpg",
-        "host": "localhost",
-        "port": 5432,
-        "name": "testdb",
-        "user": "testuser",
-    },
 }
 
 
@@ -166,7 +200,6 @@ class TestParseControl:
         result = _parse_control(MINIMAL_CONTROL)
         assert result["pause"] is False
         assert result["strict"] is True
-        assert result["db"] == MINIMAL_CONTROL["db"]
         assert result["autopackagelist"] is None
         assert result["skip_tag"] == {"rpms": set(), "modules": set()}
         assert result["exclude"] == {"rpms": set(), "modules": set()}
@@ -194,10 +227,6 @@ class TestParseControl:
     def test_missing_strict_raises(self):
         with pytest.raises(ConfigError, match="control.strict missing"):
             _parse_control({k: v for k, v in MINIMAL_CONTROL.items() if k != "strict"})
-
-    def test_missing_db_raises(self):
-        with pytest.raises(ConfigError, match="Missing database configuration"):
-            _parse_control({k: v for k, v in MINIMAL_CONTROL.items() if k != "db"})
 
 
 # Minimal valid defaults config
@@ -242,6 +271,7 @@ def _minimal_cnf(open_id_connect=None):
             "fail_fast": False,
         },
         "bodhi": {"batch_size": 0},
+        "db": MINIMAL_DB,
         "open_id_connect": open_id_connect,
         "control": MINIMAL_CONTROL,
         "defaults": MINIMAL_DEFAULTS,
@@ -256,6 +286,9 @@ class TestParseConfigurationBlock:
         assert n["koji"]["trigger_tag"] == "f40"
         assert n["koji"]["build_target"] == "eln"
         assert n["bodhi"]["batch_size"] == 0
+        assert n["db"]["host"] == "localhost"
+        assert n["db"]["port"] == 5432
+        assert n["db"]["name"] == "testdb"
         assert n["open_id_connect"] is not None
         assert n["open_id_connect"]["auth_url"] == MINIMAL_OIDC["auth_url"]
         assert n["control"]["pause"] is False
@@ -290,6 +323,12 @@ class TestParseConfigurationBlock:
         with pytest.raises(ConfigError, match="bodhi missing"):
             _parse_configuration_block(cnf)
 
+    def test_missing_db_raises(self):
+        cnf = _minimal_cnf()
+        del cnf["db"]
+        with pytest.raises(ConfigError, match="db missing"):
+            _parse_configuration_block(cnf)
+
     def test_missing_open_id_connect_raises(self):
         cnf = _minimal_cnf()
         del cnf["open_id_connect"]
@@ -320,16 +359,16 @@ configuration:
     fail_fast: false
   bodhi:
     batch_size: 0
+  db:
+    host: localhost
+    port: 5432
+    name: testdb
+    driver: postgresql+asyncpg
+    user: testuser
   open_id_connect: false
   control:
     pause: false
     strict: true
-    db:
-      driver: postgresql+asyncpg
-      host: localhost
-      port: 5432
-      name: testdb
-      user: testuser
   defaults:
     cache:
       source: "%(component)s"

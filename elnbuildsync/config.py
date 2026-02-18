@@ -391,8 +391,29 @@ def _parse_bodhi(cnf_bodhi):
     return result
 
 
+def _parse_db(cnf_db):
+    """Parse database configuration. Returns dict with host, port, name, driver, user.
+    All keys are mandatory.
+    """
+    required = ("host", "port", "name", "driver", "user")
+    for key in required:
+        if key not in cnf_db:
+            raise ConfigError(f"db.{key} missing.")
+    try:
+        result = {
+            "host": str(cnf_db["host"]),
+            "port": int(cnf_db["port"]),
+            "name": str(cnf_db["name"]),
+            "driver": str(cnf_db["driver"]),
+            "user": str(cnf_db["user"]),
+        }
+    except ValueError:
+        raise ConfigError("db.port must be an integer")
+    return result
+
+
 def _parse_control(cnf_control):
-    """Parse control configuration. Returns dict with pause, strict, db, etc."""
+    """Parse control configuration. Returns dict with pause, strict, etc."""
     result = dict()
     for k in ("pause", "strict"):
         if k in cnf_control:
@@ -415,12 +436,6 @@ def _parse_control(cnf_control):
         for cns in ("rpms", "modules"):
             if cns in cnf_control["exclude"]:
                 result["exclude"][cns].update(cnf_control["exclude"][cns])
-
-    try:
-        result["db"] = cnf_control["db"]
-    except KeyError as e:
-        logger.exception(e)
-        raise ConfigError("Missing database configuration")
 
     for cns in ("rpms", "modules"):
         if result["exclude"][cns]:
@@ -464,7 +479,7 @@ def _parse_defaults(cnf_defaults):
 
 def _parse_configuration_block(cnf):
     """Parse the full configuration block (no rawhide resolution, no components).
-    Returns dict n with koji, bodhi, open_id_connect, control, defaults.
+    Returns dict n with koji, bodhi, db, open_id_connect, control, defaults.
     """
     if "koji" not in cnf:
         raise ConfigError("koji missing.")
@@ -473,6 +488,10 @@ def _parse_configuration_block(cnf):
     if "bodhi" not in cnf:
         raise ConfigError("bodhi missing.")
     n["bodhi"] = _parse_bodhi(cnf["bodhi"])
+
+    if "db" not in cnf:
+        raise ConfigError("db missing.")
+    n["db"] = _parse_db(cnf["db"])
 
     if "open_id_connect" not in cnf:
         raise ConfigError(
@@ -659,7 +678,7 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
         # config file edit. To change DB settings, the process must be
         # restarted.
         try:
-            db_config = n["control"]["db"]
+            db_config = n["db"]
             db_url = sqlalchemy.URL.create(
                 drivername=db_config["driver"],
                 host=db_config["host"],
@@ -671,7 +690,7 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
 
         except KeyError as e:
             logger.exception(e)
-            raise ConfigError("Missing database configuration")
+            raise ConfigError("Missing database configuration (db block)")
 
 
 def is_eligible(ns, comp):
