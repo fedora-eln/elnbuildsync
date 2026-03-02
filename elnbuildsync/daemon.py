@@ -133,7 +133,7 @@ async def _main_impl(reactor, db_pw_file, config_url=None, config_file=None) -> 
 
         # Set up the Database
         logger.info("Initializing database")
-        engine = await db_models.init_db(config.db_url, echo=config.is_debug())
+        await db_models.init_db(config.db_url, echo=config.is_debug())
         logger.info("Database Initialized")
 
         # Schedule configuration updates

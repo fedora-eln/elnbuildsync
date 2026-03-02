@@ -462,7 +462,6 @@ async def _parse_components(cnf_components):
             "At least one of components.autopackagelist or components.overrides must be present."
         )
     apl = None
-    packages = set[str]()
     if "autopackagelist" in cnf_components:
         apl_raw = cnf_components["autopackagelist"]
         if "view" not in apl_raw:
