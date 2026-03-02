@@ -358,7 +358,7 @@ def _parse_open_id_connect(oidc_raw):
 
 
 def _parse_koji(cnf_koji):
-    """Parse koji configuration. Returns dict with profile, trigger_tag, build_target, scratch_build, fail_fast."""
+    """Parse koji configuration. Returns dict with profile, trigger_tag, build_target, stable_tag, scratch_build, fail_fast."""
     if "profile" not in cnf_koji:
         raise ConfigError("koji.profile missing.")
     result = {"profile": str(cnf_koji["profile"])}
@@ -368,6 +368,9 @@ def _parse_koji(cnf_koji):
     if "build_target" not in cnf_koji:
         raise ConfigError("koji.build_target missing.")
     result["build_target"] = str(cnf_koji["build_target"])
+    if "stable_tag" not in cnf_koji:
+        raise ConfigError("koji.stable_tag missing.")
+    result["stable_tag"] = str(cnf_koji["stable_tag"])
     if "scratch_build" in cnf_koji:
         result["scratch_build"] = bool(cnf_koji["scratch_build"])
     else:

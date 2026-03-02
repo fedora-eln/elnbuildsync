@@ -3,6 +3,7 @@ configuration:
     profile: koji
     trigger_tag: f40
     build_target: eln
+    stable_tag: eln
     scratch_build: true
     fail_fast: true
   bodhi:
