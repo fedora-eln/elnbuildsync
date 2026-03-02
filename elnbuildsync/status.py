@@ -89,68 +89,29 @@ async def create_status_page():
         _status_data = defaultdict(lambda: None)
         _status_data["__updated"] = datetime.now(timezone.utc)
 
-        koji_url = kojihelpers.connection.get_koji_url()
-
         # Get the list of packages that DBS has built.
         built_packages = await call_koji(
             bsys.listBuilds, userID=username, queryOpts={"order": "start_ts"}
         )
         for build in built_packages:
-            pname = build["name"]
-            if pname in desired_pkgs:
-                # The sort order goes from oldest to newest, so if we see the same
-                # package, just overwrite the build data.
-                if pname in _status_data:
-                    _status_data[pname].update(build)
-                else:
-                    _status_data[pname] = build
+            if build["start_ts"] is not None:
+                pname = build["name"]
+                if pname in desired_pkgs:
+                    _set_package_status(_status_data, pname, build, tagged_builds)
 
-                _status_data[pname]["view"] = (
-                    config.comps["downstream_components"][pname]["view"]
-                    if "view" in config.comps["downstream_components"][pname]
-                    else "UNKNOWN"
+        for pname in desired_pkgs:
+            if pname not in _status_data:
+                logger.debug(f"Package {pname} not in _status_data, checking Koji")
+
+                # Check whether the package was built by another user
+                builds = await call_koji(
+                    bsys.listBuilds, packageID=pname, queryOpts={"order": "start_ts"}
                 )
-
-                _status_data[pname]["status_detail"] = ""
-                _status_data[pname]["build_url"] = os.path.join(
-                    koji_url,
-                    "taskinfo?taskID={}".format(build["task_id"]),
-                )
-
-                if _status_data[pname]["state"] == koji.BUILD_STATES["BUILDING"]:
-                    _status_data[pname]["status"] = BuildStatus.BUILDING
-                    continue
-                else:
-                    # Unknown for now until we get down further
-                    _status_data[pname]["status"] = BuildStatus.UNKNOWN
-
-                if "tagged" not in _status_data[pname]:
-                    # Set a default of "Unknown"
-                    _status_data[pname]["tagged"] = "UNKNOWN"
-
-                if pname in tagged_builds and "nvr" in tagged_builds[pname]:
-                    _status_data[pname]["tagged"] = tagged_builds[pname]["nvr"]
-
-                if build["nvr"] == _status_data[pname]["tagged"]:
-                    _status_data[pname]["status"] = BuildStatus.SUCCEEDED
-                elif (
-                    pname in tagged_builds
-                    and _status_data[pname]["status"] == BuildStatus.UNKNOWN
-                ):
-                    # Check whether the latest tagged package is ELN or Fedora
-                    if re.search(r"\.fc\d\d$", _status_data[pname]["tagged"]):
-                        _status_data[pname]["status"] = BuildStatus.FAILED
-                        _status_data[pname]["status_detail"] = "Fedora build in tag"
-
-                    elif dest_is_newer(build, tagged_builds[pname]):
-                        _status_data[pname]["status"] = BuildStatus.SUCCEEDED
-                        _status_data[pname]["status_detail"] = "Built by another user"
-                    else:
-                        _status_data[pname]["status"] = BuildStatus.FAILED
-                        _status_data[pname]["status_detail"] = "Build failed"
-                else:
-                    _status_data[pname]["status"] = BuildStatus.FAILED
-                    _status_data[pname]["status_detail"] = "Build is not tagged"
+                for build in builds:
+                    # The ordering oddly puts "None" at the end, so we need to
+                    # exclude it or we get some odd results at times.
+                    if build["start_ts"] is not None:
+                        _set_package_status(_status_data, pname, build, tagged_builds)
 
         # Now double-check that we didn't miss any expected packages
         # This will use the defaultdict to set the value to None for
@@ -198,6 +159,75 @@ def dest_is_newer(latest_src, latest_dest):
 
     # Otherwise, return whether latest_dest is newer than latest_src
     return is_higher(latest_dest, latest_src)
+
+
+def _set_package_status(_status_data, pname, build, tagged_builds):
+    """Update _status_data[pname] with build info and computed status.
+
+    If build is None, values that would come from build are set to "UNKNOWN".
+    """
+    koji_url = kojihelpers.connection.get_koji_url()
+    if build is None:
+        build = {
+            "name": pname,
+            "task_id": "UNKNOWN",
+            "nvr": "UNKNOWN",
+            "state": -1,
+        }
+        build_unknown = True
+    else:
+        build_unknown = False
+
+    if pname in _status_data and _status_data[pname] is not None:
+        _status_data[pname].update(build)
+    else:
+        _status_data[pname] = dict(build)
+
+    entry = _status_data[pname]
+    entry["view"] = (
+        config.comps["downstream_components"][pname]["view"]
+        if "view" in config.comps["downstream_components"][pname]
+        else "UNKNOWN"
+    )
+    entry["status_detail"] = ""
+    if build_unknown:
+        entry["build_url"] = None
+    else:
+        entry["build_url"] = os.path.join(
+            koji_url,
+            "taskinfo?taskID={}".format(build["task_id"]),
+        )
+
+    if entry["state"] == koji.BUILD_STATES["BUILDING"]:
+        entry["status"] = BuildStatus.BUILDING
+        return
+    entry["status"] = BuildStatus.UNKNOWN
+
+    if build_unknown:
+        if "tagged" not in entry:
+            entry["tagged"] = None
+        return
+
+    if "tagged" not in entry:
+        entry["tagged"] = "UNKNOWN"
+    if pname in tagged_builds and "nvr" in tagged_builds[pname]:
+        entry["tagged"] = tagged_builds[pname]["nvr"]
+
+    if build["nvr"] == entry["tagged"]:
+        entry["status"] = BuildStatus.SUCCEEDED
+    elif pname in tagged_builds and entry["status"] == BuildStatus.UNKNOWN:
+        if re.search(r"\.fc\d\d$", entry["tagged"]):
+            entry["status"] = BuildStatus.FAILED
+            entry["status_detail"] = "Fedora build in tag"
+        elif dest_is_newer(build, tagged_builds[pname]):
+            entry["status"] = BuildStatus.SUCCEEDED
+            entry["status_detail"] = "Built by another user"
+        else:
+            entry["status"] = BuildStatus.FAILED
+            entry["status_detail"] = "Build failed"
+    else:
+        entry["status"] = BuildStatus.FAILED
+        entry["status_detail"] = "Build is not tagged"
 
 
 def _status_display_string(build_status):
