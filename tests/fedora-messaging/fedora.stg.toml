@@ -33,14 +33,14 @@ arguments = {}
 #
 # If you require a stronger guarantee about delivery, please talk to Fedora's
 # Infrastructure team.
-[queues."ceb269ca-4f23-4583-9875-f70a5038c37e"]
+[queues."6e80b32d-5857-40e0-a740-ae88fd5279a6"]
 durable = false
 auto_delete = true
 exclusive = true
 arguments = {}
 
 [[bindings]]
-queue = "ceb269ca-4f23-4583-9875-f70a5038c37e"
+queue = "6e80b32d-5857-40e0-a740-ae88fd5279a6"
 exchange = "amq.topic"
 routing_keys = ["#.buildsys.repo.init", "#.buildsys.repo.done", "#.buildsys.tag", "buildsys.task.state.change"]
 
