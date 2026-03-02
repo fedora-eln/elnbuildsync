@@ -16,14 +16,12 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
-import koji
-
 from collections import defaultdict
 
-from . import builds
-from . import connection
-from . import errors
-from . import tags
+from . import builds as builds
+from . import connection as connection
+from . import errors as errors
+from . import tags as tags
 
 
 # The set of repos we're waiting on to initialize

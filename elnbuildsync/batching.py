@@ -176,7 +176,7 @@ async def rebuild_from_components(downstream_components):
                     # Component is probably renamed in RHEL, so use the latest ELN build
                     buildinfo = latest_tagged_eln_table[downstream_component]
                 else:
-                    raise UnknownComponentError(
+                    raise config.UnknownComponentError(
                         f"No existing builds in either Rawhide or ELN for {downstream_component}"
                     )
 

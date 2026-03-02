@@ -16,9 +16,8 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
-from .daemon import main
-
-from . import listener
-from . import config
-from . import kojihelpers
-from . import rebuildbatch
+from .daemon import main as main
+from . import listener as listener
+from . import config as config
+from . import kojihelpers as kojihelpers
+from . import rebuildbatch as rebuildbatch
