@@ -49,7 +49,6 @@ db_url = None
 # Configuration options
 config_timer = 15 * 60  # 15 minutes
 cleanup_timer = 12 * 60 * 60  # 12 hours
-status_timer = 10 * 60  # 10 minutes
 task_check_timer = 5 * 60  # 5 minutes
 tag_check_timer = 5 * 60  # 5 minutes
 task_timeout = 24 * 60 * 60  # 24 hours
@@ -421,7 +420,7 @@ def _parse_db(cnf_db):
 
 
 def _parse_control(cnf_control):
-    """Parse control configuration. Returns dict with pause, skip_tag, exclude, ordering, etc."""
+    """Parse control configuration. Returns dict with pause, skip_tag, exclude, ordering, status_interval, etc."""
     result = dict()
     for k in ("pause",):
         if k in cnf_control:
@@ -448,6 +447,14 @@ def _parse_control(cnf_control):
     result["ordering"] = dict()
     if "ordering" in cnf_control:
         result["ordering"].update(cnf_control["ordering"])
+
+    result["status_interval"] = 600  # 10 minutes
+    if "status_interval" in cnf_control:
+        val = cnf_control["status_interval"]
+        if not isinstance(val, int) or val <= 0:
+            raise ConfigError("control.status_interval must be a positive integer.")
+        result["status_interval"] = val
+
     return result
 
 

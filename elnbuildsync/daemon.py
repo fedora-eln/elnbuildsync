@@ -148,7 +148,9 @@ async def _main_impl(reactor, db_pw_file, config_url=None, config_file=None) -> 
 
         # Schedule periodic status page and run it once at startup
         config.status_processor = task.LoopingCall(status.create_status_page)
-        config.status_processor.start(config.status_timer, now=True)
+        config.status_processor.start(
+            config.main["control"]["status_interval"], now=True
+        )
 
         # Schedule periodic cleanup
         config.cleanup_processor = task.LoopingCall(cleanup.periodic_cleanup)
