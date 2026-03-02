@@ -179,7 +179,7 @@ async def create_status_page():
         web_page = htmlmin.minify(raw_page.decode("utf-8")).encode()
         logger.debug(f"Compressed page: {len(web_page)}")
 
-    except:  # pylint: disable=broad-except
+    except Exception:  # noqa: S110
         # Normally it's bad to catch all exceptions, but in this case the
         # status page is purely cosmetic and will retry in a few minutes.
         logger.exception("Unexpected error while refreshing status page.")
