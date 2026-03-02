@@ -26,13 +26,6 @@ import rpm
 from collections import defaultdict
 from datetime import datetime, timezone
 from enum import Enum, auto
-import htmlmin
-from twisted.web.template import (
-    Element,
-    flattenString,
-    renderer,
-    XMLFile,
-)
 
 from . import config
 from . import kojihelpers
@@ -40,9 +33,7 @@ from .kojihelpers.connection import call_koji
 
 logger = logging.getLogger(__name__)
 
-raw_data = None
 encoded_json_data = None
-web_page = None
 
 
 class BuildStatus(Enum):
@@ -54,9 +45,7 @@ class BuildStatus(Enum):
 
 
 async def create_status_page():
-    global raw_data
     global encoded_json_data
-    global web_page
 
     try:
         logger.info("Refreshing status page")
@@ -168,16 +157,9 @@ async def create_status_page():
         # any packages not in the list
         [_status_data[pkg] for pkg in desired_pkgs]
 
-        # Save the finalized data to the public variables
-        raw_data = _status_data
-        encoded_json_data = json.dumps(raw_data, default=str).encode("UTF-8")
-
-        # Pre-generate the web page
-        raw_page = await flattenString(None, StatusTableElement())
-        logger.debug(f"Uncompressed page: {len(raw_page)}")
-
-        web_page = htmlmin.minify(raw_page.decode("utf-8")).encode()
-        logger.debug(f"Compressed page: {len(web_page)}")
+        # Build JSON-serializable copy with string status for the frontend
+        serializable_data = _build_serializable_status(_status_data)
+        encoded_json_data = json.dumps(serializable_data, default=str).encode("UTF-8")
 
     except Exception:  # noqa: S110
         # Normally it's bad to catch all exceptions, but in this case the
@@ -218,71 +200,29 @@ def dest_is_newer(latest_src, latest_dest):
     return is_higher(latest_dest, latest_src)
 
 
-class StatusTableElement(Element):
-    loader = XMLFile(os.path.join(os.path.dirname(__file__), "templates", "status.xml"))
+def _status_display_string(build_status):
+    """Map BuildStatus enum to string for JSON/frontend. Use UNKNOWN for else case."""
+    if build_status == BuildStatus.SUCCEEDED:
+        return "SUCCESS"
+    if build_status == BuildStatus.BUILDING:
+        return "Building"
+    if build_status == BuildStatus.FAILED:
+        return "FAILED"
+    return "UNKNOWN"
 
-    @renderer
-    def header(self, request, tag):
-        global raw_data
-        update_time = raw_data["__updated"].isoformat()
-        yield tag.clone().fillSlots(update_time=update_time)
 
-    @renderer
-    def builds(self, request, tag):
-        global raw_data
-        for pkg in sorted(raw_data.keys()):
-            if pkg.startswith("__"):
-                continue
-
-            build = raw_data[pkg]
-
-            task_url = ""
-
-            if build is None:
-                yield tag.clone().fillSlots(
-                    name=pkg,
-                    view="UNKNOWN",
-                    nvr="UNKNOWN",
-                    state="UNKNOWN",
-                    detail="Not known to Koji",
-                    task="",
-                    task_url=task_url,
-                    tagged_build="UNKNOWN",
-                    build_time="UNKNOWN",
-                )
-
-            else:
-                if "task_id" in build:
-                    task = str(build["task_id"])
-                    task_url = build.get("build_url", "")
-
-                if build["status"] == BuildStatus.SUCCEEDED:
-                    state = "SUCCESS"
-                elif build["status"] == BuildStatus.BUILDING:
-                    state = "Building"
-                elif build["status"] == BuildStatus.FAILED:
-                    state = "FAILED"
-                else:
-                    state = "Error"
-
-                detail = build["status_detail"] if build["status_detail"] else ""
-
-                tagged_build = build.get("tagged", "UNKNOWN")
-
-                build_time = "UNKNOWN"
-                if "start_ts" in build and build["start_ts"]:
-                    build_time = datetime.fromtimestamp(
-                        build["start_ts"], tz=timezone.utc
-                    ).isoformat()
-
-                yield tag.clone().fillSlots(
-                    name=pkg,
-                    view=build["view"],
-                    nvr=build["nvr"],
-                    state=state,
-                    task=task,
-                    task_url=task_url,
-                    detail=detail,
-                    tagged_build=tagged_build,
-                    build_time=build_time,
-                )
+def _build_serializable_status(_status_data):
+    """Build a dict suitable for JSON: same structure as _status_data but status is a string."""
+    result = {}
+    for key, value in _status_data.items():
+        if key.startswith("__"):
+            result[key] = value
+            continue
+        if value is None:
+            result[key] = None
+            continue
+        entry = dict(value)
+        if "status" in entry and isinstance(entry["status"], BuildStatus):
+            entry["status"] = _status_display_string(entry["status"])
+        result[key] = entry
+    return result

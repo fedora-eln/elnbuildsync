@@ -38,9 +38,6 @@ echo "Activation virtualenv"
 virtualenv --system-site-packages ${TMPDIR}/.venv
 . ${TMPDIR}/.venv/bin/activate
 pip install --upgrade pip
-# htmlmin requires the cgi module which was removed from stdlib, but hasn't been updated to declare it
-pip install legacy-cgi
-pip install --no-build-isolation htmlmin
 pip install -r requirements.txt
 
 export FEDORA_MESSAGING_CONF=/etc/fedora-messaging/config.toml

@@ -21,6 +21,7 @@
 import asyncio
 import json
 import logging
+import os
 import secrets
 
 from twisted.internet import reactor
@@ -132,8 +133,8 @@ class StatusPageResource(Resource):
     """
     StatusPageResource
 
-    Returns a table of the most recent rebuild attempts for each package.
-    Publicly accessible.
+    Returns a static HTML page that fetches /status.json and renders the
+    build status table. Publicly accessible.
     """
 
     isLeaf = True
@@ -163,13 +164,19 @@ class StatusPageResource(Resource):
     async def _do_get(self):
         request = self.request
 
+        request.setHeader("Content-Type", "text/html; charset=utf-8")
         request.setHeader("Cache-Control", "no-cache")
-        if not status.web_page:
-            request.setResponseCode(503)
-            request.write(b"Server not ready, please try again in a few minutes")
-            return
 
-        request.write(status.web_page)
+        template_path = os.path.join(
+            os.path.dirname(__file__), "templates", "status.html"
+        )
+        try:
+            with open(template_path, "rb") as f:
+                request.write(f.read())
+        except OSError as e:
+            logger.exception("Failed to read status template: %s", e)
+            request.setResponseCode(500)
+            request.write(b"Status page template not available")
 
 
 class TriggerBuildResource(Resource):

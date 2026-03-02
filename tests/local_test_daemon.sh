@@ -192,9 +192,7 @@ fi
 cd $PROJ_DIR
 
 sudo dnf -y install postgresql
-# htmlmin requires the cgi module which was removed from stdlib, but hasn't been updated to declare it
 pip install legacy-cgi
-pip install --no-build-isolation htmlmin
 pip install -r requirements.txt
 pip install --editable $PROJ_DIR
 
