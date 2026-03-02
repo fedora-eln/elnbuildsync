@@ -76,8 +76,8 @@ class RebuildAttempt:
 
         try:
             rtask = await RebuildTask(task, self).async_init()
-        except Exception as e:
-            logger.critical(f"Failed to create RebuildTask", exc_info=True)
+        except Exception:
+            logger.critical("Failed to create RebuildTask", exc_info=True)
             raise
 
         self.tasks[task] = rtask
@@ -116,11 +116,11 @@ class RebuildAttempt:
                         await self.tasks[err_obj["id"]].finish(
                             koji.TASK_STATES["FAILED"]
                         )
-                    except SyntaxError as e:
+                    except SyntaxError:
                         logger.critical("Cannot parse error message.")
                         raise
                 except Exception as e:
-                    logger.critical(f"Unexpected error while awaiting a task")
+                    logger.critical("Unexpected error while awaiting a task")
                     logger.exception(e)
                     raise
 

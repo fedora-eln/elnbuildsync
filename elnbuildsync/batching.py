@@ -59,7 +59,7 @@ async def process_message_batch():
                 tag_message = await TagMessage(fedora_tag_message).async_init()
 
                 tag_messages.append(tag_message)
-            except Empty as e:
+            except Empty:
                 break
 
         if not tag_messages:

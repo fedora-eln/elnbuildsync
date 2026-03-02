@@ -27,14 +27,12 @@ from typing import Generator
 from bodhi.client.bindings import BodhiClient, BodhiClientException
 
 from twisted.internet.defer import (
-    Deferred,
     DeferredList,
     TimeoutError as DeferredTimeoutError,
     ensureDeferred,
 )
 from twisted.internet.threads import deferToThread
 
-from .rebuildattempt import RebuildAttempt
 from .rebuildbatchslice import RebuildBatchSlice
 from .tagmessage import TagMessage
 
@@ -119,7 +117,7 @@ class RebuildBatch:
                     self._side_tag_base,
                     build_ids,
                 )
-            except DeferredTimeoutError as e:
+            except DeferredTimeoutError:
                 # Keep retrying to create a side-tag.
                 # Any other exception will be propagated up the stack.
                 logger.warning(
@@ -206,7 +204,7 @@ class RebuildBatch:
         for task_id, msg_body in all_successes.items():
             try:
                 nvr = RebuildBatch._get_srpm_nvr_from_task_msg(msg_body)
-            except ValueError as e:
+            except ValueError:
                 # This message was missing some key information
                 logger.critical(f"Couldn't get the NVR from {task_id}")
                 logger.critical(msg_body)
@@ -273,7 +271,7 @@ class RebuildBatch:
             logger.info(f"Submitting Bodhi update for {update_tag}")
             try:
                 await deferToThread(self._submit_bodhi_update, update_tag)
-            except Exception as e:
+            except Exception:
                 logger.exception(f"Failed to submit Bodhi update for {update_tag}")
                 raise
             logger.debug(f"Submitted Bodhi update for {batch_nvrs}")

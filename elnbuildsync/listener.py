@@ -157,7 +157,7 @@ def _handle_awaited_tag(msg):
     try:
         deferred = state.pending_nvr_tags.pop(tag, nvr)
         reactor.callLater(0, fire_callback, deferred, nvr)
-    except KeyError as e:
+    except KeyError:
         logger.debug(f"NVR {nvr} not found in tag {tag}, ignoring.")
         raise Drop()
 
@@ -182,12 +182,12 @@ def message_handler(msg):
             logger.debug(f"Unable to handle {msg.topic} topics, ignoring.")
             raise Drop()
 
-    except Drop as e:
+    except Drop:
         # Tell the AMQP server that we're ignoring this message
         logger.debug(f"Dropped message {msg.id}")
         raise
 
-    except Nack as e:
+    except Nack:
         # We're explicitly informing the AMQP server that we can't handle
         # this request currently and it should be re-queued.
         logger.debug(f"Re-queued message {msg.id}")
@@ -338,7 +338,7 @@ def cancel_timed_out_task(failure, task_id):
     # Reraise the original exception, catching TimeoutError if it happened
     try:
         failure.raiseException()
-    except DeferredTimeoutError as e:
+    except DeferredTimeoutError:
         pass
 
     # If we got a timeout, the Koji task is still running, so we will need to

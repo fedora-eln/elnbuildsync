@@ -354,7 +354,7 @@ class LogLevelPage(Resource):
     def render_GET(self, request):
         try:
             logging.getLogger().setLevel(self.loglevel)
-        except ValueError as e:
+        except ValueError:
             return f"Invalid log level: {self.loglevel}".encode("UTF-8")
 
         logger.warning(f"Log Level changed to {self.loglevel}")

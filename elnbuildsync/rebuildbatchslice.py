@@ -20,10 +20,7 @@
 import logging
 
 from enum import IntEnum
-from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 
-from . import config
-from . import kojihelpers
 from . import db_models
 from .decorators import as_deferred
 from .rebuildattempt import RebuildAttempt
@@ -162,10 +159,10 @@ class RebuildBatchSlice:
                 try:
                     try:
                         request = err_msg["info"]["request"][0]
-                    except ValueError as e:
+                    except ValueError:
                         request = err_msg["request"][0]
                     logger.warning(f"FAILED: {task_id}: {request}")
-                except Exception as e:
+                except Exception:
                     # If something goes wrong here, just log that the task failed.
                     logger.warning(f"FAILED: {task_id}")
 

@@ -19,9 +19,7 @@
 import logging
 
 from cachetools import cached, LRUCache
-from twisted.internet import reactor
 from twisted.internet.defer import DeferredList
-from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 from .connection import call_koji
 
 from .. import kojihelpers

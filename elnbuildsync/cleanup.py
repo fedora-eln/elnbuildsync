@@ -19,7 +19,6 @@
 
 import logging
 
-from fedora_messaging.message import Message as FedoraMessage
 
 from .kojihelpers.connection import call_koji
 

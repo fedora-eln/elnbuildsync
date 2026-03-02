@@ -212,7 +212,7 @@ async def update_config():
         logger.info("Config URL not provided.")
         return
 
-    logger.critical(f"Updating configuration")
+    logger.critical("Updating configuration")
 
     try:
         ref = await get_config_ref(scmurl)

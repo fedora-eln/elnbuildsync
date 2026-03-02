@@ -74,7 +74,7 @@ async def create_status_page():
         try:
             # Self-identify
             username = bsys.getLoggedInUser()["name"]
-        except koji.GenericError as e:
+        except koji.GenericError:
             logger.exception(
                 "Could not self-identify with Koji. Will retry in a few minutes."
             )
@@ -88,7 +88,7 @@ async def create_status_page():
             tagged_pkgs = await call_koji(
                 bsys.listTagged, config.main["koji"]["stable_tag"], latest=True
             )
-        except koji.GenericError as e:
+        except koji.GenericError:
             logger.exception(
                 "Could not communicate with Koji. Will retry in a few minutes."
             )

@@ -20,7 +20,7 @@
 import koji
 import logging
 
-from .errors import InfoUnavailableError, IneligibleBuildError
+from .errors import InfoUnavailableError
 from .connection import get_buildsys, call_koji
 from .. import config
 from .. import listener
@@ -43,7 +43,7 @@ async def get_scmurl(build_id):
     logger.debug(f"Retrieving SCM URL for {build_id}")
     try:
         buildinfo = await get_buildinfo(build_id)
-    except Exception as e:
+    except Exception:
         logger.exception("Unexpected error retrieving SCM URL")
         raise
     logger.debug(f"Buildinfo: {buildinfo}")
@@ -102,7 +102,7 @@ async def get_multi_buildinfo(build_ids, **kwargs):
         results = await call_koji(_get_multi_buildinfo_thread, build_ids, **kwargs)
     except koji.GenericError as e:
         logger.exception(f"Could not retrieve information for builds {build_ids}")
-        raise InfoUnavailableError(f"Could not retrieve information for builds") from e
+        raise InfoUnavailableError("Could not retrieve information for builds") from e
 
     return results
 
