@@ -288,8 +288,10 @@ def fire_callback(deferred, *data):
 
 
 def fire_errback(deferred, *data):
+    err = kojihelpers.errors.TaskFailedError()
+    err.data = data
     try:
-        deferred.errback(kojihelpers.errors.TaskFailedError(*data))
+        deferred.errback(err)
     except AlreadyCalledError as e:
         # Most likely due to a timeout, so ignore it
         logger.exception(e)
@@ -348,7 +350,15 @@ def cancel_timed_out_task(failure, task_id):
     reactor.callLater(0, _do_cancelation, task_id)
 
     # Raise a TaskTimeoutError with the task_id
-    raise kojihelpers.errors.TaskTimeoutError({"id": task_id})
+    err = kojihelpers.errors.TaskTimeoutError()
+    err.data = {
+        "id": task_id,
+        "info": {
+            "request": [None, None, None],
+            "ebs_state": "TIMEOUT",
+        },
+    }
+    raise err
 
 
 def _do_cancelation(task_id):

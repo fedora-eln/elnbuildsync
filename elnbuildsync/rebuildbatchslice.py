@@ -133,13 +133,24 @@ class RebuildBatchSlice:
         while num_failures > 0 and num_failures < prev_failures:
             prev_failures = num_failures
 
+            retry_urls = []
+            for failure in failures.values():
+                if failure["info"]["request"][0] is not None:
+                    retry_urls.append(failure["info"]["request"][0])
+                else:
+                    # If the task failed due to a timeout, we don't want to
+                    # retry it. Reduce the number of previous failures by one
+                    # so we don't retry all the other tasks an extra time.
+                    prev_failures -= 1
+
+            if prev_failures <= 0:
+                # If the only failure(s) were due to timeouts, we're done.
+                break
+
             logger.info(
-                f"Retrying {num_failures} tasks that failed for {self.rebuild_batch.side_tag}"
+                f"Retrying {prev_failures} tasks that failed for {self.rebuild_batch.side_tag}"
             )
 
-            retry_urls = [
-                failure["info"]["request"][0] for failure in failures.values()
-            ]
             for url in retry_urls:
                 logger.debug(f"Retrying {url}")
 
