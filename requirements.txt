@@ -13,4 +13,5 @@ requests
 rpm
 sqlalchemy >= 2
 twisted >= 22
+txrequests
 httpx
