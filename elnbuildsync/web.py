@@ -21,6 +21,7 @@
 import asyncio
 import json
 import logging
+import os
 import secrets
 
 from twisted.internet import reactor
@@ -132,8 +133,8 @@ class StatusPageResource(Resource):
     """
     StatusPageResource
 
-    Returns a table of the most recent rebuild attempts for each package.
-    Publicly accessible.
+    Returns a static HTML page that fetches /status.json and renders the
+    build status table. Publicly accessible.
     """
 
     isLeaf = True
@@ -163,13 +164,19 @@ class StatusPageResource(Resource):
     async def _do_get(self):
         request = self.request
 
+        request.setHeader("Content-Type", "text/html; charset=utf-8")
         request.setHeader("Cache-Control", "no-cache")
-        if not status.web_page:
-            request.setResponseCode(503)
-            request.write(b"Server not ready, please try again in a few minutes")
-            return
 
-        request.write(status.web_page)
+        template_path = os.path.join(
+            os.path.dirname(__file__), "templates", "status.html"
+        )
+        try:
+            with open(template_path, "rb") as f:
+                request.write(f.read())
+        except OSError as e:
+            logger.exception("Failed to read status template: %s", e)
+            request.setResponseCode(500)
+            request.write(b"Status page template not available")
 
 
 class TriggerBuildResource(Resource):
@@ -178,6 +185,7 @@ class TriggerBuildResource(Resource):
 
     Accepts a POST request containing a JSON list of components to rebuild for
     ELN. This endpoint requires authentication if OpenID Connect is configured.
+    The components are expected to be provided as their downstream names.
     """
 
     isLeaf = True
@@ -266,7 +274,7 @@ class TriggerBuildResource(Resource):
 <h1>ELN Build Trigger</h1>
 <p>Logged in as: <strong>{user["username"]}</strong></p>
 <p>Groups: {", ".join(user["groups"])}</p>
-<p>To trigger builds, POST a JSON array of component names to this endpoint.</p>
+<p>To trigger builds, POST a JSON array of downstream component names to this endpoint.</p>
 {token_block}
 <p><a href="/logout">Logout</a></p>
 </body>
@@ -353,7 +361,7 @@ class LogLevelPage(Resource):
     def render_GET(self, request):
         try:
             logging.getLogger().setLevel(self.loglevel)
-        except ValueError as e:
+        except ValueError:
             return f"Invalid log level: {self.loglevel}".encode("UTF-8")
 
         logger.warning(f"Log Level changed to {self.loglevel}")

@@ -49,7 +49,6 @@ db_url = None
 # Configuration options
 config_timer = 15 * 60  # 15 minutes
 cleanup_timer = 12 * 60 * 60  # 12 hours
-status_timer = 10 * 60  # 10 minutes
 task_check_timer = 5 * 60  # 5 minutes
 tag_check_timer = 5 * 60  # 5 minutes
 task_timeout = 24 * 60 * 60  # 24 hours
@@ -78,6 +77,10 @@ tmpdir = None
 
 
 class ConfigError(Exception):
+    pass
+
+
+class UnknownComponentError(ConfigError):
     pass
 
 
@@ -208,7 +211,7 @@ async def update_config():
         logger.info("Config URL not provided.")
         return
 
-    logger.critical(f"Updating configuration")
+    logger.critical("Updating configuration")
 
     try:
         ref = await get_config_ref(scmurl)
@@ -245,7 +248,7 @@ async def get_distro_packages(
     if not which_source:
         which_source = ["source", "buildroot-source"]
 
-    merged_packages = dict()
+    packages = dict[str, dict[str, str]]()
 
     for view in reversed(distro_view):
         for this_source in reversed(which_source):
@@ -262,18 +265,19 @@ async def get_distro_packages(
             with Session() as session:
                 r = await session.get(url, allow_redirects=True)
                 for line in r.text.splitlines():
-                    merged_packages[line] = {
+                    packages[line] = {
                         "view": view,
-                        "content_type": this_source,
+                        "source": this_source,
+                        "upstream_name": line,
+                        "downstream_name": line,
                     }
 
     # There may be an empty line in the file, ignore it.
-    if "" in merged_packages:
-        del merged_packages[""]
+    packages.pop("", None)
 
-    logger.debug("Found a total of {} packages".format(len(merged_packages)))
+    logger.debug("Found a total of {} packages".format(len(packages)))
 
-    return {"rpms": merged_packages}
+    return packages
 
 
 @backoff.on_exception(backoff.expo, Exception, max_time=60)
@@ -309,6 +313,264 @@ async def get_rawhide_tag():
         raise ConfigError("Unexpectedly received no valid Fedora rawhide release")
 
     return stable_tag
+
+
+def _parse_open_id_connect(oidc_raw):
+    """Parse OpenID Connect configuration. Returns None if disabled, else a dict.
+    Raises ConfigError on invalid or missing required fields.
+    """
+    if oidc_raw is False:
+        logger.info(
+            "OpenID Connect explicitly disabled - /trigger endpoint unprotected"
+        )
+        return None
+    oidc = oidc_raw
+    default_scopes = [
+        "openid",
+        "profile",
+        "https://id.fedoraproject.org/scope/groups",
+    ]
+    required_fields = [
+        "auth_url",
+        "client_id",
+        "client_secret",
+        "token_endpoint",
+        "admin_groups",
+    ]
+    for field in required_fields:
+        if field not in oidc:
+            raise ConfigError(f"open_id_connect.{field} missing.")
+    result = {
+        "auth_url": str(oidc["auth_url"]),
+        "client_id": str(oidc["client_id"]),
+        "client_secret": str(oidc["client_secret"]),
+        "token_endpoint": str(oidc["token_endpoint"]),
+        "userinfo_endpoint": str(oidc.get("userinfo_endpoint", "")),
+        "scopes": list(oidc.get("scopes", default_scopes)),
+        "admin_groups": list(oidc["admin_groups"]),
+    }
+    logger.info(
+        "OpenID Connect authentication enabled; admin groups: %s",
+        result["admin_groups"],
+    )
+    return result
+
+
+def _parse_koji(cnf_koji):
+    """Parse koji configuration. Returns dict with profile, trigger_tag, build_target, stable_tag, scratch_build, fail_fast."""
+    if "profile" not in cnf_koji:
+        raise ConfigError("koji.profile missing.")
+    result = {"profile": str(cnf_koji["profile"])}
+    if "trigger_tag" not in cnf_koji:
+        raise ConfigError("koji.trigger_tag missing.")
+    result["trigger_tag"] = str(cnf_koji["trigger_tag"])
+    if "build_target" not in cnf_koji:
+        raise ConfigError("koji.build_target missing.")
+    result["build_target"] = str(cnf_koji["build_target"])
+    if "stable_tag" not in cnf_koji:
+        raise ConfigError("koji.stable_tag missing.")
+    result["stable_tag"] = str(cnf_koji["stable_tag"])
+    if "scratch_build" in cnf_koji:
+        result["scratch_build"] = bool(cnf_koji["scratch_build"])
+    else:
+        logger.warning(
+            "Configuration warning: koji.scratch_build not defined, assuming false."
+        )
+        result["scratch_build"] = False
+    if "fail_fast" in cnf_koji:
+        result["fail_fast"] = bool(cnf_koji["fail_fast"])
+    else:
+        logger.warning(
+            "Configuration warning: koji.fail_fast not defined, assuming false."
+        )
+        result["fail_fast"] = False
+    return result
+
+
+def _parse_bodhi(cnf_bodhi):
+    """Parse bodhi configuration. Returns dict with batch_size."""
+    result = {"batch_size": 0}
+    if "batch_size" in cnf_bodhi:
+        try:
+            result["batch_size"] = int(cnf_bodhi["batch_size"])
+        except ValueError:
+            raise ConfigError("bodhi.batch_size must be an integer")
+    return result
+
+
+def _parse_db(cnf_db):
+    """Parse database configuration. Returns dict with host, port, name, driver, user.
+    All keys are mandatory.
+    """
+    required = ("host", "port", "name", "driver", "user")
+    for key in required:
+        if key not in cnf_db:
+            raise ConfigError(f"db.{key} missing.")
+    try:
+        result = {
+            "host": str(cnf_db["host"]),
+            "port": int(cnf_db["port"]),
+            "name": str(cnf_db["name"]),
+            "driver": str(cnf_db["driver"]),
+            "user": str(cnf_db["user"]),
+        }
+    except ValueError:
+        raise ConfigError("db.port must be an integer")
+    return result
+
+
+def _parse_control(cnf_control):
+    """Parse control configuration. Returns dict with pause, skip_tag, exclude, ordering, status_interval, etc."""
+    result = dict()
+    for k in ("pause",):
+        if k in cnf_control:
+            result[k] = bool(cnf_control[k])
+        else:
+            raise ConfigError(f"control.{k} missing.")
+
+    result["skip_tag"] = set()
+    if "skip_tag" in cnf_control:
+        result["skip_tag"].update(cnf_control["skip_tag"])
+
+    result["exclude"] = set()
+    if "exclude" in cnf_control:
+        result["exclude"].update(cnf_control["exclude"])
+
+    if result["exclude"]:
+        logger.info(
+            "Excluding %d component(s).",
+            len(result["exclude"]),
+        )
+    else:
+        logger.info("Not excluding any components.")
+
+    result["ordering"] = dict()
+    if "ordering" in cnf_control:
+        result["ordering"].update(cnf_control["ordering"])
+
+    result["status_interval"] = 600  # 10 minutes
+    if "status_interval" in cnf_control:
+        val = cnf_control["status_interval"]
+        if not isinstance(val, int) or val <= 0:
+            raise ConfigError("control.status_interval must be a positive integer.")
+        result["status_interval"] = val
+
+    return result
+
+
+async def _parse_components(cnf_components):
+    """Parse the components block (top-level). Requires at least one of autopackagelist or overrides.
+    When autopackagelist is present, calls get_distro_packages() and uses the returned dict as comps.
+    If overrides is present, updates/supplements comps with comps.update() semantics per component.
+    Returns dict with comps (dict), and autopackagelist (dict or None) for view/content_resolver.
+    """
+    if "autopackagelist" not in cnf_components and "overrides" not in cnf_components:
+        raise ConfigError(
+            "At least one of components.autopackagelist or components.overrides must be present."
+        )
+    apl = None
+    if "autopackagelist" in cnf_components:
+        apl_raw = cnf_components["autopackagelist"]
+        if "view" not in apl_raw:
+            raise ConfigError("components.autopackagelist.view missing.")
+        if "source" not in apl_raw:
+            raise ConfigError("components.autopackagelist.source missing.")
+        apl = {
+            "view": apl_raw["view"]
+            if isinstance(apl_raw["view"], list)
+            else [apl_raw["view"]],
+            "source": apl_raw["source"]
+            if isinstance(apl_raw["source"], list)
+            else [apl_raw["source"]],
+            "content_resolver": apl_raw.get(
+                "content_resolver", DEFAULT_CONTENT_RESOLVER
+            ),
+        }
+        downstream_components = await get_distro_packages(
+            distro_url=apl["content_resolver"],
+            distro_view=apl["view"],
+            which_source=apl["source"],
+        )
+        for comp_name, comp_entry in downstream_components.items():
+            if not isinstance(comp_entry, dict):
+                raise ConfigError(
+                    f"components.autopackagelist entry '{comp_name}' must be a dictionary."
+                )
+            if "upstream_name" not in comp_entry:
+                raise ConfigError(
+                    f"components.autopackagelist entry '{comp_name}' missing upstream_name."
+                )
+            if "downstream_name" not in comp_entry:
+                raise ConfigError(
+                    f"components.autopackagelist entry '{comp_name}' missing downstream_name."
+                )
+    else:
+        downstream_components = {}
+    upstream_components = downstream_components.copy()
+
+    overrides = cnf_components.get("overrides", {})
+    if not isinstance(overrides, dict):
+        raise ConfigError("components.overrides must be a dictionary.")
+
+    for downstream_name, override_options in overrides.items():
+        if not isinstance(override_options, dict):
+            raise ConfigError(
+                f"components.overrides.{downstream_name} must be a dictionary"
+            )
+
+        upstream_name = override_options.get("upstream_name", downstream_name)
+
+        if downstream_name not in downstream_components:
+            downstream_components[downstream_name] = {
+                "view": "override",
+                "source": "override",
+                "upstream_name": upstream_name,
+                "downstream_name": downstream_name,
+            }
+        downstream_components[downstream_name].update(override_options)
+        downstream_components[downstream_name].setdefault(
+            "upstream_name", downstream_name
+        )
+        downstream_components[downstream_name].setdefault(
+            "downstream_name", downstream_name
+        )
+        upstream_components[upstream_name] = downstream_components[
+            downstream_name
+        ].copy()
+
+    return {
+        "downstream_components": downstream_components,
+        "upstream_components": upstream_components,
+    }
+
+
+def _parse_configuration_block(cnf):
+    """Parse the full configuration block (no rawhide resolution, no components).
+    Returns dict n with koji, bodhi, db, open_id_connect, control.
+    """
+    if "koji" not in cnf:
+        raise ConfigError("koji missing.")
+    n = {"koji": _parse_koji(cnf["koji"])}
+
+    if "bodhi" not in cnf:
+        raise ConfigError("bodhi missing.")
+    n["bodhi"] = _parse_bodhi(cnf["bodhi"])
+
+    if "db" not in cnf:
+        raise ConfigError("db missing.")
+    n["db"] = _parse_db(cnf["db"])
+
+    if "open_id_connect" not in cnf:
+        raise ConfigError(
+            "open_id_connect missing. Set open_id_connect: false to disable authentication."
+        )
+    n["open_id_connect"] = _parse_open_id_connect(cnf["open_id_connect"])
+
+    if "control" not in cnf:
+        raise ConfigError("control missing.")
+    n["control"] = _parse_control(cnf["control"])
+
+    return n
 
 
 # FIXME: This needs even more error checking, e.g.
@@ -374,316 +636,19 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
             logger.info(e)
             raise ConfigError(f"Could not parse {config_file}.")
 
-    n = dict()
-    if "configuration" in y:
-        cnf = y["configuration"]
-        for k in ("source", "destination"):
-            if k in cnf:
-                n[k] = dict()
-                if "scm" in cnf[k]:
-                    n[k]["scm"] = str(cnf[k]["scm"])
-                else:
-                    raise ConfigError("%s.scm missing.", k)
-
-                if "cache" in cnf[k]:
-                    n[k]["cache"] = dict()
-                    for kc in ("url", "cgi", "path"):
-                        if kc in cnf[k]["cache"]:
-                            n[k]["cache"][kc] = str(cnf[k]["cache"][kc])
-                        else:
-                            raise ConfigError(
-                                "%s.cache.%s missing.",
-                                k,
-                                kc,
-                            )
-                else:
-                    raise ConfigError("%s.cache missing.", k)
-
-                if "profile" in cnf[k]:
-                    n[k]["profile"] = str(cnf[k]["profile"])
-                else:
-                    raise ConfigError("%s.profile missing.", k)
-
-                if "mbs" in cnf[k]:
-                    n[k]["mbs"] = cnf[k]["mbs"]
-                else:
-                    raise ConfigError("%s.mbs missing.", k)
-
-            else:
-                raise ConfigError("%s missing.", k)
-
-        if "trigger" in cnf:
-            n["trigger"] = dict()
-            for k in ("rpms", "modules"):
-                if k in cnf["trigger"]:
-                    n["trigger"][k] = str(cnf["trigger"][k])
-                else:
-                    raise ConfigError("trigger.%s missing.", k)
-
-        else:
-            raise ConfigError("trigger missing.")
-
-        # Parse OpenID Connect configuration (mandatory unless explicitly disabled)
-        if "open_id_connect" not in cnf:
-            raise ConfigError(
-                "open_id_connect missing. Set open_id_connect: false to disable authentication."
-            )
-        oidc_raw = cnf["open_id_connect"]
-        if oidc_raw is False:
-            n["open_id_connect"] = None
-            logger.info(
-                "OpenID Connect explicitly disabled - /trigger endpoint unprotected"
-            )
-        else:
-            oidc = oidc_raw
-            # Default scopes for Fedora OIDC (groups scope required for authorization)
-            default_scopes = [
-                "openid",
-                "profile",
-                "https://id.fedoraproject.org/scope/groups",
-            ]
-            required_fields = [
-                "auth_url",
-                "client_id",
-                "client_secret",
-                "token_endpoint",
-                "admin_groups",
-            ]
-            for field in required_fields:
-                if field not in oidc:
-                    raise ConfigError(f"open_id_connect.{field} missing.")
-            n["open_id_connect"] = {
-                "auth_url": str(oidc["auth_url"]),
-                "client_id": str(oidc["client_id"]),
-                "client_secret": str(oidc["client_secret"]),
-                "token_endpoint": str(oidc["token_endpoint"]),
-                "userinfo_endpoint": str(oidc.get("userinfo_endpoint", "")),
-                "scopes": list(oidc.get("scopes", default_scopes)),
-                "admin_groups": list(oidc["admin_groups"]),
-            }
-            logger.info(
-                "OpenID Connect authentication enabled; admin groups: %s",
-                n["open_id_connect"]["admin_groups"],
-            )
-
-        # Handle auto-configuration of the trigger for Rawhide
-        if n["trigger"]["rpms"] == "rawhide":
-            n["trigger"]["rpms"] = await get_rawhide_tag()
-            logger.info(f"Detected rawhide tag {n['trigger']['rpms']}")
-
-        if "build" in cnf:
-            n["build"] = dict()
-            for k in ("prefix", "target", "platform"):
-                if k in cnf["build"]:
-                    n["build"][k] = str(cnf["build"][k])
-                else:
-                    raise ConfigError("build.%s missing.", k)
-
-            if "scratch" in cnf["build"]:
-                n["build"]["scratch"] = bool(cnf["build"]["scratch"])
-            else:
-                logger.warning(
-                    "Configuration warning: build.scratch not defined, assuming false."
-                )
-                n["build"]["scratch"] = False
-            if "fail_fast" in cnf["build"]:
-                n["build"]["fail_fast"] = bool(cnf["build"]["fail_fast"])
-            else:
-                logger.warning(
-                    "Configuration warning: build.fail_fast not defined, assuming false."
-                )
-                n["build"]["fail_fast"] = False
-        else:
-            raise ConfigError("build missing.")
-
-        if "git" in cnf:
-            n["git"] = dict()
-            for k in ("author", "email", "message"):
-                if k in cnf["git"]:
-                    n["git"][k] = str(cnf["git"][k])
-                else:
-                    raise ConfigError("git.%s missing.", k)
-
-        else:
-            raise ConfigError("git missing.")
-
-        if "control" in cnf:
-            n["control"] = dict()
-            for k in ("build", "merge", "pause", "strict"):
-                if k in cnf["control"]:
-                    n["control"][k] = bool(cnf["control"][k])
-                else:
-                    raise ConfigError("control.%s missing.", k)
-
-            # If update_batch_size is not set, set it to 0 (unlimited batch
-            # size)
-            n["control"]["update_batch_size"] = 0
-            if "update_batch_size" in cnf["control"]:
-                try:
-                    n["control"]["update_batch_size"] = int(
-                        cnf["control"]["update_batch_size"]
-                    )
-                except ValueError:
-                    raise ConfigError("control.update_batch_size must be an integer")
-
-            n["control"]["autopackagelist"] = None
-            if "autopackagelist" in cnf["control"]:
-                n["control"]["autopackagelist"] = cnf["control"]["autopackagelist"]
-
-            n["control"]["skip_tag"] = {"rpms": set(), "modules": set()}
-            if "skip_tag" in cnf["control"]:
-                for cns in ("rpms", "modules"):
-                    if cns in cnf["control"]["skip_tag"]:
-                        n["control"]["skip_tag"][cns].update(
-                            cnf["control"]["skip_tag"][cns]
-                        )
-
-            n["control"]["exclude"] = {"rpms": set(), "modules": set()}
-            if "exclude" in cnf["control"]:
-                for cns in ("rpms", "modules"):
-                    if cns in cnf["control"]["exclude"]:
-                        n["control"]["exclude"][cns].update(
-                            cnf["control"]["exclude"][cns]
-                        )
-
-            try:
-                n["control"]["db"] = cnf["control"]["db"]
-            except KeyError as e:
-                logger.exception(e)
-                raise ConfigError("Missing database configuration")
-
-            for cns in ("rpms", "modules"):
-                if n["control"]["exclude"]["rpms"]:
-                    logger.info(
-                        "Excluding %d component(s) from the %s namespace.",
-                        len(n["control"]["exclude"][cns]),
-                        cns,
-                    )
-                else:
-                    logger.info(
-                        "Not excluding any components from the %s namespace.",
-                        cns,
-                    )
-            n["control"]["ordering"] = {"rpms": dict(), "modules": dict()}
-            if "ordering" in cnf["control"]:
-                for cns in ("rpms", "modules"):
-                    if cns in cnf["control"]["ordering"]:
-                        n["control"]["ordering"][cns].update(
-                            cnf["control"]["ordering"][cns]
-                        )
-        else:
-            raise ConfigError("control missing.")
-
-        if "defaults" in cnf:
-            n["defaults"] = dict()
-            for dk in ("cache", "rpms", "modules"):
-                if dk in cnf["defaults"]:
-                    n["defaults"][dk] = dict()
-                    for dkk in ("source", "destination"):
-                        if dkk in cnf["defaults"][dk]:
-                            n["defaults"][dk][dkk] = str(cnf["defaults"][dk][dkk])
-                        else:
-                            logger.error(
-                                "Configuration error: defaults.%s.%s missing.",
-                                dk,
-                                dkk,
-                            )
-                else:
-                    raise ConfigError("defaults.%s missing.", dk)
-
-        else:
-            raise ConfigError("defaults missing.")
-
-    else:
+    if "configuration" not in y:
         raise ConfigError("The required configuration block is missing.")
+    if "components" not in y:
+        raise ConfigError("The required components block is missing.")
+    cnf = y["configuration"]
+    n = _parse_configuration_block(cnf)
+    nc = await _parse_components(y["components"])
+    logger.info("Found %d component(s).", len(nc["downstream_components"]))
 
-    components = 0
-    nc = {"rpms": dict(), "modules": dict()}
-    if "components" in y or "autopackagelist" in n["control"]:
-        cnf = {}
+    if n["koji"]["trigger_tag"] == "rawhide":
+        n["koji"]["trigger_tag"] = await get_rawhide_tag()
+        logger.info(f"Detected rawhide tag {n['koji']['trigger_tag']}")
 
-        if "autopackagelist" in n["control"]:
-            resolver = DEFAULT_CONTENT_RESOLVER
-            views = list()
-
-            if "content_resolver" in n["control"]["autopackagelist"]:
-                resolver = n["control"]["autopackagelist"]["content_resolver"]
-
-            if type(n["control"]["autopackagelist"]["view"]) == list:
-                views = n["control"]["autopackagelist"]["view"]
-            else:
-                views = [
-                    n["control"]["autopackagelist"]["view"],
-                ]
-
-            cnf = await get_distro_packages(
-                distro_url=resolver,
-                distro_view=views,
-            )
-
-        if "components" in y:
-            if "rpms" in cnf:
-                cnf["rpms"].update(y["components"]["rpms"])
-            if "modules" in cnf:
-                cnf["modules"].update(y["components"]["modules"])
-
-        for k in ("rpms", "modules"):
-            if k in cnf:
-                for p in cnf[k].keys():
-                    components += 1
-                    if k in cnf and p in cnf[k]:
-                        nc[k][p] = cnf[k][p]
-                    else:
-                        nc[k][p] = dict()
-                    cname = p
-                    sname = ""
-                    if k == "modules":
-                        ms = split_module(p)
-                        cname = ms["name"]
-                        sname = ms["stream"]
-                    nc[k][p]["source"] = n["defaults"][k]["source"] % {
-                        "component": cname,
-                        "stream": sname,
-                    }
-                    nc[k][p]["destination"] = n["defaults"][k]["destination"] % {
-                        "component": cname,
-                        "stream": sname,
-                    }
-                    nc[k][p]["cache"] = {
-                        "source": n["defaults"]["cache"]["source"]
-                        % {"component": cname, "stream": sname},
-                        "destination": n["defaults"]["cache"]["destination"]
-                        % {"component": cname, "stream": sname},
-                    }
-                    if cnf[k][p] is None:
-                        cnf[k][p] = dict()
-                    for ck in ("source", "destination", "target"):
-                        if ck in cnf[k][p]:
-                            nc[k][p][ck] = str(cnf[k][p][ck])
-                    if "cache" in cnf[k][p]:
-                        for ck in ("source", "destination"):
-                            if ck in cnf[k][p]["cache"]:
-                                nc[k][p]["cache"][ck] = str(cnf[k][p]["cache"][ck])
-            logger.info(
-                "Found %d configured component(s) in the %s namespace.",
-                len(nc[k]),
-                k,
-            )
-    if n["control"]["strict"]:
-        logger.info(
-            "Running in the strict mode.  Only configured components will be processed."
-        )
-    else:
-        logger.info(
-            "Running in the non-strict mode.  All trigger components will be processed."
-        )
-    if not components:
-        if n["control"]["strict"]:
-            logger.warning(
-                "No components configured while running in the strict mode.  Nothing to do."
-            )
-        else:
-            logger.info("No components explicitly configured.")
     main = n
     comps = nc
 
@@ -693,7 +658,7 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
         # config file edit. To change DB settings, the process must be
         # restarted.
         try:
-            db_config = n["control"]["db"]
+            db_config = n["db"]
             db_url = sqlalchemy.URL.create(
                 drivername=db_config["driver"],
                 host=db_config["host"],
@@ -705,35 +670,41 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
 
         except KeyError as e:
             logger.exception(e)
-            raise ConfigError("Missing database configuration")
+            raise ConfigError("Missing database configuration (db block)")
 
 
-def is_eligible(ns, comp):
+def is_eligible(comp, is_downstream):
     # Check whether this component is meaningful to us
-    if config.main["control"]["strict"] and comp not in config.comps[ns]:
-        logger.debug(f"{comp} is not an approved component, ignoring")
+    if is_downstream:
+        component_list = config.comps["downstream_components"]
+    else:
+        component_list = config.comps["upstream_components"]
+    if comp not in component_list:
+        logger.debug(
+            f"{comp} is not an approved {'downstream' if is_downstream else 'upstream'} component, ignoring"
+        )
         return False
 
-    for pattern in config.main["control"]["exclude"][ns]:
+    for pattern in config.main["control"]["exclude"]:
         if re.search(pattern, comp):
-            logger.debug(f"{ns}/{comp} is on the exclude list, skipping")
+            logger.debug(f"{comp} is on the exclude list, skipping")
             return False
 
     return True
 
 
-def skip_tag(ns, comp):
-    for pattern in config.main["control"]["skip_tag"][ns]:
+def skip_tag(comp):
+    for pattern in config.main["control"]["skip_tag"]:
         if re.search(pattern, comp):
-            logger.debug(f"{ns}/{comp} is on the skip_tag list, building immediately")
+            logger.debug(f"{comp} is on the skip_tag list, building immediately")
             return True
     return False
 
 
-def get_order(ns, comp):
-    for pattern in config.main["control"]["ordering"][ns]:
+def get_order(comp):
+    for pattern in config.main["control"]["ordering"]:
         if re.search(pattern, comp):
-            return config.main["control"]["ordering"][ns][pattern]
+            return config.main["control"]["ordering"][pattern]
 
     # If we don't have a specific pattern, return a high number (1000)
     # so we always build them late in the cycle
@@ -742,3 +713,25 @@ def get_order(ns, comp):
 
 def is_paused():
     return config.main["control"]["pause"]
+
+
+def get_upstream_name(downstream_component):
+    try:
+        return config.comps["downstream_components"][downstream_component][
+            "upstream_name"
+        ]
+    except KeyError:
+        raise UnknownComponentError(
+            f"Downstream component {downstream_component} not found"
+        )
+
+
+def get_downstream_name(upstream_component):
+    try:
+        return config.comps["upstream_components"][upstream_component][
+            "downstream_name"
+        ]
+    except KeyError:
+        raise UnknownComponentError(
+            f"Upstream component {upstream_component} not found"
+        )

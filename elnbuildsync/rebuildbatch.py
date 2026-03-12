@@ -27,14 +27,12 @@ from typing import Generator
 from bodhi.client.bindings import BodhiClient, BodhiClientException
 
 from twisted.internet.defer import (
-    Deferred,
     DeferredList,
     TimeoutError as DeferredTimeoutError,
     ensureDeferred,
 )
 from twisted.internet.threads import deferToThread
 
-from .rebuildattempt import RebuildAttempt
 from .rebuildbatchslice import RebuildBatchSlice
 from .tagmessage import TagMessage
 
@@ -87,7 +85,7 @@ class RebuildBatch:
         for tag_message in self._unprocessed_tag_messages:
             await self.add_tag_message(tag_message)
 
-            if not config.skip_tag("rpms", tag_message.component):
+            if not config.skip_tag(tag_message.component):
                 build_ids.append(tag_message.get_build_id())
 
         (
@@ -119,7 +117,7 @@ class RebuildBatch:
                     self._side_tag_base,
                     build_ids,
                 )
-            except DeferredTimeoutError as e:
+            except DeferredTimeoutError:
                 # Keep retrying to create a side-tag.
                 # Any other exception will be propagated up the stack.
                 logger.warning(
@@ -186,7 +184,7 @@ class RebuildBatch:
         # Get the SCM URLs and order them
         all_tag_messages = defaultdict(list)
         for tag_message in self.tag_messages.values():
-            order = config.get_order("rpms", tag_message.component)
+            order = config.get_order(tag_message.component)
             all_tag_messages[order].append(tag_message)
 
         all_successes = dict()
@@ -206,7 +204,7 @@ class RebuildBatch:
         for task_id, msg_body in all_successes.items():
             try:
                 nvr = RebuildBatch._get_srpm_nvr_from_task_msg(msg_body)
-            except ValueError as e:
+            except ValueError:
                 # This message was missing some key information
                 logger.critical(f"Couldn't get the NVR from {task_id}")
                 logger.critical(msg_body)
@@ -229,18 +227,19 @@ class RebuildBatch:
 
             # Wait for the Bodhi update to make it to stable by verifying
             # that all the builds are tagged into the stable tag.
+            stable_tag = config.main["koji"]["stable_tag"]
             results = await kojihelpers.tags.wait_for_nvrs_in_tag(
-                self.target, build_nvrs
+                stable_tag, build_nvrs
             )
             for success, value in results:
                 if success:
-                    logger.info(f"Build {value} tagged into {self.target}")
+                    logger.info(f"Build {value} tagged into {stable_tag}")
                 else:
                     # The most likely scenario here is that the tagging timed out,
                     # so we'll just proceed. Failures here are not really
                     # recoverable. Log and continue.
                     logger.error(
-                        f"Build failed to tag into {self.target}", exc_info=value
+                        f"Build failed to tag into {stable_tag}", exc_info=value
                     )
 
         # Remove the side-tag where we performed the rebuilds.
@@ -255,7 +254,7 @@ class RebuildBatch:
         def _build_batch_generator(
             build_nvrs: list[str],
         ) -> Generator[list[str], None, None]:
-            batch_size = config.main["control"]["update_batch_size"]
+            batch_size = config.main["bodhi"]["batch_size"]
             if batch_size == 0:
                 yield build_nvrs
                 return
@@ -272,7 +271,7 @@ class RebuildBatch:
             logger.info(f"Submitting Bodhi update for {update_tag}")
             try:
                 await deferToThread(self._submit_bodhi_update, update_tag)
-            except Exception as e:
+            except Exception:
                 logger.exception(f"Failed to submit Bodhi update for {update_tag}")
                 raise
             logger.debug(f"Submitted Bodhi update for {batch_nvrs}")

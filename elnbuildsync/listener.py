@@ -113,7 +113,7 @@ def _handle_tag(msg):
     """Handle buildsys.tag messages to trigger rebuilds."""
     tag = msg.body["tag"]
 
-    if tag == config.main["trigger"]["rpms"]:
+    if tag == config.main["koji"]["trigger_tag"]:
         return _handle_trigger_tag(msg)
 
     elif tag in state.pending_nvr_tags.keys():
@@ -125,7 +125,7 @@ def _handle_tag(msg):
 
 def _handle_trigger_tag(msg):
     # Check whether this component is meaningful to us
-    if not config.is_eligible("rpms", msg.body["name"]):
+    if not config.is_eligible(msg.body["name"], is_downstream=False):
         raise Drop()
 
     # If we are currently processing a batch or are in a "paused" state,
@@ -134,7 +134,9 @@ def _handle_trigger_tag(msg):
     if batching.running or config.is_paused():
         raise Nack()
 
-    logger.info(f"Triggering rebuild on trigger tag {config.main['trigger']['rpms']}")
+    logger.info(
+        f"Triggering rebuild on trigger tag {config.main['koji']['trigger_tag']}"
+    )
 
     # This is a component we care about, so add it to the queue
     batching.message_batch_processor.reset()
@@ -155,7 +157,7 @@ def _handle_awaited_tag(msg):
     try:
         deferred = state.pending_nvr_tags.pop(tag, nvr)
         reactor.callLater(0, fire_callback, deferred, nvr)
-    except KeyError as e:
+    except KeyError:
         logger.debug(f"NVR {nvr} not found in tag {tag}, ignoring.")
         raise Drop()
 
@@ -180,12 +182,12 @@ def message_handler(msg):
             logger.debug(f"Unable to handle {msg.topic} topics, ignoring.")
             raise Drop()
 
-    except Drop as e:
+    except Drop:
         # Tell the AMQP server that we're ignoring this message
         logger.debug(f"Dropped message {msg.id}")
         raise
 
-    except Nack as e:
+    except Nack:
         # We're explicitly informing the AMQP server that we can't handle
         # this request currently and it should be re-queued.
         logger.debug(f"Re-queued message {msg.id}")
@@ -205,9 +207,7 @@ async def check_tasks():
 
     for task in watched_tasks:
         try:
-            taskinfo = await kojihelpers.builds.get_taskinfo(
-                "destination", task, request=True
-            )
+            taskinfo = await kojihelpers.builds.get_taskinfo(task, request=True)
 
             # Atomically pop the task and claim ownership of the Deferred.
             # If a message handler already claimed it during the await, skip.
@@ -338,7 +338,7 @@ def cancel_timed_out_task(failure, task_id):
     # Reraise the original exception, catching TimeoutError if it happened
     try:
         failure.raiseException()
-    except DeferredTimeoutError as e:
+    except DeferredTimeoutError:
         pass
 
     # If we got a timeout, the Koji task is still running, so we will need to

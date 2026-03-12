@@ -19,7 +19,6 @@
 
 import logging
 
-from fedora_messaging.message import Message as FedoraMessage
 
 from .kojihelpers.connection import call_koji
 
@@ -37,16 +36,14 @@ async def periodic_cleanup():
         return
 
     logger.debug("Starting periodic cleanup.")
-    bsys = kojihelpers.connection.get_buildsys(
-        kojihelpers.connection.BuildSystemType.destination
-    )
+    bsys = kojihelpers.connection.get_buildsys()
 
     # We have the set of desired packages from Content Resolver
-    desired_pkg_names = set(config.comps["rpms"].keys())
+    desired_pkg_names = set(config.comps["downstream_components"].keys())
 
-    # Get the list of packages currently tagged into the destination tag
+    # Get the list of packages currently tagged into the stable tag
     latest_tagged_dest_pkgs = await call_koji(
-        bsys.listTagged, config.main["build"]["target"], latest=True
+        bsys.listTagged, config.main["koji"]["stable_tag"], latest=True
     )
 
     # Get the list of up-to-date packages in the destination tag
@@ -59,20 +56,26 @@ async def periodic_cleanup():
         ]
     )
 
-    # Get the complete list of builds tagged into the destination tag
+    # Get the complete list of builds tagged into the stable tag
     all_tagged_dest_pkgs = await call_koji(
-        bsys.listTagged, config.main["build"]["target"], latest=False
+        bsys.listTagged, config.main["koji"]["stable_tag"], latest=False
     )
     all_tagged_dest_nvrs = set([pkg["nvr"] for pkg in all_tagged_dest_pkgs])
 
     # Queue up the set of old builds to untag
     nvrs_to_untag = all_tagged_dest_nvrs - latest_tagged_dest_nvrs
 
-    if config.do_untagging and len(nvrs_to_untag) > 0:
+    if len(nvrs_to_untag) > 0:
         logger.info("{} builds to untag:".format(len(nvrs_to_untag)))
         for nvr in sorted(nvrs_to_untag):
-            logger.info(f"Untagging {nvr}")
-        kojihelpers.tags.untag_builds(config.main["build"]["target"], nvrs_to_untag)
+            logger.info(f"\t{nvr}")
+
+        if config.do_untagging:
+            kojihelpers.tags.untag_builds(
+                config.main["koji"]["stable_tag"], nvrs_to_untag
+            )
+        else:
+            logger.info("Untagging is disabled, skipping untagging.")
 
     # Packages in the desired list but not in the tag should be built
     latest_tagged_dest_pkg_names = {pkg["name"] for pkg in latest_tagged_dest_pkgs}

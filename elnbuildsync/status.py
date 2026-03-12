@@ -26,13 +26,6 @@ import rpm
 from collections import defaultdict
 from datetime import datetime, timezone
 from enum import Enum, auto
-import htmlmin
-from twisted.web.template import (
-    Element,
-    flattenString,
-    renderer,
-    XMLFile,
-)
 
 from . import config
 from . import kojihelpers
@@ -40,9 +33,7 @@ from .kojihelpers.connection import call_koji
 
 logger = logging.getLogger(__name__)
 
-raw_data = None
 encoded_json_data = None
-web_page = None
 
 
 class BuildStatus(Enum):
@@ -54,26 +45,25 @@ class BuildStatus(Enum):
 
 
 async def create_status_page():
-    global raw_data
     global encoded_json_data
-    global web_page
 
     try:
         logger.info("Refreshing status page")
 
         # Get the list of desired package names
         desired_pkgs = [
-            component for component in sorted(config.comps["rpms"], key=str.lower)
+            component
+            for component in sorted(
+                config.comps["downstream_components"], key=str.lower
+            )
         ]
 
-        bsys = kojihelpers.connection.get_buildsys(
-            kojihelpers.connection.BuildSystemType.destination
-        )
+        bsys = kojihelpers.connection.get_buildsys()
 
         try:
             # Self-identify
             username = bsys.getLoggedInUser()["name"]
-        except koji.GenericError as e:
+        except koji.GenericError:
             logger.exception(
                 "Could not self-identify with Koji. Will retry in a few minutes."
             )
@@ -83,11 +73,11 @@ async def create_status_page():
         # NOTE: This might be better to do live, rather than periodic.
 
         try:
-            # Look up packages tagged into the tag associated with the target
+            # Look up packages tagged into the stable tag
             tagged_pkgs = await call_koji(
-                bsys.listTagged, config.main["build"]["target"], latest=True
+                bsys.listTagged, config.main["koji"]["stable_tag"], latest=True
             )
-        except koji.GenericError as e:
+        except koji.GenericError:
             logger.exception(
                 "Could not communicate with Koji. Will retry in a few minutes."
             )
@@ -99,86 +89,40 @@ async def create_status_page():
         _status_data = defaultdict(lambda: None)
         _status_data["__updated"] = datetime.now(timezone.utc)
 
-        koji_url = kojihelpers.connection.get_koji_url()
-
         # Get the list of packages that DBS has built.
         built_packages = await call_koji(
             bsys.listBuilds, userID=username, queryOpts={"order": "start_ts"}
         )
         for build in built_packages:
-            pname = build["name"]
-            if pname in desired_pkgs:
-                # The sort order goes from oldest to newest, so if we see the same
-                # package, just overwrite the build data.
-                if pname in _status_data:
-                    _status_data[pname].update(build)
-                else:
-                    _status_data[pname] = build
+            if build["start_ts"] is not None:
+                pname = build["name"]
+                if pname in desired_pkgs:
+                    _set_package_status(_status_data, pname, build, tagged_builds)
 
-                _status_data[pname]["view"] = (
-                    config.comps["rpms"][pname]["view"]
-                    if "view" in config.comps["rpms"][pname]
-                    else "UNKNOWN"
+        for pname in desired_pkgs:
+            if pname not in _status_data:
+                logger.debug(f"Package {pname} not in _status_data, checking Koji")
+
+                # Check whether the package was built by another user
+                builds = await call_koji(
+                    bsys.listBuilds, packageID=pname, queryOpts={"order": "start_ts"}
                 )
-
-                _status_data[pname]["status_detail"] = ""
-                _status_data[pname]["build_url"] = os.path.join(
-                    koji_url,
-                    "taskinfo?taskID={}".format(build["task_id"]),
-                )
-
-                if _status_data[pname]["state"] == koji.BUILD_STATES["BUILDING"]:
-                    _status_data[pname]["status"] = BuildStatus.BUILDING
-                    continue
-                else:
-                    # Unknown for now until we get down further
-                    _status_data[pname]["status"] = BuildStatus.UNKNOWN
-
-                if "tagged" not in _status_data[pname]:
-                    # Set a default of "Unknown"
-                    _status_data[pname]["tagged"] = "UNKNOWN"
-
-                if pname in tagged_builds and "nvr" in tagged_builds[pname]:
-                    _status_data[pname]["tagged"] = tagged_builds[pname]["nvr"]
-
-                if build["nvr"] == _status_data[pname]["tagged"]:
-                    _status_data[pname]["status"] = BuildStatus.SUCCEEDED
-                elif (
-                    pname in tagged_builds
-                    and _status_data[pname]["status"] == BuildStatus.UNKNOWN
-                ):
-                    # Check whether the latest tagged package is ELN or Fedora
-                    if re.search(r"\.fc\d\d$", _status_data[pname]["tagged"]):
-                        _status_data[pname]["status"] = BuildStatus.FAILED
-                        _status_data[pname]["status_detail"] = "Fedora build in tag"
-
-                    elif dest_is_newer(build, tagged_builds[pname]):
-                        _status_data[pname]["status"] = BuildStatus.SUCCEEDED
-                        _status_data[pname]["status_detail"] = "Built by another user"
-                    else:
-                        _status_data[pname]["status"] = BuildStatus.FAILED
-                        _status_data[pname]["status_detail"] = "Build failed"
-                else:
-                    _status_data[pname]["status"] = BuildStatus.FAILED
-                    _status_data[pname]["status_detail"] = "Build is not tagged"
+                for build in builds:
+                    # The ordering oddly puts "None" at the end, so we need to
+                    # exclude it or we get some odd results at times.
+                    if build["start_ts"] is not None:
+                        _set_package_status(_status_data, pname, build, tagged_builds)
 
         # Now double-check that we didn't miss any expected packages
         # This will use the defaultdict to set the value to None for
         # any packages not in the list
         [_status_data[pkg] for pkg in desired_pkgs]
 
-        # Save the finalized data to the public variables
-        raw_data = _status_data
-        encoded_json_data = json.dumps(raw_data, default=str).encode("UTF-8")
+        # Build JSON-serializable copy with string status for the frontend
+        serializable_data = _build_serializable_status(_status_data)
+        encoded_json_data = json.dumps(serializable_data, default=str).encode("UTF-8")
 
-        # Pre-generate the web page
-        raw_page = await flattenString(None, StatusTableElement())
-        logger.debug(f"Uncompressed page: {len(raw_page)}")
-
-        web_page = htmlmin.minify(raw_page.decode("utf-8")).encode()
-        logger.debug(f"Compressed page: {len(web_page)}")
-
-    except:  # pylint: disable=broad-except
+    except Exception:  # noqa: S110
         # Normally it's bad to catch all exceptions, but in this case the
         # status page is purely cosmetic and will retry in a few minutes.
         logger.exception("Unexpected error while refreshing status page.")
@@ -217,71 +161,98 @@ def dest_is_newer(latest_src, latest_dest):
     return is_higher(latest_dest, latest_src)
 
 
-class StatusTableElement(Element):
-    loader = XMLFile(os.path.join(os.path.dirname(__file__), "templates", "status.xml"))
+def _set_package_status(_status_data, pname, build, tagged_builds):
+    """Update _status_data[pname] with build info and computed status.
 
-    @renderer
-    def header(self, request, tag):
-        global raw_data
-        update_time = raw_data["__updated"].isoformat()
-        yield tag.clone().fillSlots(update_time=update_time)
+    If build is None, values that would come from build are set to "UNKNOWN".
+    """
+    koji_url = kojihelpers.connection.get_koji_url()
+    if build is None:
+        build = {
+            "name": pname,
+            "task_id": "UNKNOWN",
+            "nvr": "UNKNOWN",
+            "state": -1,
+        }
+        build_unknown = True
+    else:
+        build_unknown = False
 
-    @renderer
-    def builds(self, request, tag):
-        global raw_data
-        for pkg in sorted(raw_data.keys()):
-            if pkg.startswith("__"):
-                continue
+    if pname in _status_data and _status_data[pname] is not None:
+        _status_data[pname].update(build)
+    else:
+        _status_data[pname] = dict(build)
 
-            build = raw_data[pkg]
+    entry = _status_data[pname]
+    entry["view"] = (
+        config.comps["downstream_components"][pname]["view"]
+        if "view" in config.comps["downstream_components"][pname]
+        else "UNKNOWN"
+    )
+    entry["status_detail"] = ""
+    if build_unknown:
+        entry["build_url"] = None
+    else:
+        entry["build_url"] = os.path.join(
+            koji_url,
+            "taskinfo?taskID={}".format(build["task_id"]),
+        )
 
-            task_url = ""
+    if entry["state"] == koji.BUILD_STATES["BUILDING"]:
+        entry["status"] = BuildStatus.BUILDING
+        return
+    entry["status"] = BuildStatus.UNKNOWN
 
-            if build is None:
-                yield tag.clone().fillSlots(
-                    name=pkg,
-                    view="UNKNOWN",
-                    nvr="UNKNOWN",
-                    state="UNKNOWN",
-                    detail="Not known to Koji",
-                    task="",
-                    task_url=task_url,
-                    tagged_build="UNKNOWN",
-                    build_time="UNKNOWN",
-                )
+    if build_unknown:
+        if "tagged" not in entry:
+            entry["tagged"] = None
+        return
 
-            else:
-                if "task_id" in build:
-                    task = str(build["task_id"])
-                    task_url = build.get("build_url", "")
+    if "tagged" not in entry:
+        entry["tagged"] = "UNKNOWN"
+    if pname in tagged_builds and "nvr" in tagged_builds[pname]:
+        entry["tagged"] = tagged_builds[pname]["nvr"]
 
-                if build["status"] == BuildStatus.SUCCEEDED:
-                    state = "SUCCESS"
-                elif build["status"] == BuildStatus.BUILDING:
-                    state = "Building"
-                elif build["status"] == BuildStatus.FAILED:
-                    state = "FAILED"
-                else:
-                    state = "Error"
+    if build["nvr"] == entry["tagged"]:
+        entry["status"] = BuildStatus.SUCCEEDED
+    elif pname in tagged_builds and entry["status"] == BuildStatus.UNKNOWN:
+        if re.search(r"\.fc\d\d$", entry["tagged"]):
+            entry["status"] = BuildStatus.FAILED
+            entry["status_detail"] = "Fedora build in tag"
+        elif dest_is_newer(build, tagged_builds[pname]):
+            entry["status"] = BuildStatus.SUCCEEDED
+            entry["status_detail"] = "Built by another user"
+        else:
+            entry["status"] = BuildStatus.FAILED
+            entry["status_detail"] = "Build failed"
+    else:
+        entry["status"] = BuildStatus.FAILED
+        entry["status_detail"] = "Build is not tagged"
 
-                detail = build["status_detail"] if build["status_detail"] else ""
 
-                tagged_build = build.get("tagged", "UNKNOWN")
+def _status_display_string(build_status):
+    """Map BuildStatus enum to string for JSON/frontend. Use UNKNOWN for else case."""
+    if build_status == BuildStatus.SUCCEEDED:
+        return "SUCCESS"
+    if build_status == BuildStatus.BUILDING:
+        return "Building"
+    if build_status == BuildStatus.FAILED:
+        return "FAILED"
+    return "UNKNOWN"
 
-                build_time = "UNKNOWN"
-                if "start_ts" in build and build["start_ts"]:
-                    build_time = datetime.fromtimestamp(
-                        build["start_ts"], tz=timezone.utc
-                    ).isoformat()
 
-                yield tag.clone().fillSlots(
-                    name=pkg,
-                    view=build["view"],
-                    nvr=build["nvr"],
-                    state=state,
-                    task=task,
-                    task_url=task_url,
-                    detail=detail,
-                    tagged_build=tagged_build,
-                    build_time=build_time,
-                )
+def _build_serializable_status(_status_data):
+    """Build a dict suitable for JSON: same structure as _status_data but status is a string."""
+    result = {}
+    for key, value in _status_data.items():
+        if key.startswith("__"):
+            result[key] = value
+            continue
+        if value is None:
+            result[key] = None
+            continue
+        entry = dict(value)
+        if "status" in entry and isinstance(entry["status"], BuildStatus):
+            entry["status"] = _status_display_string(entry["status"])
+        result[key] = entry
+    return result

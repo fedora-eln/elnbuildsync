@@ -30,23 +30,23 @@ except RuntimeError:
     asyncio.set_event_loop(event_loop)
 asyncioreactor.install(event_loop)
 
-import click
-import fedora_messaging.api
-import fedora_messaging.config
-import logging
-import sys
-import tempfile
+import click  # noqa: E402
+import fedora_messaging.api  # noqa: E402
+import fedora_messaging.config  # noqa: E402
+import logging  # noqa: E402
+import sys  # noqa: E402
+import tempfile  # noqa: E402
 
-from twisted.internet import task
-from twisted.internet.defer import Deferred
+from twisted.internet import task  # noqa: E402
+from twisted.internet.defer import Deferred  # noqa: E402
 
-from . import batching
-from . import cleanup
-from . import db_models
-from . import config
-from . import listener
-from . import status
-from . import web
+from . import batching  # noqa: E402
+from . import cleanup  # noqa: E402
+from . import db_models  # noqa: E402
+from . import config  # noqa: E402
+from . import listener  # noqa: E402
+from . import status  # noqa: E402
+from . import web  # noqa: E402
 
 
 logger = logging.getLogger(__name__)
@@ -133,7 +133,7 @@ async def _main_impl(reactor, db_pw_file, config_url=None, config_file=None) -> 
 
         # Set up the Database
         logger.info("Initializing database")
-        engine = await db_models.init_db(config.db_url, echo=config.is_debug())
+        await db_models.init_db(config.db_url, echo=config.is_debug())
         logger.info("Database Initialized")
 
         # Schedule configuration updates
@@ -148,7 +148,9 @@ async def _main_impl(reactor, db_pw_file, config_url=None, config_file=None) -> 
 
         # Schedule periodic status page and run it once at startup
         config.status_processor = task.LoopingCall(status.create_status_page)
-        config.status_processor.start(config.status_timer, now=True)
+        config.status_processor.start(
+            config.main["control"]["status_interval"], now=True
+        )
 
         # Schedule periodic cleanup
         config.cleanup_processor = task.LoopingCall(cleanup.periodic_cleanup)
