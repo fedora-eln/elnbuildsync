@@ -105,20 +105,16 @@ class RebuildAttempt:
 
             else:
                 try:
-                    err_msg = value.getErrorMessage()
-                    logger.critical(f"Rebuild failure: {err_msg}")
-
                     try:
-                        err_obj = ast.literal_eval(err_msg)
-                        failures[err_obj["id"]] = err_obj
+                        value.raiseException()
+                    except Exception as e:
+                        data = e.data
 
-                        # Store the results in the DB
-                        await self.tasks[err_obj["id"]].finish(
-                            koji.TASK_STATES["FAILED"]
-                        )
-                    except SyntaxError:
-                        logger.critical("Cannot parse error message.")
-                        raise
+                    id = data["id"]
+                    failures[id] = data
+
+                    # Store the results in the DB
+                    await self.tasks[id].finish(koji.TASK_STATES["FAILED"])
                 except Exception as e:
                     logger.critical("Unexpected error while awaiting a task")
                     logger.exception(e)
