@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>ELN Rebuild Status</title>
+    <link rel="stylesheet" href="https://unpkg.com/@patternfly/patternfly@latest/patternfly.css"/>
+    <style>
+        .status-success { color: var(--pf-v6-global--success-color--100, #3e8635); font-weight: 500; }
+        .status-failed { color: var(--pf-v6-global--danger-color--100, #c9190b); font-weight: 500; }
+        .status-unknown { color: var(--pf-v6-global--warning-color--100, #f0ab00); font-weight: 500; }
+        .status-building { color: var(--pf-v6-global--info-color--100, #2b9af3); font-weight: 500; }
+        .status-error { color: var(--pf-v6-global--warning-color--100, #f0ab00); font-weight: 500; }
+        .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 1rem 0; }
+        .toolbar label { display: flex; align-items: center; gap: 0.5rem; }
+        .pagination-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 1rem 0; }
+        .pagination-bar button { padding: 0.25rem 0.5rem; }
+        .pagination-bar select { padding: 0.25rem; }
+        body { font-family: var(--pf-v6-global--FontFamily--sans-serif, redhat, sans-serif); padding: 1rem; }
+        table { width: 100%; border-collapse: collapse; }
+        .pf-v6-c-table__sort .pf-v6-c-table__button { cursor: pointer; }
+        .pf-v6-c-table__tbody .pf-v6-c-table__tr:hover { background-color: var(--pf-v6-global--BackgroundColor--200, rgba(0, 0, 0, 0.04)); }
+        .filter-select { width: 100%; max-width: 100%; box-sizing: border-box; }
+    </style>
+</head>
+<body>
+    <h1>ELN Rebuild Status</h1>
+    <p id="updated">Loading…</p>
+
+    <div class="toolbar">
+        <label>
+            <span>Search by name:</span>
+            <input type="text" id="searchName" placeholder="Filter by package name" aria-label="Search by name"/>
+        </label>
+        <label>
+            <span>Items per page:</span>
+            <select id="perPage" aria-label="Items per page">
+                <option value="10">10</option>
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+            </select>
+        </label>
+    </div>
+
+    <div class="table-wrapper">
+        <table class="pf-v6-c-table" role="grid" aria-label="Build status table">
+            <thead class="pf-v6-c-table__thead">
+                <tr class="pf-v6-c-table__tr">
+                    <th class="pf-v6-c-table__th pf-v6-c-table__sort" scope="col" data-col="name" aria-sort="none">
+                        <button type="button" class="pf-v6-c-table__button">
+                            <span class="pf-v6-c-table__button-content">Name</span>
+                            <span class="pf-v6-c-table__sort-indicator"></span>
+                        </button>
+                    </th>
+                    <th class="pf-v6-c-table__th pf-v6-c-table__sort" scope="col" data-col="view" aria-sort="none">
+                        <button type="button" class="pf-v6-c-table__button">
+                            <span class="pf-v6-c-table__button-content">View</span>
+                            <span class="pf-v6-c-table__sort-indicator"></span>
+                        </button>
+                    </th>
+                    <th class="pf-v6-c-table__th pf-v6-c-table__sort" scope="col" data-col="status" aria-sort="none">
+                        <button type="button" class="pf-v6-c-table__button">
+                            <span class="pf-v6-c-table__button-content">Status</span>
+                            <span class="pf-v6-c-table__sort-indicator"></span>
+                        </button>
+                    </th>
+                    <th class="pf-v6-c-table__th pf-v6-c-table__sort" scope="col" data-col="task" aria-sort="none">
+                        <button type="button" class="pf-v6-c-table__button">
+                            <span class="pf-v6-c-table__button-content">Koji Task</span>
+                            <span class="pf-v6-c-table__sort-indicator"></span>
+                        </button>
+                    </th>
+                    <th class="pf-v6-c-table__th pf-v6-c-table__sort" scope="col" data-col="detail" aria-sort="none">
+                        <button type="button" class="pf-v6-c-table__button">
+                            <span class="pf-v6-c-table__button-content">Detail</span>
+                            <span class="pf-v6-c-table__sort-indicator"></span>
+                        </button>
+                    </th>
+                    <th class="pf-v6-c-table__th pf-v6-c-table__sort" scope="col" data-col="nvr" aria-sort="none">
+                        <button type="button" class="pf-v6-c-table__button">
+                            <span class="pf-v6-c-table__button-content">NVR</span>
+                            <span class="pf-v6-c-table__sort-indicator"></span>
+                        </button>
+                    </th>
+                    <th class="pf-v6-c-table__th pf-v6-c-table__sort" scope="col" data-col="tagged" aria-sort="none">
+                        <button type="button" class="pf-v6-c-table__button">
+                            <span class="pf-v6-c-table__button-content">Current in ELN</span>
+                            <span class="pf-v6-c-table__sort-indicator"></span>
+                        </button>
+                    </th>
+                    <th class="pf-v6-c-table__th pf-v6-c-table__sort" scope="col" data-col="build_time" aria-sort="none">
+                        <button type="button" class="pf-v6-c-table__button">
+                            <span class="pf-v6-c-table__button-content">Build Time</span>
+                            <span class="pf-v6-c-table__sort-indicator"></span>
+                        </button>
+                    </th>
+                </tr>
+                <tr class="pf-v6-c-table__tr">
+                    <th class="pf-v6-c-table__th">
+                        <select class="filter-select" data-col="name" aria-label="Filter by Name"><option value="">All</option></select>
+                    </th>
+                    <th class="pf-v6-c-table__th">
+                        <select class="filter-select" data-col="view" aria-label="Filter by View"><option value="">All</option></select>
+                    </th>
+                    <th class="pf-v6-c-table__th">
+                        <select class="filter-select" data-col="status" aria-label="Filter by Status"><option value="">All</option></select>
+                    </th>
+                    <th class="pf-v6-c-table__th">
+                        <select class="filter-select" data-col="task" aria-label="Filter by Koji Task"><option value="">All</option></select>
+                    </th>
+                    <th class="pf-v6-c-table__th">
+                        <select class="filter-select" data-col="detail" aria-label="Filter by Detail"><option value="">All</option></select>
+                    </th>
+                    <th class="pf-v6-c-table__th">
+                        <select class="filter-select" data-col="nvr" aria-label="Filter by NVR"><option value="">All</option></select>
+                    </th>
+                    <th class="pf-v6-c-table__th">
+                        <select class="filter-select" data-col="tagged" aria-label="Filter by Current in ELN"><option value="">All</option></select>
+                    </th>
+                    <th class="pf-v6-c-table__th">
+                        <select class="filter-select" data-col="build_time" aria-label="Filter by Build Time"><option value="">All</option></select>
+                    </th>
+                </tr>
+            </thead>
+            <tbody class="pf-v6-c-table__tbody" id="tableBody">
+                <tr class="pf-v6-c-table__tr"><td class="pf-v6-c-table__td" colspan="8">Loading…</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pagination-bar">
+        <button type="button" id="firstPage" aria-label="First page">First</button>
+        <button type="button" id="prevPage" aria-label="Previous page">Previous</button>
+        <span id="pageInfo"></span>
+        <button type="button" id="nextPage" aria-label="Next page">Next</button>
+        <button type="button" id="lastPage" aria-label="Last page">Last</button>
+    </div>
+
+    <script>
+(function () {
+    "use strict";
+
+    var allRows = [];
+    var filteredRows = [];
+    var sortCol = "name";
+    var sortDir = "asc";
+    var page = 1;
+    var perPage = 25;
+    var updatedAt = "";
+
+    function buildTime(ts) {
+        if (ts == null || ts === undefined) return "UNKNOWN";
+        var d = new Date(ts * 1000);
+        return isNaN(d.getTime()) ? "UNKNOWN" : d.toISOString();
+    }
+
+    function normalizeRow(name, build) {
+        if (build == null) {
+            return {
+                name: name,
+                view: "UNKNOWN",
+                status: "UNKNOWN",
+                task: "",
+                task_url: "",
+                detail: "Not known to Koji",
+                nvr: "UNKNOWN",
+                tagged: "UNKNOWN",
+                build_time: "UNKNOWN"
+            };
+        }
+        return {
+            name: name,
+            view: build.view || "UNKNOWN",
+            status: build.status || "UNKNOWN",
+            task: build.task_id != null ? String(build.task_id) : "",
+            task_url: build.build_url || "",
+            detail: build.status_detail || "",
+            nvr: build.nvr || "UNKNOWN",
+            tagged: build.tagged || "UNKNOWN",
+            build_time: build.start_ts != null ? buildTime(build.start_ts) : "UNKNOWN"
+        };
+    }
+
+    function statusClass(status) {
+        if (status === "SUCCESS") return "status-success";
+        if (status === "FAILED") return "status-failed";
+        if (status === "UNKNOWN") return "status-unknown";
+        if (status === "Building") return "status-building";
+        if (status === "Error") return "status-error";
+        return "status-unknown";
+    }
+
+    function getSortKey(row, col) {
+        var v = row[col];
+        if (col === "build_time" && v !== "UNKNOWN") return new Date(v).getTime();
+        if (typeof v === "string" && v.toLowerCase() === "unknown") return "";
+        return v;
+    }
+
+    function sortRows() {
+        filteredRows.sort(function (a, b) {
+            var ka = getSortKey(a, sortCol);
+            var kb = getSortKey(b, sortCol);
+            if (ka < kb) return sortDir === "asc" ? -1 : 1;
+            if (ka > kb) return sortDir === "asc" ? 1 : -1;
+            return 0;
+        });
+    }
+
+    function applyFilter() {
+        var q = document.getElementById("searchName").value.trim().toLowerCase();
+        if (!q) {
+            filteredRows = allRows.slice();
+        } else {
+            filteredRows = allRows.filter(function (r) {
+                return r.name.toLowerCase().indexOf(q) !== -1;
+            });
+        }
+        document.querySelectorAll(".filter-select[data-col]").forEach(function (select) {
+            var col = select.getAttribute("data-col");
+            var val = select.value;
+            if (val !== "") {
+                filteredRows = filteredRows.filter(function (r) {
+                    return String(r[col] != null ? r[col] : "") === val;
+                });
+            }
+        });
+        page = 1;
+        sortRows();
+        render();
+    }
+
+    function render() {
+        var tbody = document.getElementById("tableBody");
+        var start = (page - 1) * perPage;
+        var slice = filteredRows.slice(start, start + perPage);
+
+        if (filteredRows.length === 0) {
+            tbody.innerHTML = "<tr class=\"pf-v6-c-table__tr\"><td class=\"pf-v6-c-table__td\" colspan=\"8\">No rows match the filter.</td></tr>";
+        } else {
+            tbody.innerHTML = slice.map(function (row) {
+                var taskCell = row.task_url
+                    ? "<a href=\"" + escapeHtml(row.task_url) + "\">" + escapeHtml(row.task) + "</a>"
+                    : escapeHtml(row.task || "");
+                var statusSpan = "<span class=\"" + statusClass(row.status) + "\">" + escapeHtml(row.status) + "</span>";
+                return "<tr class=\"pf-v6-c-table__tr\">" +
+                    "<td class=\"pf-v6-c-table__td\" data-label=\"Name\">" + escapeHtml(row.name) + "</td>" +
+                    "<td class=\"pf-v6-c-table__td\" data-label=\"View\">" + escapeHtml(row.view) + "</td>" +
+                    "<td class=\"pf-v6-c-table__td\" data-label=\"Status\">" + statusSpan + "</td>" +
+                    "<td class=\"pf-v6-c-table__td\" data-label=\"Koji Task\">" + taskCell + "</td>" +
+                    "<td class=\"pf-v6-c-table__td\" data-label=\"Detail\">" + escapeHtml(row.detail) + "</td>" +
+                    "<td class=\"pf-v6-c-table__td\" data-label=\"NVR\">" + escapeHtml(row.nvr) + "</td>" +
+                    "<td class=\"pf-v6-c-table__td\" data-label=\"Current in ELN\">" + escapeHtml(row.tagged) + "</td>" +
+                    "<td class=\"pf-v6-c-table__td\" data-label=\"Build Time\">" + escapeHtml(row.build_time) + "</td>" +
+                    "</tr>";
+            }).join("");
+        }
+
+        var total = filteredRows.length;
+        var totalPages = Math.max(1, Math.ceil(total / perPage));
+        var from = total === 0 ? 0 : start + 1;
+        var to = Math.min(start + perPage, total);
+        document.getElementById("pageInfo").textContent = from + " - " + to + " of " + total;
+
+        document.getElementById("firstPage").disabled = page <= 1;
+        document.getElementById("prevPage").disabled = page <= 1;
+        document.getElementById("nextPage").disabled = page >= totalPages;
+        document.getElementById("lastPage").disabled = page >= totalPages;
+    }
+
+    function escapeHtml(s) {
+        if (s == null) return "";
+        var div = document.createElement("div");
+        div.textContent = s;
+        return div.innerHTML;
+    }
+
+    function setSort(col) {
+        if (sortCol === col) {
+            sortDir = sortDir === "asc" ? "desc" : "asc";
+        } else {
+            sortCol = col;
+            sortDir = "asc";
+        }
+        sortRows();
+        var headers = document.querySelectorAll(".pf-v6-c-table__sort");
+        headers.forEach(function (th) {
+            var c = th.getAttribute("data-col");
+            th.setAttribute("aria-sort", c === sortCol ? (sortDir === "asc" ? "ascending" : "descending") : "none");
+        });
+        render();
+    }
+
+    var COL_KEYS = ["name", "view", "status", "task", "detail", "nvr", "tagged", "build_time"];
+
+    function populateColumnFilters() {
+        COL_KEYS.forEach(function (col) {
+            var seen = {};
+            allRows.forEach(function (row) {
+                var v = row[col];
+                var s = v != null ? String(v) : "";
+                if (!seen.hasOwnProperty(s)) seen[s] = true;
+            });
+            var values = Object.keys(seen).sort(function (a, b) {
+                if (col === "build_time" && a !== "UNKNOWN" && b !== "UNKNOWN") return new Date(a).getTime() - new Date(b).getTime();
+                return a.localeCompare(b, undefined, { sensitivity: "base" });
+            });
+            var select = document.querySelector(".filter-select[data-col=\"" + col + "\"]");
+            if (!select) return;
+            select.innerHTML = "";
+            var allOpt = document.createElement("option");
+            allOpt.value = "";
+            allOpt.textContent = "All";
+            select.appendChild(allOpt);
+            values.forEach(function (val) {
+                var opt = document.createElement("option");
+                opt.value = val;
+                opt.textContent = val;
+                select.appendChild(opt);
+            });
+        });
+    }
+
+    function fetchData() {
+        document.getElementById("updated").textContent = "Loading…";
+        document.getElementById("tableBody").innerHTML = "<tr class=\"pf-v6-c-table__tr\"><td class=\"pf-v6-c-table__td\" colspan=\"8\">Loading…</td></tr>";
+
+        fetch("/status.json")
+            .then(function (res) {
+                if (!res.ok) {
+                    document.getElementById("updated").textContent = "Status data not available (server may still be starting).";
+                    document.getElementById("tableBody").innerHTML = "<tr class=\"pf-v6-c-table__tr\"><td class=\"pf-v6-c-table__td\" colspan=\"8\">Failed to load status. Try again later.</td></tr>";
+                    return null;
+                }
+                return res.json();
+            })
+            .then(function (data) {
+                if (data == null) return;
+                updatedAt = data.__updated || "";
+                document.getElementById("updated").textContent = "Last updated: " + (updatedAt ? new Date(updatedAt).toISOString() : "—");
+
+                allRows = [];
+                Object.keys(data).forEach(function (key) {
+                    if (key.indexOf("__") === 0) return;
+                    allRows.push(normalizeRow(key, data[key]));
+                });
+                allRows.sort(function (a, b) { return a.name.localeCompare(b.name, undefined, { sensitivity: "base" }); });
+
+                populateColumnFilters();
+                filteredRows = allRows.slice();
+                page = 1;
+                sortCol = "name";
+                sortDir = "asc";
+                sortRows();
+                render();
+            })
+            .catch(function (err) {
+                document.getElementById("updated").textContent = "Error loading status.";
+                document.getElementById("tableBody").innerHTML = "<tr class=\"pf-v6-c-table__tr\"><td class=\"pf-v6-c-table__td\" colspan=\"8\">Error: " + escapeHtml(String(err)) + "</td></tr>";
+            });
+    }
+
+    document.getElementById("searchName").addEventListener("input", function () { applyFilter(); });
+    document.getElementById("searchName").addEventListener("change", function () { applyFilter(); });
+
+    document.querySelectorAll(".filter-select[data-col]").forEach(function (select) {
+        select.addEventListener("change", function () { applyFilter(); });
+    });
+
+    document.getElementById("perPage").addEventListener("change", function () {
+        perPage = parseInt(this.value, 10);
+        page = 1;
+        render();
+    });
+
+    document.querySelectorAll(".pf-v6-c-table__sort button").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            var th = this.closest("th");
+            if (th) setSort(th.getAttribute("data-col"));
+        });
+    });
+
+    document.getElementById("firstPage").addEventListener("click", function () { page = 1; render(); });
+    document.getElementById("prevPage").addEventListener("click", function () { if (page > 1) { page--; render(); } });
+    document.getElementById("nextPage").addEventListener("click", function () {
+        var totalPages = Math.ceil(filteredRows.length / perPage);
+        if (page < totalPages) { page++; render(); }
+    });
+    document.getElementById("lastPage").addEventListener("click", function () {
+        page = Math.max(1, Math.ceil(filteredRows.length / perPage));
+        render();
+    });
+
+    fetchData();
+})();
+    </script>
+</body>
+</html>
