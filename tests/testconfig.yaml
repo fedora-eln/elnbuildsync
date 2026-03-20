@@ -128,6 +128,14 @@ configuration:
       ^llvm[0-9\.]*$: 0
       ^clang[0-9\.]*$: 1
       ^fedora-repos.*$: 0
+  email:
+    smtp_host: localhost
+    smtp_port: 587
+    smtp_username: alice
+    from: elnbuildsync@fedoraproject.org
+    recipients:
+      - list1@fedoraproject.org
+      - list2@redhat.com
 components:
   autopackagelist:
     view: [ eln, eln-extras ]

@@ -34,6 +34,7 @@ from elnbuildsync.config import (
     _parse_configuration_block,
     _parse_control,
     _parse_db,
+    _parse_email,
     _parse_koji,
     _parse_open_id_connect,
     get_config_ref,
@@ -202,6 +203,36 @@ MINIMAL_CONTROL = {
     "pause": False,
 }
 
+MINIMAL_EMAIL = {
+    "smtp_host": "localhost",
+    "smtp_port": 587,
+    "smtp_username": "alice",
+    "from": "elnbuildsync@fedoraproject.org",
+    "recipients": ["list1@fedoraproject.org"],
+}
+
+
+class TestParseEmail:
+    def test_valid_returns_parsed(self):
+        result = _parse_email(MINIMAL_EMAIL)
+        assert result["smtp_host"] == "localhost"
+        assert result["smtp_port"] == 587
+        assert result["smtp_username"] == "alice"
+        assert result["from"] == "elnbuildsync@fedoraproject.org"
+        assert result["recipients"] == ["list1@fedoraproject.org"]
+
+    def test_missing_from_raises(self):
+        with pytest.raises(ConfigError, match="email.from missing"):
+            _parse_email({k: v for k, v in MINIMAL_EMAIL.items() if k != "from"})
+
+    def test_empty_recipients_raises(self):
+        with pytest.raises(ConfigError, match="email.recipients must be a non-empty"):
+            _parse_email({**MINIMAL_EMAIL, "recipients": []})
+
+    def test_invalid_port_raises(self):
+        with pytest.raises(ConfigError, match="email.smtp_port must be an integer"):
+            _parse_email({**MINIMAL_EMAIL, "smtp_port": "x"})
+
 
 class TestParseControl:
     def test_minimal_required(self):
@@ -246,6 +277,7 @@ def _minimal_cnf(open_id_connect=None):
         "db": MINIMAL_DB,
         "open_id_connect": open_id_connect,
         "control": MINIMAL_CONTROL,
+        "email": MINIMAL_EMAIL,
     }
 
 
@@ -264,6 +296,8 @@ class TestParseConfigurationBlock:
         assert n["open_id_connect"] is not None
         assert n["open_id_connect"]["auth_url"] == MINIMAL_OIDC["auth_url"]
         assert n["control"]["pause"] is False
+        assert n["email"]["smtp_host"] == "localhost"
+        assert n["email"]["from"] == "elnbuildsync@fedoraproject.org"
 
     def test_oidc_disabled(self):
         cnf = _minimal_cnf(open_id_connect=False)
@@ -310,6 +344,12 @@ class TestParseConfigurationBlock:
         cnf = _minimal_cnf()
         del cnf["control"]
         with pytest.raises(ConfigError, match="control missing"):
+            _parse_configuration_block(cnf)
+
+    def test_missing_email_raises(self):
+        cnf = _minimal_cnf()
+        del cnf["email"]
+        with pytest.raises(ConfigError, match="email missing"):
             _parse_configuration_block(cnf)
 
 
@@ -498,6 +538,13 @@ configuration:
   open_id_connect: false
   control:
     pause: false
+  email:
+    smtp_host: localhost
+    smtp_port: 587
+    smtp_username: alice
+    from: elnbuildsync@fedoraproject.org
+    recipients:
+      - list1@fedoraproject.org
 components:
   overrides: {}
 """
@@ -539,6 +586,33 @@ class TestLoadConfig:
             assert "upstream_components" in config_mod.comps
             assert config_mod.comps["downstream_components"] == {}
             assert config_mod.comps["upstream_components"] == {}
+            assert config_mod.main["email"]["smtp_host"] == "localhost"
+            assert config_mod.emailer is not None
+        finally:
+            os.unlink(path)
+
+    @pytest.mark.asyncio
+    async def test_load_config_reinstantiates_email_each_load(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write(MINIMAL_LOAD_CONFIG_YAML)
+            path = f.name
+        try:
+            config_mod.emailer = None
+            with patch(
+                "elnbuildsync.config.deferToThread", side_effect=_fake_defer_to_thread
+            ):
+                with patch(
+                    "elnbuildsync.config.get_rawhide_tag", new_callable=AsyncMock
+                ):
+                    with patch(
+                        "elnbuildsync.config.get_distro_packages",
+                        new_callable=AsyncMock,
+                    ):
+                        with patch("elnbuildsync.config.Email") as MockEmail:
+                            await load_config(config_file=path, db_pw="testpw")
+                            assert MockEmail.call_count == 1
+                            await load_config(config_file=path, db_pw="testpw")
+                            assert MockEmail.call_count == 2
         finally:
             os.unlink(path)
 
@@ -616,6 +690,13 @@ configuration:
   open_id_connect: false
   control:
     pause: false
+  email:
+    smtp_host: localhost
+    smtp_port: 587
+    smtp_username: alice
+    from: elnbuildsync@fedoraproject.org
+    recipients:
+      - list1@fedoraproject.org
 """
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_no_components)

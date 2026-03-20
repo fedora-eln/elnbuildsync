@@ -5,5 +5,5 @@ __pycache__
 .vscode
 build/
 tests/persistent_db
-/ebs_db_pw
-
+/tests/ebs_db_pw
+/tests/ebs_smtp_pw
