@@ -97,11 +97,17 @@ class TestParseOpenIdConnect:
 class TestParseKoji:
     def test_minimal_required_only(self):
         result = _parse_koji(
-            {"profile": "koji", "trigger_tag": "f40", "build_target": "eln"}
+            {
+                "profile": "koji",
+                "trigger_tag": "f40",
+                "build_target": "eln",
+                "stable_tag": "eln",
+            }
         )
         assert result["profile"] == "koji"
         assert result["trigger_tag"] == "f40"
         assert result["build_target"] == "eln"
+        assert result["stable_tag"] == "eln"
         assert result["scratch_build"] is False
         assert result["fail_fast"] is False
 
@@ -111,6 +117,7 @@ class TestParseKoji:
                 "profile": "koji",
                 "trigger_tag": "f40",
                 "build_target": "eln",
+                "stable_tag": "eln",
                 "scratch_build": True,
                 "fail_fast": True,
             }
@@ -123,15 +130,17 @@ class TestParseKoji:
 
     def test_missing_profile_raises(self):
         with pytest.raises(ConfigError, match="koji.profile missing"):
-            _parse_koji({"trigger_tag": "f40", "build_target": "eln"})
+            _parse_koji(
+                {"trigger_tag": "f40", "build_target": "eln", "stable_tag": "eln"}
+            )
 
     def test_missing_trigger_tag_raises(self):
         with pytest.raises(ConfigError, match="koji.trigger_tag missing"):
-            _parse_koji({"profile": "koji", "build_target": "eln"})
+            _parse_koji({"profile": "koji", "build_target": "eln", "stable_tag": "eln"})
 
     def test_missing_build_target_raises(self):
         with pytest.raises(ConfigError, match="koji.build_target missing"):
-            _parse_koji({"profile": "koji", "trigger_tag": "f40"})
+            _parse_koji({"profile": "koji", "trigger_tag": "f40", "stable_tag": "eln"})
 
 
 class TestParseBodhi:
@@ -229,6 +238,7 @@ def _minimal_cnf(open_id_connect=None):
             "profile": "koji",
             "trigger_tag": "f40",
             "build_target": "eln",
+            "stable_tag": "eln",
             "scratch_build": False,
             "fail_fast": False,
         },
@@ -246,6 +256,7 @@ class TestParseConfigurationBlock:
         assert n["koji"]["profile"] == "koji"
         assert n["koji"]["trigger_tag"] == "f40"
         assert n["koji"]["build_target"] == "eln"
+        assert n["koji"]["stable_tag"] == "eln"
         assert n["bodhi"]["batch_size"] == 0
         assert n["db"]["host"] == "localhost"
         assert n["db"]["port"] == 5432
@@ -473,6 +484,7 @@ configuration:
     profile: koji
     trigger_tag: f40
     build_target: eln
+    stable_tag: eln
     scratch_build: false
     fail_fast: false
   bodhi:
@@ -590,6 +602,7 @@ configuration:
     profile: koji
     trigger_tag: f40
     build_target: eln
+    stable_tag: eln
     scratch_build: false
     fail_fast: false
   bodhi:
