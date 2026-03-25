@@ -127,12 +127,6 @@ def main(
 async def _main(
     reactor, db_pw_file, smtp_pw_file, config_url=None, config_file=None
 ) -> None:
-    await _main_impl(reactor, db_pw_file, smtp_pw_file, config_url, config_file)
-
-
-async def _main_impl(
-    reactor, db_pw_file, smtp_pw_file, config_url=None, config_file=None
-) -> None:
     config.terminator = Deferred()
     with tempfile.TemporaryDirectory(prefix="elnbuildsync-") as cdir:
         config.tmpdir = cdir
