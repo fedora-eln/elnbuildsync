@@ -21,6 +21,7 @@
 # Created by argbash-init v2.11.0
 # ARG_OPTIONAL_SINGLE([log-level],[],[Log verbosity],[INFO])
 # ARG_OPTIONAL_SINGLE([dp-pw-file],[],[Database password file],[tests/ebs_db_pw])
+# ARG_OPTIONAL_SINGLE([smtp-pw-file],[],[SMTP password file],[tests/ebs_smtp_pw])
 # ARG_OPTIONAL_SINGLE([lull-time],[],[Time to wait after the last trigger before starting the batch],[5])
 # ARG_OPTIONAL_SINGLE([config-file],[],[Configuration file],[tests/testconfig.yaml])
 # ARG_OPTIONAL_SINGLE([environment],[],[Environment],[stg])
@@ -56,6 +57,7 @@ _arg_custom=()
 # THE DEFAULTS INITIALIZATION - OPTIONALS
 _arg_log_level="INFO"
 _arg_dp_pw_file="tests/ebs_db_pw"
+_arg_smtp_pw_file="tests/ebs_smtp_pw"
 _arg_lull_time="5"
 _arg_config_file="tests/testconfig.yaml"
 _arg_environment="stg"
@@ -63,10 +65,11 @@ _arg_environment="stg"
 
 print_help()
 {
-	printf 'Usage: %s [--log-level <arg>] [--dp-pw-file <arg>] [--lull-time <arg>] [--config-file <arg>] [--environment <arg>] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
+	printf 'Usage: %s [--log-level <arg>] [--dp-pw-file <arg>] [--smtp-pw-file <arg>] [--lull-time <arg>] [--config-file <arg>] [--environment <arg>] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
 	printf '\t%s\n' "<custom>: Additional arguments to pass to the ELNBuildSync daemon"
 	printf '\t%s\n' "--log-level: Log verbosity (default: 'INFO')"
 	printf '\t%s\n' "--dp-pw-file: Database password file (default: 'tests/ebs_db_pw')"
+	printf '\t%s\n' "--smtp-pw-file: SMTP password file (default: 'tests/ebs_smtp_pw')"
 	printf '\t%s\n' "--lull-time: Time to wait after the last trigger before starting the batch (default: '5')"
 	printf '\t%s\n' "--config-file: Configuration file (default: 'tests/testconfig.yaml')"
 	printf '\t%s\n' "--environment: Environment (default: 'stg')"
@@ -108,6 +111,14 @@ parse_commandline()
 				;;
 			--dp-pw-file=*)
 				_arg_dp_pw_file="${_key##--dp-pw-file=}"
+				;;
+			--smtp-pw-file)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_smtp_pw_file="$2"
+				shift
+				;;
+			--smtp-pw-file=*)
+				_arg_smtp_pw_file="${_key##--smtp-pw-file=}"
 				;;
 			--lull-time)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
@@ -253,6 +264,7 @@ fi
     --lull-time "$_arg_lull_time" \
     --config-file "$_arg_config_file" \
     --db-pw-file "$_arg_dp_pw_file" \
+    --smtp-pw-file "$_arg_smtp_pw_file" \
     "${_arg_custom[@]}" \
     2>&1 | tee /tmp/elnbuildsync.log
 

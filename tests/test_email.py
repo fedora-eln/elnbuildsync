@@ -1,0 +1,59 @@
+# This file is part of ELNBuildSync
+# Copyright (C) 2026 Stephen Gallagher <sgallagh@redhat.com>
+
+# SPDX-License-Identifier: 	GPL-3.0-or-later
+
+from unittest.mock import MagicMock, patch
+
+import pytest
+from twisted.internet.defer import succeed
+
+from elnbuildsync.email import Email
+
+MINIMAL_EMAIL_CFG = {
+    "smtp_host": "smtp.example.com",
+    "smtp_port": 587,
+    "smtp_username": "user",
+    "from": "from@example.com",
+    "recipients": ["to@example.com"],
+}
+
+
+def _defer_immediately(f, *args, **kwargs):
+    return succeed(f(*args, **kwargs))
+
+
+@pytest.mark.asyncio
+async def test_send_email_uses_smtplib():
+    mock_smtp = MagicMock()
+    mock_ctx = MagicMock()
+    mock_ctx.__enter__ = MagicMock(return_value=mock_smtp)
+    mock_ctx.__exit__ = MagicMock(return_value=None)
+
+    with (
+        patch("elnbuildsync.email.smtplib.SMTP", return_value=mock_ctx),
+        patch("elnbuildsync.email.deferToThread", side_effect=_defer_immediately),
+    ):
+        client = Email(MINIMAL_EMAIL_CFG, "secret")
+        await client.send_email("Subj", "body text", None)
+
+    mock_smtp.starttls.assert_called_once()
+    mock_smtp.login.assert_called_once_with("user", "secret")
+    mock_smtp.send_message.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_send_email_skips_login_when_no_password():
+    mock_smtp = MagicMock()
+    mock_ctx = MagicMock()
+    mock_ctx.__enter__ = MagicMock(return_value=mock_smtp)
+    mock_ctx.__exit__ = MagicMock(return_value=None)
+
+    with (
+        patch("elnbuildsync.email.smtplib.SMTP", return_value=mock_ctx),
+        patch("elnbuildsync.email.deferToThread", side_effect=_defer_immediately),
+    ):
+        client = Email(MINIMAL_EMAIL_CFG, "")
+        await client.send_email("Subj", "body")
+
+    mock_smtp.login.assert_not_called()

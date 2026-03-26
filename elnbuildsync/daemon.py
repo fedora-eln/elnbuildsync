@@ -83,11 +83,26 @@ def log_filter(record):
 @click.option("--config-file", default=None)
 @click.option("--db-pw-file", type=click.File(mode="r"), default="/etc/ebs_db_pw")
 @click.option(
+    "--smtp-pw-file",
+    type=click.File(mode="r"),
+    default=None,
+    help="File containing one line: SMTP password for configuration.email",
+)
+@click.option(
     "--untagging/--no-untagging",
     default=False,
     help="Untag all but the most recent builds in the destination target",
 )
-def main(log_level, dry_run, lull_time, config_url, config_file, db_pw_file, untagging):
+def main(
+    log_level,
+    dry_run,
+    lull_time,
+    config_url,
+    config_file,
+    db_pw_file,
+    smtp_pw_file,
+    untagging,
+):
     logging.basicConfig(
         format="%(asctime)s : %(name)s : %(levelname)s : %(message)s",
         level=log_level,
@@ -104,22 +119,25 @@ def main(log_level, dry_run, lull_time, config_url, config_file, db_pw_file, unt
     logger.debug("Starting Twisted mainloop")
     return task.react(
         lambda reactor: Deferred.fromCoroutine(
-            _main(reactor, db_pw_file, config_url, config_file)
+            _main(reactor, db_pw_file, smtp_pw_file, config_url, config_file)
         )
     )
 
 
-async def _main(reactor, db_pw_file, config_url=None, config_file=None) -> None:
-    await _main_impl(reactor, db_pw_file, config_url, config_file)
-
-
-async def _main_impl(reactor, db_pw_file, config_url=None, config_file=None) -> None:
+async def _main(
+    reactor, db_pw_file, smtp_pw_file, config_url=None, config_file=None
+) -> None:
     config.terminator = Deferred()
     with tempfile.TemporaryDirectory(prefix="elnbuildsync-") as cdir:
         config.tmpdir = cdir
 
         # Read in the database password
         db_pw = db_pw_file.readline().rstrip()
+
+        if smtp_pw_file is not None:
+            config.smtp_password = smtp_pw_file.readline().rstrip()
+        else:
+            config.smtp_password = ""
 
         # Read in the config file
         try:

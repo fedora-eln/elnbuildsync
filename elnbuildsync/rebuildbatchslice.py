@@ -162,6 +162,7 @@ class RebuildBatchSlice:
 
         # When we get here, either they have all succeeded or the same set
         # have failed twice in a row.
+        failure_requests = []
         if num_failures:
             logger.warning(
                 f"{num_failures} tasks failed for {self.rebuild_batch.side_tag}"
@@ -173,11 +174,13 @@ class RebuildBatchSlice:
                     except ValueError:
                         request = err_msg["request"][0]
                     logger.warning(f"FAILED: {task_id}: {request}")
+                    failure_requests.append(request)
                 except Exception:
                     # If something goes wrong here, just log that the task failed.
                     logger.warning(f"FAILED: {task_id}")
+                    failure_requests.append(f"Task: {task_id}")
 
         # Update database state to "finished"
         await self._update_status(RebuildBatchSliceStatus.FINISHED)
 
-        return all_successes
+        return all_successes, failure_requests

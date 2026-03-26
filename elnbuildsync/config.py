@@ -33,6 +33,8 @@ import yaml
 from twisted.internet.threads import deferToThread
 
 from . import config
+from .email import Email
+
 
 # Global logger
 logger = logging.getLogger(__name__)
@@ -74,6 +76,10 @@ waitrepo_timeout = 20 * 60
 cleanup_processor = None
 status_processor = None
 tmpdir = None
+
+# SMTP (see email.py); password set from daemon --smtp-pw-file before load_config
+emailer = None
+smtp_password = ""
 
 
 class ConfigError(Exception):
@@ -398,6 +404,33 @@ def _parse_bodhi(cnf_bodhi):
     return result
 
 
+def _parse_email(cnf_email):
+    """Parse email configuration. Returns dict with smtp_host, smtp_port, smtp_username,
+    from, recipients.
+    """
+    required = ("smtp_host", "smtp_port", "smtp_username", "from", "recipients")
+    for key in required:
+        if key not in cnf_email:
+            raise ConfigError(f"email.{key} missing.")
+    try:
+        port = int(cnf_email["smtp_port"])
+    except (TypeError, ValueError):
+        raise ConfigError("email.smtp_port must be an integer")
+    recipients = cnf_email["recipients"]
+    if not isinstance(recipients, list) or len(recipients) == 0:
+        raise ConfigError("email.recipients must be a non-empty list.")
+    for r in recipients:
+        if not isinstance(r, str) or not r:
+            raise ConfigError("email.recipients must be a list of non-empty strings.")
+    return {
+        "smtp_host": str(cnf_email["smtp_host"]),
+        "smtp_port": port,
+        "smtp_username": str(cnf_email["smtp_username"]),
+        "from": str(cnf_email["from"]),
+        "recipients": [str(x) for x in recipients],
+    }
+
+
 def _parse_db(cnf_db):
     """Parse database configuration. Returns dict with host, port, name, driver, user.
     All keys are mandatory.
@@ -546,7 +579,7 @@ async def _parse_components(cnf_components):
 
 def _parse_configuration_block(cnf):
     """Parse the full configuration block (no rawhide resolution, no components).
-    Returns dict n with koji, bodhi, db, open_id_connect, control.
+    Returns dict n with koji, bodhi, db, open_id_connect, control, email.
     """
     if "koji" not in cnf:
         raise ConfigError("koji missing.")
@@ -570,6 +603,10 @@ def _parse_configuration_block(cnf):
         raise ConfigError("control missing.")
     n["control"] = _parse_control(cnf["control"])
 
+    if "email" not in cnf:
+        raise ConfigError("email missing.")
+    n["email"] = _parse_email(cnf["email"])
+
     return n
 
 
@@ -589,6 +626,7 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
     global comps
     global scmurl
     global db_url
+    global emailer
 
     if not (config_git_url or config_file):
         raise ValueError("One of 'config_git_url' or 'config_file' must be specified")
@@ -671,6 +709,8 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
         except KeyError as e:
             logger.exception(e)
             raise ConfigError("Missing database configuration (db block)")
+
+    emailer = Email(main["email"], smtp_password)
 
 
 def is_eligible(comp, is_downstream):

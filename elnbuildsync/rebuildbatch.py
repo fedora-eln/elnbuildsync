@@ -188,6 +188,7 @@ class RebuildBatch:
             all_tag_messages[order].append(tag_message)
 
         all_successes = dict()
+        all_failures = dict()
 
         # Create RebuildBatchSlices for each ordering value
         for order, tag_messages in sorted(all_tag_messages.items()):
@@ -196,8 +197,17 @@ class RebuildBatch:
 
         # Process each of the slices
         for slice in self.slices:
-            successes = await slice.run()
+            successes, failed_requests = await slice.run()
             all_successes.update(successes)
+            all_failures.extend(failed_requests)
+
+        # Email notification of failures
+        if all_failures:
+            await config.emailer.send_email(
+                subject="ELNBuildSync build failures",
+                body="The ELNBuildSync build failed for the following requests: "
+                + "\n".join(all_failures),
+            )
 
         # Get the list of NVRs that we will need to tag.
         build_nvrs = list()
