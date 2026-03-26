@@ -28,6 +28,7 @@ import requests.exceptions
 import elnbuildsync.config as config_mod
 from elnbuildsync.config import (
     ConfigError,
+    UnknownComponentError,
     UnknownRefError,
     _parse_bodhi,
     _parse_components,
@@ -36,6 +37,7 @@ from elnbuildsync.config import (
     _parse_db,
     _parse_koji,
     _parse_open_id_connect,
+    ensure_downstream_name,
     get_config_ref,
     get_order,
     get_rawhide_tag,
@@ -831,6 +833,14 @@ class TestSkipTag:
 
 
 class TestGetOrder:
+    @staticmethod
+    def _comps_with(names):
+        """Minimal comps dict with the given component names in both lists."""
+        return {
+            "downstream_components": {n: {} for n in names},
+            "upstream_components": {n: {} for n in names},
+        }
+
     def test_pattern_matches_returns_order(self, monkeypatch):
         monkeypatch.setattr(
             config_mod,
@@ -840,6 +850,11 @@ class TestGetOrder:
                     "ordering": {"^ocaml$": 0},
                 },
             },
+        )
+        monkeypatch.setattr(
+            config_mod,
+            "comps",
+            self._comps_with(["ocaml"]),
         )
         assert get_order("ocaml") == 0
 
@@ -853,7 +868,127 @@ class TestGetOrder:
                 },
             },
         )
+        monkeypatch.setattr(
+            config_mod,
+            "comps",
+            self._comps_with(["ipa"]),
+        )
         assert get_order("ipa") == 1000
+
+    def test_ordering_uses_downstream_name_when_passed_upstream_component(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            config_mod,
+            "main",
+            {
+                "control": {
+                    "ordering": {"^rust$": 5},
+                },
+            },
+        )
+        monkeypatch.setattr(
+            config_mod,
+            "comps",
+            {
+                "downstream_components": {"rust": {}},
+                "upstream_components": {
+                    "rust-toolset": {"downstream_name": "rust"},
+                },
+            },
+        )
+        assert get_order("rust-toolset") == 5
+
+    def test_unknown_component_not_in_either_list_matches_ordering_pattern(
+        self, monkeypatch, caplog
+    ):
+        """Ordering regex applies to the passed name when the component is unknown."""
+        monkeypatch.setattr(
+            config_mod,
+            "main",
+            {
+                "control": {
+                    "ordering": {"^ghost$": 42},
+                },
+            },
+        )
+        monkeypatch.setattr(
+            config_mod,
+            "comps",
+            {
+                "downstream_components": {},
+                "upstream_components": {},
+            },
+        )
+        caplog.set_level(logging.WARNING)
+        assert get_order("ghost") == 42
+        assert any(
+            "Unknown component ghost in ordering" in r.message for r in caplog.records
+        )
+
+    def test_unknown_component_not_in_either_list_returns_default_without_pattern(
+        self, monkeypatch, caplog
+    ):
+        monkeypatch.setattr(
+            config_mod,
+            "main",
+            {
+                "control": {
+                    "ordering": {},
+                },
+            },
+        )
+        monkeypatch.setattr(
+            config_mod,
+            "comps",
+            {
+                "downstream_components": {},
+                "upstream_components": {},
+            },
+        )
+        caplog.set_level(logging.WARNING)
+        assert get_order("orphan") == 1000
+        assert any(
+            "Unknown component orphan in ordering" in r.message for r in caplog.records
+        )
+
+
+class TestEnsureDownstreamName:
+    def test_downstream_name_unchanged(self, monkeypatch):
+        monkeypatch.setattr(
+            config_mod,
+            "comps",
+            {
+                "downstream_components": {"ipa": {}},
+                "upstream_components": {},
+            },
+        )
+        assert ensure_downstream_name("ipa") == "ipa"
+
+    def test_upstream_name_maps_to_downstream(self, monkeypatch):
+        monkeypatch.setattr(
+            config_mod,
+            "comps",
+            {
+                "downstream_components": {"rust": {}},
+                "upstream_components": {
+                    "rust-toolset": {"downstream_name": "rust"},
+                },
+            },
+        )
+        assert ensure_downstream_name("rust-toolset") == "rust"
+
+    def test_not_in_either_list_raises(self, monkeypatch):
+        monkeypatch.setattr(
+            config_mod,
+            "comps",
+            {
+                "downstream_components": {},
+                "upstream_components": {},
+            },
+        )
+        with pytest.raises(UnknownComponentError, match="rust-toolset"):
+            ensure_downstream_name("rust-toolset")
 
 
 class TestIsPaused:

@@ -702,8 +702,16 @@ def skip_tag(comp):
 
 
 def get_order(comp):
+    try:
+        downstream_name = ensure_downstream_name(comp)
+    except UnknownComponentError as e:
+        # This really shouldn't happen, but in the unlikely event that it
+        # does, assume it's a downstream component already and continue.
+        logger.warning(f"Unknown component {comp} in ordering, continuing")
+        downstream_name = comp
+
     for pattern in config.main["control"]["ordering"]:
-        if re.search(pattern, comp):
+        if re.search(pattern, downstream_name):
             return config.main["control"]["ordering"][pattern]
 
     # If we don't have a specific pattern, return a high number (1000)
@@ -735,3 +743,12 @@ def get_downstream_name(upstream_component):
         raise UnknownComponentError(
             f"Upstream component {upstream_component} not found"
         )
+
+def ensure_downstream_name(comp):
+    # Check if the component is in the downstream components list
+    if comp in config.comps["downstream_components"]:
+        return comp
+
+    # Otherwise, convert it to the downstream name
+    # This may raise an UnknownComponentError if the component is not found
+    return get_downstream_name(comp)
