@@ -202,7 +202,7 @@ class RebuildBatch:
             all_failures.extend(failed_requests)
 
         # Email notification of failures
-        if all_failures:
+        if all_failures and config.emailer is not None:
             await config.emailer.send_email(
                 subject="ELNBuildSync build failures",
                 body="The ELNBuildSync build failed for the following requests: "

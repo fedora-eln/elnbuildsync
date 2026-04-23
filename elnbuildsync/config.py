@@ -405,9 +405,13 @@ def _parse_bodhi(cnf_bodhi):
 
 
 def _parse_email(cnf_email):
-    """Parse email configuration. Returns dict with smtp_host, smtp_port, smtp_username,
-    from, recipients.
+    """Parse email configuration. Returns None if disabled, else a dict with
+    smtp_host, smtp_port, smtp_username, from, recipients.
+    Raises ConfigError on invalid or missing required fields.
     """
+    if cnf_email is False:
+        logger.info("Email explicitly disabled")
+        return None
     required = ("smtp_host", "smtp_port", "smtp_username", "from", "recipients")
     for key in required:
         if key not in cnf_email:
@@ -604,7 +608,7 @@ def _parse_configuration_block(cnf):
     n["control"] = _parse_control(cnf["control"])
 
     if "email" not in cnf:
-        raise ConfigError("email missing.")
+        raise ConfigError("email missing. Set email: false to disable email.")
     n["email"] = _parse_email(cnf["email"])
 
     return n
@@ -710,7 +714,8 @@ async def load_config(db_pw=None, config_git_url=None, config_file=None):
             logger.exception(e)
             raise ConfigError("Missing database configuration (db block)")
 
-    emailer = Email(main["email"], smtp_password)
+    if main["email"] is not None:
+        emailer = Email(main["email"], smtp_password)
 
 
 def is_eligible(comp, is_downstream):
