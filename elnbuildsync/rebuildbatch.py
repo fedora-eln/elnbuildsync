@@ -188,7 +188,7 @@ class RebuildBatch:
             all_tag_messages[order].append(tag_message)
 
         all_successes = dict()
-        all_failures = dict()
+        all_failures = list()
 
         # Create RebuildBatchSlices for each ordering value
         for order, tag_messages in sorted(all_tag_messages.items()):
