@@ -17,7 +17,7 @@ app = "Example Application"
 app_url = "https://github.com/fedora-infra/fedora-messaging"
 # Contact emails for the maintainer(s) of the consumer - in case the
 # broker admin needs to contact them, for e.g.
-app_contacts_email = ["jcline@fedoraproject.org"]
+app_contacts_email = ["admin@fedoraproject.org"]
 
 [exchanges."amq.topic"]
 type = "topic"
@@ -26,10 +26,12 @@ auto_delete = false
 arguments = {}
 
 # Queue names *must* be in the normal UUID format: run "uuidgen" and use the
-# output as your queue name. If your queue is not exclusive, anyone can connect
-# and consume from it, causing you to miss messages, so do not share your queue
-# name. Any queues that are not auto-deleted on disconnect are garbage-collected
-# after approximately one hour.
+# output as your queue name. If you don't define a queue here, the server will
+# generate a queue name for you. This queue will be non-durable, auto-deleted and
+# exclusive.
+# If your queue is not exclusive, anyone can connect and consume from it, causing
+# you to miss messages, so do not share your queue name. Any queues that are not
+# auto-deleted on disconnect are garbage-collected after approximately one hour.
 #
 # If you require a stronger guarantee about delivery, please talk to Fedora's
 # Infrastructure team.
@@ -39,6 +41,8 @@ auto_delete = true
 exclusive = true
 arguments = {}
 
+# If you use the server-generated queue names, you can leave out the "queue"
+# parameter in the bindings definition.
 [[bindings]]
 queue = "f5debce1-6010-4537-8d75-01d3a77e5dad"
 exchange = "amq.topic"
