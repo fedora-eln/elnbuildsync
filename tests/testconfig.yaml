@@ -9,7 +9,7 @@ configuration:
   bodhi:
     batch_size: 750
   db:
-    host: localhost
+    host: temp_postgres
     port: 5432
     name: elnbuildsync
     driver: postgresql+asyncpg
@@ -139,6 +139,7 @@ configuration:
 components:
   autopackagelist:
     view: [ eln, eln-extras ]
+    source: [ source, buildroot-source ]
     content_resolver: https://tiny.distro.builders
   overrides:
     # Some packages have a different name in ELN than in Fedora

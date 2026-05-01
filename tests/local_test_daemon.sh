@@ -25,6 +25,7 @@
 # ARG_OPTIONAL_SINGLE([lull-time],[],[Time to wait after the last trigger before starting the batch],[5])
 # ARG_OPTIONAL_SINGLE([config-file],[],[Configuration file],[tests/testconfig.yaml])
 # ARG_OPTIONAL_SINGLE([environment],[],[Environment],[stg])
+# ARG_OPTIONAL_BOOLEAN([build-container],[],[Build the ELNBuildSync container],[off])
 # ARG_POSITIONAL_DOUBLEDASH([])
 # ARG_POSITIONAL_INF([custom],[Additional arguments to pass to the ELNBuildSync daemon])
 # ARG_HELP([],[Run the ELNBuildSync daemon for testing])
@@ -61,11 +62,12 @@ _arg_smtp_pw_file="tests/ebs_smtp_pw"
 _arg_lull_time="5"
 _arg_config_file="tests/testconfig.yaml"
 _arg_environment="stg"
+_arg_build_container="off"
 
 
 print_help()
 {
-	printf 'Usage: %s [--log-level <arg>] [--dp-pw-file <arg>] [--smtp-pw-file <arg>] [--lull-time <arg>] [--config-file <arg>] [--environment <arg>] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
+	printf 'Usage: %s [--log-level <arg>] [--dp-pw-file <arg>] [--smtp-pw-file <arg>] [--lull-time <arg>] [--config-file <arg>] [--environment <arg>] [--(no-)build-container] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
 	printf '\t%s\n' "<custom>: Additional arguments to pass to the ELNBuildSync daemon"
 	printf '\t%s\n' "--log-level: Log verbosity (default: 'INFO')"
 	printf '\t%s\n' "--dp-pw-file: Database password file (default: 'tests/ebs_db_pw')"
@@ -73,6 +75,7 @@ print_help()
 	printf '\t%s\n' "--lull-time: Time to wait after the last trigger before starting the batch (default: '5')"
 	printf '\t%s\n' "--config-file: Configuration file (default: 'tests/testconfig.yaml')"
 	printf '\t%s\n' "--environment: Environment (default: 'stg')"
+	printf '\t%s\n' "--build-container, --no-build-container: Build the ELNBuildSync container (off by default)"
 	printf '\t%s\n' "-h, --help: Prints help"
 	printf '\n%s\n' "Run the ELNBuildSync daemon for testing"
 }
@@ -144,6 +147,10 @@ parse_commandline()
 			--environment=*)
 				_arg_environment="${_key##--environment=}"
 				;;
+			--no-build-container|--build-container)
+				_arg_build_container="on"
+				test "${1:0:5}" = "--no-" && _arg_build_container="off"
+				;;
 			-h|--help)
 				print_help
 				exit 0
@@ -193,11 +200,17 @@ assign_positional_args 1 "${_positionals[@]}"
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJ_DIR=$SCRIPT_DIR/..
+POSTGRES_VERSION=18
 
 if [ -r /run/.containerenv ]; then
   CONTAINER_ENGINE=/usr/bin/podman-remote
 else
   CONTAINER_ENGINE=/usr/bin/podman
+fi
+
+if [ "$_arg_build_container" == "on" ]; then
+    # Build the ELNBuildSync container
+    ${CONTAINER_ENGINE} build -t localhost/elnbuildsync:local_test_daemon $PROJ_DIR
 fi
 
 cd $PROJ_DIR
@@ -208,7 +221,7 @@ pip install -r requirements.txt
 pip install --editable $PROJ_DIR
 
 function check_db_avail() {
-    PGPASSWORD=$(cat tests/ebs_db_pw) \
+    PGPASSWORD=$(cat tests/secrets/ebs_db_pw) \
     pg_isready --quiet \
                --dbname elnbuildsync \
                --username elnbuildsync \
@@ -222,25 +235,24 @@ function closedb() {
     ${CONTAINER_ENGINE} stop temp_postgres
 }
 
+# Prepare the container network
+${CONTAINER_ENGINE} network create --ignore ebs_local_test
+
 # Check if there's already a database running
 check_db_avail > /dev/null 2>&1
 
 if [ $db_ready -ne 0 ]; then
     # Start a non-persistent database for testing
     echo "Starting up non-persistent database container"
-    ${CONTAINER_ENGINE} pull docker.io/postgres:18
-    echo ${CONTAINER_ENGINE} run --publish 5432:5432 --rm --detach \
-        --volume ${SCRIPT_DIR}/ebs_db_pw:/run/secrets/ebs_db_pw:Z \
+    ${CONTAINER_ENGINE} pull docker.io/postgres:$POSTGRES_VERSION
+    ${CONTAINER_ENGINE} run --rm --detach \
+		--publish 5432:5432 \
+	    --network ebs_local_test \
+        --volume ${SCRIPT_DIR}/secrets:/run/secrets:Z \
         --name temp_postgres \
         --env POSTGRES_PASSWORD_FILE=/run/secrets/ebs_db_pw \
         --env POSTGRES_USER=elnbuildsync \
-        docker.io/postgres:18
-    ${CONTAINER_ENGINE} run --publish 5432:5432 --rm --detach \
-        --volume ${SCRIPT_DIR}/ebs_db_pw:/run/secrets/ebs_db_pw:Z \
-        --name temp_postgres \
-        --env POSTGRES_PASSWORD_FILE=/run/secrets/ebs_db_pw \
-        --env POSTGRES_USER=elnbuildsync \
-        docker.io/postgres:18
+        docker.io/postgres:$POSTGRES_VERSION
     trap closedb EXIT
 
     echo Started database container, waiting for it to complete initialization
@@ -259,13 +271,21 @@ else
     export FEDORA_MESSAGING_CONF="$SCRIPT_DIR/fedora-messaging/fedora.toml"
 fi
 
-~/.local/bin/elnbuildsync \
-    --log-level "$_arg_log_level" \
-    --lull-time "$_arg_lull_time" \
-    --config-file "$_arg_config_file" \
-    --db-pw-file "$_arg_dp_pw_file" \
-    --smtp-pw-file "$_arg_smtp_pw_file" \
-    "${_arg_custom[@]}" \
-    2>&1 | tee /tmp/elnbuildsync.log
+${CONTAINER_ENGINE} run --rm --interactive --tty \
+	--publish 8080:8080 \
+    --network ebs_local_test \
+	--userns=keep-id \
+	--user $(id -u):$(id -g) \
+	--security-opt label=disable \
+	--env KRB5CCNAME=KCM:$(id -u) \
+	--volume /var/run/.heim_org.h5l.kcm-socket:/var/run/.heim_org.h5l.kcm-socket \
+	--volume ${SCRIPT_DIR}/secrets:/etc/elnbuildsync:Z \
+	--volume ${PROJ_DIR}:/tmp:Z \
+	localhost/elnbuildsync:local_test_daemon \
+	--log-level "$_arg_log_level" \
+	--config-file "$_arg_config_file" \
+	--lull-time "$_arg_lull_time" \
+	${_arg_custom[@]} \
+	2>&1 | tee /tmp/elnbuildsync.log
 
 # ] <-- needed because of Argbash
