@@ -64,7 +64,9 @@ class Email:
                 self._send_smtp_sync,
                 msg,
             )
-            logger.info("Sent email subject=%r to %s", subject, self._config["recipients"])
+            logger.info(
+                "Sent email subject=%r to %s", subject, self._config["recipients"]
+            )
         except Exception as e:
             # We don't want an email failure to cause the service to fail.
             # Just log the error and continue.

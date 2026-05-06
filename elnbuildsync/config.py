@@ -789,6 +789,7 @@ def get_downstream_name(upstream_component):
             f"Upstream component {upstream_component} not found"
         )
 
+
 def ensure_downstream_name(comp):
     # Check if the component is in the downstream components list
     if comp in config.comps["downstream_components"]:
