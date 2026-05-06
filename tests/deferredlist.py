@@ -12,9 +12,6 @@ def test_deferredlist():
 
 
 def finish():
-    global d1
-    global d2
-
     d1.callback("Whee!")
     d2.errback(Exception("FAIL!"))
 

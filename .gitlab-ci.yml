@@ -27,7 +27,7 @@ flake8:
     - pip install flake8-gl-codeclimate
     - flake8 --version
     - |
-      flake8 --exit-zero --format gl-codeclimate \
+      flake8 --exit-zero --format gl-codeclimate --extend-ignore=E501 \
              --output-file $CI_PROJECT_DIR/gl-code-quality-report.json \
              $CI_PROJECT_DIR
   artifacts:

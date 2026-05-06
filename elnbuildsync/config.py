@@ -208,9 +208,6 @@ async def get_config_ref(url):
 
 
 async def update_config():
-    global main
-    global comps
-    global scmurl
     global config_ref
 
     if not scmurl:
