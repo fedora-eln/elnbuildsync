@@ -1,34 +1,19 @@
-image: python:3.9-alpine
+.base_ruff:
+  interruptible: true
+  image: ghcr.io/astral-sh/ruff:alpine
+  before_script:
+    - cd $CI_PROJECT_DIR
+    - ruff --version
 
-workflow:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
-
-stages:
-  - format
-  - push
-
-format-python:
-  stage: format
+Ruff Check:
+  extends: .base_ruff
   script:
-    - pip install ruff
-    - ruff format --target-version py39 --verbose $CI_PROJECT_DIR
+    - ruff check --output-format=gitlab --output-file=code-quality-report.json
   artifacts:
-    paths:
-      - $CI_PROJECT_DIR/
-    exclude:
-      - $CI_PROJECT_DIR/.git
+    reports:
+      codequality: $CI_PROJECT_DIR/code-quality-report.json
 
-push-changes:
-  stage: push
-  dependencies:
-    - format-python
+Ruff Format:
+  extends: .base_ruff
   script:
-    - apk add git
-    - git config --global user.name "DistroBuildSync CI"
-    - git config --global user.email "$GITLAB_USER_EMAIL"
-    - git remote set-url origin https://oauth2:${GIT_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git
-    - git config --list
-    - git status
-    - 'git commit -am "Code auto-formatting" ||:'
-    - 'git push -o ci.skip origin HEAD:$CI_COMMIT_BRANCH ||:'
+    - ruff format --diff
