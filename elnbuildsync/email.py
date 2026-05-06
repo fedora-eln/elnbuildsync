@@ -27,7 +27,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from twisted.internet.threads import deferToThread
-from twisted.internet.defer import Deferred
 
 logger = logging.getLogger(__name__)
 

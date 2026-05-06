@@ -140,8 +140,6 @@ def evr(build):
     # #  so for this, they are not important.
     epoch = "0"
     version = build["version"]
-    p = re.compile(".(fc|eln)[0-9]*")
-    # release = re.sub(p, "", build["release"])
     release = build["release"]
     return epoch, version, release
 

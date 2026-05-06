@@ -749,7 +749,7 @@ def skip_tag(comp):
 def get_order(comp):
     try:
         downstream_name = ensure_downstream_name(comp)
-    except UnknownComponentError as e:
+    except UnknownComponentError:
         # This really shouldn't happen, but in the unlikely event that it
         # does, assume it's a downstream component already and continue.
         logger.warning(f"Unknown component {comp} in ordering, continuing")
