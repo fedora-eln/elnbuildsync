@@ -20,11 +20,13 @@
 
 # Created by argbash-init v2.11.0
 # ARG_OPTIONAL_SINGLE([log-level],[],[Log verbosity],[INFO])
-# ARG_OPTIONAL_SINGLE([dp-pw-file],[],[Database password file],[tests/ebs_db_pw])
+# ARG_OPTIONAL_SINGLE([db-pw-file],[],[Database password file],[tests/ebs_db_pw])
 # ARG_OPTIONAL_SINGLE([smtp-pw-file],[],[SMTP password file],[tests/ebs_smtp_pw])
 # ARG_OPTIONAL_SINGLE([lull-time],[],[Time to wait after the last trigger before starting the batch],[5])
 # ARG_OPTIONAL_SINGLE([config-file],[],[Configuration file],[tests/testconfig.yaml])
 # ARG_OPTIONAL_SINGLE([environment],[],[Environment],[stg])
+# ARG_OPTIONAL_BOOLEAN([persistent-db],[],[Use persistent database],[off])
+# ARG_OPTIONAL_SINGLE([persistent-db-path],[],[Path to persistent database],[tests/persistent_db])
 # ARG_OPTIONAL_BOOLEAN([build-container],[],[Build the ELNBuildSync container],[off])
 # ARG_POSITIONAL_DOUBLEDASH([])
 # ARG_POSITIONAL_INF([custom],[Additional arguments to pass to the ELNBuildSync daemon])
@@ -57,24 +59,28 @@ _positionals=()
 _arg_custom=()
 # THE DEFAULTS INITIALIZATION - OPTIONALS
 _arg_log_level="INFO"
-_arg_dp_pw_file="tests/ebs_db_pw"
+_arg_db_pw_file="tests/ebs_db_pw"
 _arg_smtp_pw_file="tests/ebs_smtp_pw"
 _arg_lull_time="5"
 _arg_config_file="tests/testconfig.yaml"
 _arg_environment="stg"
+_arg_persistent_db="off"
+_arg_persistent_db_path="tests/persistent_db"
 _arg_build_container="off"
 
 
 print_help()
 {
-	printf 'Usage: %s [--log-level <arg>] [--dp-pw-file <arg>] [--smtp-pw-file <arg>] [--lull-time <arg>] [--config-file <arg>] [--environment <arg>] [--(no-)build-container] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
+	printf 'Usage: %s [--log-level <arg>] [--db-pw-file <arg>] [--smtp-pw-file <arg>] [--lull-time <arg>] [--config-file <arg>] [--environment <arg>] [--(no-)persistent-db] [--persistent-db-path <arg>] [--(no-)build-container] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
 	printf '\t%s\n' "<custom>: Additional arguments to pass to the ELNBuildSync daemon"
 	printf '\t%s\n' "--log-level: Log verbosity (default: 'INFO')"
-	printf '\t%s\n' "--dp-pw-file: Database password file (default: 'tests/ebs_db_pw')"
+	printf '\t%s\n' "--db-pw-file: Database password file (default: 'tests/ebs_db_pw')"
 	printf '\t%s\n' "--smtp-pw-file: SMTP password file (default: 'tests/ebs_smtp_pw')"
 	printf '\t%s\n' "--lull-time: Time to wait after the last trigger before starting the batch (default: '5')"
 	printf '\t%s\n' "--config-file: Configuration file (default: 'tests/testconfig.yaml')"
 	printf '\t%s\n' "--environment: Environment (default: 'stg')"
+	printf '\t%s\n' "--persistent-db, --no-persistent-db: Use persistent database (off by default)"
+	printf '\t%s\n' "--persistent-db-path: Path to persistent database (default: 'tests/persistent_db')"
 	printf '\t%s\n' "--build-container, --no-build-container: Build the ELNBuildSync container (off by default)"
 	printf '\t%s\n' "-h, --help: Prints help"
 	printf '\n%s\n' "Run the ELNBuildSync daemon for testing"
@@ -107,13 +113,13 @@ parse_commandline()
 			--log-level=*)
 				_arg_log_level="${_key##--log-level=}"
 				;;
-			--dp-pw-file)
+			--db-pw-file)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
-				_arg_dp_pw_file="$2"
+				_arg_db_pw_file="$2"
 				shift
 				;;
-			--dp-pw-file=*)
-				_arg_dp_pw_file="${_key##--dp-pw-file=}"
+			--db-pw-file=*)
+				_arg_db_pw_file="${_key##--db-pw-file=}"
 				;;
 			--smtp-pw-file)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
@@ -146,6 +152,18 @@ parse_commandline()
 				;;
 			--environment=*)
 				_arg_environment="${_key##--environment=}"
+				;;
+			--no-persistent-db|--persistent-db)
+				_arg_persistent_db="on"
+				test "${1:0:5}" = "--no-" && _arg_persistent_db="off"
+				;;
+			--persistent-db-path)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_persistent_db_path="$2"
+				shift
+				;;
+			--persistent-db-path=*)
+				_arg_persistent_db_path="${_key##--persistent-db-path=}"
 				;;
 			--no-build-container|--build-container)
 				_arg_build_container="on"
@@ -238,12 +256,21 @@ function closedb() {
 # Prepare the container network
 ${CONTAINER_ENGINE} network create --ignore ebs_local_test
 
-# Check if there's already a database running
+# Check if there's already a database running so we don't start another one
 check_db_avail > /dev/null 2>&1
 
 if [ $db_ready -ne 0 ]; then
-    # Start a non-persistent database for testing
-    echo "Starting up non-persistent database container"
+    # Start a database for testing
+    echo -n "Starting up database container "
+
+	if [ "$_arg_persistent_db" == "on" ]; then
+	    echo "using persistent database"
+		mkdir -p ${_arg_persistent_db_path}
+		PERSISTENT_DB_ARG="--volume ${_arg_persistent_db_path}:/var/lib/postgresql/data:Z"
+	else
+		echo "using non-persistent database"
+		PERSISTENT_DB_ARG=""
+	fi
     ${CONTAINER_ENGINE} pull docker.io/postgres:$POSTGRES_VERSION
     ${CONTAINER_ENGINE} run --rm --detach \
 		--publish 5432:5432 \
