@@ -1,0 +1,45 @@
+app_name: elnbuildsync
+oc_namespace: eln-ops
+
+image:
+  repo: image-registry.openshift-image-registry.svc:5000/eln-ops/buildsync-image
+  tag:
+
+secrets:
+  # All secrets must be provided to the helm command using the
+  # --set or --set-file flags.
+  keytab:
+  elnbuildsync_db_pass:
+  fedora_messaging_config:
+  fedora_messaging_cacert:
+  fedora_messaging_client_pem:
+  fedora_messaging_client_key:
+
+git:
+  uri: https://gitlab.com/redhat/centos-stream/ci-cd/distrosync/distrobuildsync
+
+# A health check periodically performs diagnostics on a running container
+health_checks:
+  # Indicates whether the application within a container is started
+  startup_probe:
+    # Path to access on the HTTP server
+    path: /startup
+    # Specify the port on which the container is listening
+    port: 8080
+    # When a probe fails, Kubernetes will try failureThreshold times before giving up
+    failure_threshold: 60
+    # How often (in seconds) to perform the probe
+    period_seconds: 10
+
+  # Determines if a container is still running
+  liveness_probe:
+    # Path to access on the HTTP server
+    path: /alive
+    # Specify the port on which the container is listening.
+    port: 8080
+    # Number of seconds after the container has started before liveness or readiness probes are initiated
+    initial_delay_seconds: 600
+    # How often (in seconds) to perform the probe
+    period_seconds: 20
+    # Number of seconds after which the probe times out
+    timeout_seconds: 10

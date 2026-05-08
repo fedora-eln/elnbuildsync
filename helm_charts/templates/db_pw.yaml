@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Secret
+
+metadata:
+  name: db-pw
+  namespace: {{ .Values.oc_namespace }}
+  selfLink: "/api/v1/namespaces/{{ .Values.oc_namespace }}/secrets/db-pw"
+data:
+  ebs_db_pw: "{{ .Values.secrets.elnbuildsync_db_pass | b64enc }}"
+type: Opaque

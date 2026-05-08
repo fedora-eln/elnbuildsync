@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: fedora-messaging-config
+  namespace: "{{ .Values.oc_namespace }}"
+  selfLink: "/api/v1/namespaces/{{ .Values.oc_namespace }}/secrets/fedora-messaging-config"
+data:
+  "config.toml": "{{ .Values.secrets.fedora_messaging_config | b64enc }}"
+  "cacert.pem": "{{ .Values.secrets.fedora_messaging_cacert | b64enc }}"
+  "elnbuildsync.crt": "{{ .Values.secrets.fedora_messaging_client_pem | b64enc }}"
+  "elnbuildsync.key": "{{ .Values.secrets.fedora_messaging_client_key | b64enc }}"

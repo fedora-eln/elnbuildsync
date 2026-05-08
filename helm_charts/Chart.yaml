@@ -1,0 +1,16 @@
+apiVersion  : v2
+name        : elnbuildsync
+description : Helm chart for deploying ELNBuildSync app
+type        : application
+version     : 1.4.0
+appVersion  : "2.0.0"
+
+keywords:
+  - elnbuildsync
+  - eln
+
+maintainers:
+  - name : Stephen Gallagher
+    email : sgallagh@redhat.com
+  - name : Yaakov Selkowitz
+    email : yselkowi@redhat.com
