@@ -19,6 +19,14 @@ spec:
       labels:
         app: {{ .Values.app_name }}
     spec:
+      {{- if .Values.sidecar_database }}
+      # Optional Postgres sidecar: TESTING/DEVELOPMENT only — not for production.
+      # Runs as a Kubernetes 1.31+ native sidecar initContainer so the app starts after Postgres.
+      initContainers:
+      - name: postgres
+        restartPolicy: Always
+        {{- include "elnbuildsync.postgresContainerBody" . | nindent 8 }}
+      {{- end }}
       containers:
       - name: {{ .Values.app_name }}
         image: {{ .Values.image.repo }}:{{ .Values.image.tag }}
@@ -67,3 +75,13 @@ spec:
         secret:
           defaultMode: 420
           secretName: fedora-messaging-config
+      {{- if .Values.sidecar_database }}
+      # postgres-data: backing store for the testing-only Postgres sidecar (see initContainers).
+      - name: postgres-data
+        {{- if .Values.sidecar_database_persistent }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.app_name }}-postgres-data
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      {{- end }}

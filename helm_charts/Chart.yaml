@@ -4,6 +4,8 @@ description : Helm chart for deploying ELNBuildSync app
 type        : application
 version     : 1.4.0
 appVersion  : "2.0.0"
+# Required when optional sidecar_database is enabled (native sidecar init containers).
+kubeVersion : ">=1.31.0"
 
 keywords:
   - elnbuildsync

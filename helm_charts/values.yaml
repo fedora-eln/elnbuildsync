@@ -43,3 +43,28 @@ health_checks:
     period_seconds: 20
     # Number of seconds after which the probe times out
     timeout_seconds: 10
+
+# -----------------------------------------------------------------------------
+# Optional PostgreSQL sidecar (Kubernetes 1.31+ native sidecar init containers).
+#
+# WARNING: This in-pod database is intended for TESTING and DEVELOPMENT only.
+# Do not enable sidecar_database for production deployments—use a managed or
+# dedicated PostgreSQL service instead.
+# -----------------------------------------------------------------------------
+# When enabled, align Git config db.host (127.0.0.1), db.port (5432), db.user,
+# and db.name with sidecar_database_postgres below; password from secrets.
+sidecar_database: false
+# When true (and sidecar_database is true), persist Postgres data in a PVC.
+# When false, use emptyDir (data lost when the Pod is deleted).
+sidecar_database_persistent: true
+sidecar_database_postgres:
+  image: docker.io/library/postgres:18
+  # Must match the db.user field in your Git-backed configuration.
+  user: elnbuildsync
+  # Must match the db.name field in your Git-backed configuration.
+  database: elnbuildsync
+  resources: {}
+  persistence:
+    size: 10Gi
+    # Empty = cluster default StorageClass; set explicitly when required.
+    storageClassName: ""
