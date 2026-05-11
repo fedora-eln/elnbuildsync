@@ -35,7 +35,7 @@ spec:
           initialDelaySeconds: {{ .Values.health_checks.liveness_probe.initial_delay_seconds }}
           periodSeconds: {{ .Values.health_checks.liveness_probe.period_seconds }}
           timeoutSeconds: {{ .Values.health_checks.liveness_probe.timeout_seconds }}
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
           protocol: TCP
