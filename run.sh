@@ -181,9 +181,12 @@ if [ -f /keytab/distrobaker.keytab ]; then
 
   echo "Getting Kerberos TGT every hour"
   (while true; do kinit -k -t /keytab/distrobaker.keytab eln-buildsync@FEDORAPROJECT.ORG; sleep 55m; done) &
-
-  sleep 3
 fi
+
+# Make sure Kerberos is working by trying to connect to koji
+while true; do
+  koji hello && break || sleep 1
+done
 
 # Set the config file URL or file path
 if [ -n "${_arg_config_file}" ]; then
