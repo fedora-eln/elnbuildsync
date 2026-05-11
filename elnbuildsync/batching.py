@@ -97,9 +97,6 @@ async def process_message_batch():
 async def rebuild_from_components(downstream_components):
     """Takes an iterable of downstream component names and rebuilds them."""
 
-    global message_batch_processor
-    global message_queue
-
     # Fake up a TagMessage for each of these to enqueue into the next batch
     bsys = kojihelpers.connection.get_buildsys()
 

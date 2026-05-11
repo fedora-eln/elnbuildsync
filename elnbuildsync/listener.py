@@ -93,12 +93,16 @@ def _handle_task_state_change(msg):
             logger.info(
                 f"Task {task_id} ({msg.body['info']['request']}) completed successfully"
             )
-            reactor.callLater(0, fire_task_callback, state.active_tasks[task_id], msg.body)
+            reactor.callLater(
+                0, fire_task_callback, state.active_tasks[task_id], msg.body
+            )
 
         else:
             # It either failed or was canceled. Call the errback
             logger.info(f"Task {task_id} failed.")
-            reactor.callLater(0, fire_task_errback, state.active_tasks[task_id], msg.body)
+            reactor.callLater(
+                0, fire_task_errback, state.active_tasks[task_id], msg.body
+            )
 
         del state.active_tasks[task_id]
         return

@@ -71,8 +71,6 @@ class StartupResource(Resource):
         return Resource.getChild(self, name, request)
 
     def render_GET(self, request):
-        global started
-
         request.setHeader("Cache-Control", "no-cache")
         if not started:
             request.setResponseCode(503)
@@ -96,7 +94,6 @@ class LivenessResource(Resource):
         return Resource.getChild(self, name, request)
 
     def render_GET(self, request):
-        global alive
 
         request.setHeader("Cache-Control", "no-cache")
         if not alive:
@@ -290,8 +287,6 @@ class TriggerBuildResource(Resource):
         return NOT_DONE_YET
 
     async def _do_post(self):
-        global started
-
         request = self.request
         request.setHeader("Cache-Control", "no-cache")
 

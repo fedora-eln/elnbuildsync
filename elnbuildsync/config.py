@@ -208,9 +208,6 @@ async def get_config_ref(url):
 
 
 async def update_config():
-    global main
-    global comps
-    global scmurl
     global config_ref
 
     if not scmurl:
@@ -749,7 +746,7 @@ def skip_tag(comp):
 def get_order(comp):
     try:
         downstream_name = ensure_downstream_name(comp)
-    except UnknownComponentError as e:
+    except UnknownComponentError:
         # This really shouldn't happen, but in the unlikely event that it
         # does, assume it's a downstream component already and continue.
         logger.warning(f"Unknown component {comp} in ordering, continuing")
@@ -788,6 +785,7 @@ def get_downstream_name(upstream_component):
         raise UnknownComponentError(
             f"Upstream component {upstream_component} not found"
         )
+
 
 def ensure_downstream_name(comp):
     # Check if the component is in the downstream components list
