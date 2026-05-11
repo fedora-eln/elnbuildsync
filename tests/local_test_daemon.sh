@@ -23,7 +23,7 @@
 # ARG_OPTIONAL_SINGLE([db-pw-file],[],[Database password file],[tests/ebs_db_pw])
 # ARG_OPTIONAL_SINGLE([smtp-pw-file],[],[SMTP password file],[tests/ebs_smtp_pw])
 # ARG_OPTIONAL_SINGLE([lull-time],[],[Time to wait after the last trigger before starting the batch],[5])
-# ARG_OPTIONAL_SINGLE([config-file],[],[Configuration file],[tests/testconfig.yaml])
+# ARG_OPTIONAL_SINGLE([config-file],[],[Configuration file],[tests/local_testconfig.yaml])
 # ARG_OPTIONAL_SINGLE([environment],[],[Environment],[stg])
 # ARG_OPTIONAL_BOOLEAN([persistent-db],[],[Use persistent database],[off])
 # ARG_OPTIONAL_SINGLE([persistent-db-path],[],[Path to persistent database],[tests/persistent_db])
@@ -62,7 +62,7 @@ _arg_log_level="INFO"
 _arg_db_pw_file="tests/ebs_db_pw"
 _arg_smtp_pw_file="tests/ebs_smtp_pw"
 _arg_lull_time="5"
-_arg_config_file="tests/testconfig.yaml"
+_arg_config_file="tests/local_testconfig.yaml"
 _arg_environment="stg"
 _arg_persistent_db="off"
 _arg_persistent_db_path="tests/persistent_db"
@@ -77,7 +77,7 @@ print_help()
 	printf '\t%s\n' "--db-pw-file: Database password file (default: 'tests/ebs_db_pw')"
 	printf '\t%s\n' "--smtp-pw-file: SMTP password file (default: 'tests/ebs_smtp_pw')"
 	printf '\t%s\n' "--lull-time: Time to wait after the last trigger before starting the batch (default: '5')"
-	printf '\t%s\n' "--config-file: Configuration file (default: 'tests/testconfig.yaml')"
+	printf '\t%s\n' "--config-file: Configuration file (default: 'tests/local_testconfig.yaml')"
 	printf '\t%s\n' "--environment: Environment (default: 'stg')"
 	printf '\t%s\n' "--persistent-db, --no-persistent-db: Use persistent database (off by default)"
 	printf '\t%s\n' "--persistent-db-path: Path to persistent database (default: 'tests/persistent_db')"
