@@ -188,10 +188,16 @@ while true; do
   koji hello && break || sleep 1
 done
 
-# Set the config file URL or file path
-if [ -n "${_arg_config_file}" ]; then
+if [ -f /etc/elnbuildsync/elnbuildsync_config.yaml ]; then
+  # Check if we have mounted a config file into the container.
+  # This is mostly useful for OpenShift Local testing.
+  echo "Using config file at /etc/elnbuildsync/elnbuildsync_config.yaml"
+  CONFIG_ARG="--config-file /etc/elnbuildsync/elnbuildsync_config.yaml"
+elif [ -n "${_arg_config_file}" ]; then
+  echo "Using config file at ${_arg_config_file}"
   CONFIG_ARG="--config-file ${_arg_config_file}"
 else
+  echo "Using config URL at ${_arg_config_url}#${_arg_config_branch}"
   CONFIG_ARG="--config-url ${_arg_config_url}#${_arg_config_branch}"
 fi
 
