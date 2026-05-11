@@ -13,7 +13,7 @@ env:
 - name: POSTGRES_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: db-pw
+      name: ebs-config
       key: ebs_db_pw
 ports:
 - containerPort: 5432

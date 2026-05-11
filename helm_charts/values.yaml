@@ -8,12 +8,18 @@ image:
 secrets:
   # All secrets must be provided to the helm command using the
   # --set or --set-file flags.
+
+  # Mandatory
   keytab:
-  elnbuildsync_db_pass:
+  database_password:
   fedora_messaging_config:
   fedora_messaging_cacert:
   fedora_messaging_client_pem:
   fedora_messaging_client_key:
+
+  # Optional: supply with helm --set-file secrets.elnbuildsync_config_file=/path/to/file.yaml
+  elnbuildsync_config_file:
+  smtp_password:
 
 git:
   uri: https://gitlab.com/redhat/centos-stream/ci-cd/distrosync/distrobuildsync

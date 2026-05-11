@@ -53,8 +53,9 @@ spec:
         volumeMounts:
         - mountPath: /keytab
           name: keytab
+        # DB password and optional elnbuildsync_config.yaml
         - mountPath: /etc/elnbuildsync
-          name: db-pw
+          name: ebs-config
         - mountPath: /etc/fedora-messaging
           name: fedora-messaging-config
       dnsPolicy: ClusterFirst
@@ -67,10 +68,10 @@ spec:
         secret:
           defaultMode: 420
           secretName: keytab
-      - name: db-pw
+      - name: ebs-config
         secret:
           defaultMode: 420
-          secretName: db-pw
+          secretName: ebs-config
       - name: fedora-messaging-config
         secret:
           defaultMode: 420
