@@ -17,7 +17,6 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
-import backoff
 import git
 import json
 import logging
@@ -30,6 +29,7 @@ import tempfile
 import twisted.internet.utils
 import yaml
 
+from tenacity import retry as retry_on_exception, stop_after_delay, wait_exponential
 from twisted.internet.threads import deferToThread
 
 from . import config
@@ -283,7 +283,11 @@ async def get_distro_packages(
     return packages
 
 
-@backoff.on_exception(backoff.expo, Exception, max_time=60)
+@retry_on_exception(
+    wait=wait_exponential(),
+    stop=stop_after_delay(60),
+    reraise=True,
+)
 async def get_rawhide_tag():
     """
     Queries Bodhi for the current tag associated with Rawhide

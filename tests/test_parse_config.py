@@ -1105,7 +1105,7 @@ class TestConfigError:
 
 
 def _get_rawhide_tag_impl():
-    """Use unwrapped function for tests that expect ConfigError so backoff doesn't retry."""
+    """Use unwrapped function for tests that expect ConfigError so retries don't mask errors."""
     f = get_rawhide_tag
     while hasattr(f, "__wrapped__"):
         f = f.__wrapped__

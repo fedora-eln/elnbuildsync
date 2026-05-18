@@ -110,7 +110,7 @@ def main(
     for handler in logging.root.handlers:
         handler.addFilter(log_filter)
     logger.debug("Debug logging enabled")
-    logging.getLogger("backoff").addHandler(logging.StreamHandler())
+    logging.getLogger("tenacity").addHandler(logging.StreamHandler())
 
     config.dry_run = dry_run
     config.do_untagging = untagging

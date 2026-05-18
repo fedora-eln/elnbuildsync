@@ -17,7 +17,6 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
-import backoff
 import json
 import logging
 import os
@@ -25,6 +24,7 @@ import os
 from collections import defaultdict
 from typing import Generator
 from bodhi.client.bindings import BodhiClient, BodhiClientException
+from tenacity import retry, stop_after_delay, wait_exponential
 
 from twisted.internet.defer import (
     DeferredList,
@@ -292,7 +292,11 @@ class RebuildBatch:
         ]
         await DeferredList(batches, consumeErrors=True)
 
-    @backoff.on_exception(backoff.expo, Exception, max_time=900)
+    @retry(
+        wait=wait_exponential(),
+        stop=stop_after_delay(900),
+        reraise=True,
+    )
     def _submit_bodhi_update(self, update_tag: str) -> None:
         try:
             # Submitting a Bodhi update is infrequent-enough that it doesn't

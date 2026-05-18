@@ -17,13 +17,13 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
-import backoff
 import koji
 import logging
 import time
 
 from cachetools import cached, TTLCache
 from requests.exceptions import RequestException
+from tenacity import retry, retry_if_exception, stop_after_delay, wait_exponential
 from twisted.internet.threads import deferToThread
 
 from .. import config
@@ -96,14 +96,34 @@ def get_koji_url():
     return cfg["weburl"]
 
 
-# Wrap the call to koji in a backoff decorator to handle transient errors
-# and give up on 400-499 errors.
-@backoff.on_exception(
-    backoff.expo,
-    RequestException,
-    giveup=lambda e: 400 <= e.response.status_code < 500,
-    max_time=60,
+# HTTP 4xx codes that are still worth retrying (transient client/server behavior).
+_RETRYABLE_4XX = frozenset((408, 429))
+
+
+def _retry_koji_request_exception(exc: BaseException) -> bool:
+    """Do not retry most HTTP 4xx responses; still retry 408 and 429."""
+    if not isinstance(exc, RequestException):
+        return False
+    resp = getattr(exc, "response", None)
+    if resp is None:
+        return True
+    code = resp.status_code
+    if code in _RETRYABLE_4XX:
+        return True
+    return not (400 <= code < 500)
+
+
+# Wrap the call to koji in retries for transient errors; give up on 4xx except 408/429.
+@retry(
+    wait=wait_exponential(),
+    stop=stop_after_delay(60),
+    retry=retry_if_exception(_retry_koji_request_exception),
+    reraise=True,
 )
-@backoff.on_exception(backoff.expo, Exception, max_time=60)
+@retry(
+    wait=wait_exponential(),
+    stop=stop_after_delay(60),
+    reraise=True,
+)
 async def call_koji(method, *args, **kwargs):
     return await deferToThread(method, *args, **kwargs)
