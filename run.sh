@@ -224,10 +224,11 @@ virtualenv --system-site-packages ${TMPDIR}/.venv
 . ${TMPDIR}/.venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
+pip install "${SCRIPT_DIR}"
 
 export FEDORA_MESSAGING_CONF=/etc/fedora-messaging/config.toml
 
-python3 -c "from elnbuildsync import main; main()" \
+elnbuildsync \
   $CONFIG_ARG \
   --log-level ${_arg_log_level} \
   --db-pw-file /etc/elnbuildsync/ebs_db_pw \

@@ -33,6 +33,7 @@ asyncioreactor.install(event_loop)
 import click  # noqa: E402
 import fedora_messaging.api  # noqa: E402
 import fedora_messaging.config  # noqa: E402
+import importlib.metadata  # noqa: E402
 import logging  # noqa: E402
 import sys  # noqa: E402
 import tempfile  # noqa: E402
@@ -63,6 +64,10 @@ def log_filter(record):
 
 
 @click.command()
+@click.version_option(
+    version=importlib.metadata.version("ELNBuildSync"),
+    message="%(version)s",
+)
 @click.option(
     "--log-level",
     type=click.Choice(
@@ -110,6 +115,10 @@ def main(
     for handler in logging.root.handlers:
         handler.addFilter(log_filter)
     logger.debug("Debug logging enabled")
+    logger.info(
+        "ELNBuildSync version %s",
+        importlib.metadata.version("ELNBuildSync"),
+    )
     logging.getLogger("tenacity").addHandler(logging.StreamHandler())
 
     config.dry_run = dry_run
