@@ -1,10 +1,28 @@
+stages:
+  - lint
+  - test
+  - build_image
+  - deploy
+
 workflow:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH
     - if: $CI_COMMIT_TAG
 
+variables:
+  PROJECT_NAME: elnbuildsync
+  # OC_PROJECT_NAME: The project name to deploy to on OpenShift
+  # OC_SERVER: The server URL to deploy to on OpenShift
+  # OC_TOKEN: The token to deploy to on OpenShift
+  # OC_USER: The user to deploy to on OpenShift
+  # OC_PASSWORD: The password to deploy to on OpenShift
+  # OC_NAMESPACE: The namespace to deploy to on OpenShift
+  # OC_IMAGE_STREAM: The image stream to deploy to on OpenShift
+  # OC_IMAGE_TAG: The image tag to deploy to on OpenShift
+
 .base_ruff:
+  stage: lint
   interruptible: true
   image: ghcr.io/astral-sh/ruff:alpine
   before_script:
@@ -28,6 +46,7 @@ Ruff Format:
 
 
 flake8:
+  stage: lint
   image: python:3.14-alpine
   script:
     - pip install flake8-gl-codeclimate
@@ -39,3 +58,23 @@ flake8:
   artifacts:
     reports:
       codequality: $CI_PROJECT_DIR/gl-code-quality-report.json
+
+
+# Confirm that the version in the pyproject.toml matches the tag being set
+version_check:
+  stage: lint
+  image: python:3.14-alpine
+  script:
+    - export VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+    - 'echo "Version: $VERSION"'
+    - 'echo "Tag: $CI_COMMIT_TAG"'
+    - |
+      if [ "$VERSION" != "$CI_COMMIT_TAG" ]; then
+        echo "Version in pyproject.toml does not match tag"
+        echo "Make sure to update the metadata before trying to deploy"
+        exit 1
+      else
+        echo "Version in pyproject.toml matches tag"
+      fi
+  rules:
+    - if: $CI_COMMIT_TAG
