@@ -7,3 +7,6 @@ build/
 tests/persistent_db
 /tests/ebs_db_pw
 /tests/ebs_smtp_pw
+/.cache
+/.local
+
