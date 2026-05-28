@@ -22,7 +22,7 @@ secrets:
   smtp_password:
 
 git:
-  uri: https://gitlab.com/redhat/centos-stream/ci-cd/distrosync/distrobuildsync
+  uri: https://github.com/fedora-eln/elnbuildsync.git
 
 # A health check periodically performs diagnostics on a running container
 health_checks:
