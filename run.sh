@@ -21,7 +21,7 @@
 # Created by argbash-init v2.11.0
 # ARG_OPTIONAL_SINGLE([log-level],[],[Log verbosity],[INFO])
 # ARG_OPTIONAL_SINGLE([config-file],[],[Configuration file])
-# ARG_OPTIONAL_SINGLE([config-url],[],[Configuration Git URL],[https://gitlab.com/redhat/centos-stream/ci-cd/distrosync/distrobuildsync-config.git])
+# ARG_OPTIONAL_SINGLE([config-url],[],[Configuration Git URL],[https://github.com/fedora-eln/elnbuildsync-config.git])
 # ARG_OPTIONAL_SINGLE([config-branch],[],[Configuration Git branch],[main])
 # ARG_POSITIONAL_DOUBLEDASH([])
 # ARG_POSITIONAL_INF([custom],[Additional arguments to pass to the ELNBuildSync daemon])
@@ -55,7 +55,7 @@ _arg_custom=()
 # THE DEFAULTS INITIALIZATION - OPTIONALS
 _arg_log_level="INFO"
 _arg_config_file=
-_arg_config_url="https://gitlab.com/redhat/centos-stream/ci-cd/distrosync/distrobuildsync-config.git"
+_arg_config_url="https://github.com/fedora-eln/elnbuildsync-config.git"
 _arg_config_branch="main"
 
 
@@ -65,7 +65,7 @@ print_help()
 	printf '\t%s\n' "<custom>: Additional arguments to pass to the ELNBuildSync daemon"
 	printf '\t%s\n' "--log-level: Log verbosity (default: 'INFO')"
 	printf '\t%s\n' "--config-file: Configuration file (no default)"
-	printf '\t%s\n' "--config-url: Configuration Git URL (default: 'https://gitlab.com/redhat/centos-stream/ci-cd/distrosync/distrobuildsync-config.git')"
+	printf '\t%s\n' "--config-url: Configuration Git URL (default: 'https://github.com/fedora-eln/elnbuildsync-config.git')"
 	printf '\t%s\n' "--config-branch: Configuration Git branch (default: 'main')"
 	printf '\t%s\n' "-h, --help: Prints help"
 	printf '\n%s\n' "Run the ELNBuildSync daemon"

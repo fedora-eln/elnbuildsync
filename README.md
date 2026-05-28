@@ -319,7 +319,7 @@ day-to-day code changes.
 ## Production configuration
 
 Production deployments load configuration from the
-[distrobuildsync-config](https://gitlab.com/redhat/centos-stream/ci-cd/distrosync/distrobuildsync-config)
+[elnbuildsync-config](https://github.com/fedora-eln/elnbuildsync-config)
 git repository (see `run.sh --config-url`), mount database and SMTP secrets at
 `/etc/elnbuildsync/`, and use a service keytab for
 `eln-buildsync@FEDORAPROJECT.ORG`. See `helm_charts/` for Kubernetes
@@ -328,8 +328,3 @@ resources.
 ## License
 
 GPL-3.0-or-later. See [LICENSE](LICENSE).
-
-The production configuration repository is hosted at:
-
-https://gitlab.com/redhat/centos-stream/ci-cd/
-distrosync/distrobuildsync-config
