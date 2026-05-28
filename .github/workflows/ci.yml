@@ -116,6 +116,6 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           file: Dockerfile
           tags: ${{ env.REGISTRY_IMAGE }}/${{ env.PROJECT_NAME }}:${{ env.IMAGE_TAG }}
