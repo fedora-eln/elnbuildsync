@@ -6,6 +6,7 @@ configuration:
     stable_tag: eln
     scratch_build: true
     fail_fast: true
+    username: eln-buildsync
   bodhi:
     batch_size: 750
   db:

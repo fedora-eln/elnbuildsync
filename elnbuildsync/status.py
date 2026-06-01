@@ -60,14 +60,17 @@ async def create_status_page():
 
         bsys = kojihelpers.connection.get_buildsys()
 
-        try:
-            # Self-identify
-            username = bsys.getLoggedInUser()["name"]
-        except koji.GenericError:
-            logger.exception(
-                "Could not self-identify with Koji. Will retry in a few minutes."
-            )
-            return
+        # Use the configured username, or self-identify if not configured
+        username = config.main["koji"].get("username", None)
+        if username is None:
+            try:
+                # Self-identify
+                username = bsys.getLoggedInUser()["name"]
+            except koji.GenericError:
+                logger.exception(
+                    "Could not self-identify with Koji. Will retry in a few minutes."
+                )
+                return
 
         # TODO: Show any currently-running tasks
         # NOTE: This might be better to do live, rather than periodic.
