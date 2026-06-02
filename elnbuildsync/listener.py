@@ -24,9 +24,11 @@ from fedora_messaging.exceptions import Drop, Nack
 from twisted.internet import reactor
 from twisted.internet.defer import AlreadyCalledError, Deferred
 from twisted.internet.defer import TimeoutError as DeferredTimeoutError
+from twisted.internet.threads import blockingCallFromThread
 
 from . import batching, config, kojihelpers
 from .state import ELNBuildSyncState as state
+from .tagmessage import TagMessage
 
 logger = logging.getLogger(__name__)
 
@@ -136,14 +138,17 @@ def _handle_trigger_tag(msg):
 
     logger.info(f"Triggering rebuild on trigger tag {config.control['trigger_tag']}")
 
-    # This is a component we care about, so add it to the queue
+    # This is a component we care about, so add it to the next batch
     batching.message_batch_processor.reset()
 
-    # TODO: We also need to save the list of pending messages to the DB
-    # so they aren't lost if we restart. It's okay to block this thread
-    # for this purpose.
+    # Save this message to the database so it isn't lost if we restart.
+    # It's necessary to block this thread so that we don't mark this message
+    # as accepted from the AMQP queue before it's fully saved to the database.
     logger.debug(f"Adding {msg.body['name']} to the next batch.")
-    batching.message_queue.put(msg)
+    blockingCallFromThread(
+        reactor,
+        TagMessage(msg.body["name"], msg.body["build_id"]).async_init,
+    )
 
 
 def _handle_awaited_tag(msg):
