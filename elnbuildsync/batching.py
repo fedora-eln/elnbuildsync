@@ -19,17 +19,13 @@
 import logging
 import re
 from datetime import datetime
-from queue import Empty, Queue
 
 import rpm
-from fedora_messaging.message import Message as FedoraMessage
-
 from . import config, kojihelpers
 from .kojihelpers.connection import call_koji
 from .rebuildbatch import RebuildBatch
 from .tagmessage import TagMessage
 
-message_queue = Queue()
 message_batch_processor = None
 
 running = False
@@ -46,17 +42,9 @@ class ComponentNotFoundError(Exception):
 
 async def process_message_batch():
     global running
-    tag_messages = []
     try:
-        while True:
-            try:
-                fedora_tag_message = message_queue.get_nowait()
-
-                tag_message = await TagMessage(fedora_tag_message).async_init()
-
-                tag_messages.append(tag_message)
-            except Empty:
-                break
+        # Get all the unprocessed tag messages from the database
+        tag_messages = await TagMessage.get_unprocessed_messages()
 
         if not tag_messages:
             # Nothing to do here
@@ -82,6 +70,15 @@ async def process_message_batch():
             # to the next batch.
             logger.exception("Unrecoverable error while running rebuild batch")
         finally:
+            # Mark all the tag messages as completed
+            for tag_message in tag_messages:
+                try:
+                    await tag_message.mark_completed()
+                except Exception:
+                    logger.exception(
+                        f"Could not mark tag message {tag_message.id} as completed"
+                    )
+
             running = False
     except Exception:
         # We need to catch all exceptions here. If we allow them to bubble up,
@@ -171,23 +168,10 @@ async def rebuild_from_components(downstream_components):
                         f"No existing builds in either Rawhide or ELN for {downstream_component}"
                     )
 
-                # Fake up a FedoraMessage for the batching system
-                msg = FedoraMessage(
-                    topic="org.fedoraproject.prod.buildsys.tag",
-                    body={
-                        "name": buildinfo["name"],
-                        "version": buildinfo["version"],
-                        "release": buildinfo["release"],
-                        "nvr": buildinfo["nvr"],
-                        "build_id": buildinfo["build_id"],
-                        "tag": buildinfo["tag_name"],
-                        "ELNBuildSync_notes": "Fake message for building missing packages",
-                    },
-                )
                 logger.info(f"Rebuilding {buildinfo['nvr']} for ELN.")
 
                 message_batch_processor.reset()
-                message_queue.put(msg)
+                await TagMessage(buildinfo["name"], buildinfo["build_id"]).async_init()
 
             except ComponentNotFoundError:
                 logger.exception(
