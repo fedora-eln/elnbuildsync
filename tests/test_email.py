@@ -57,3 +57,32 @@ async def test_send_email_skips_login_when_no_password():
         await client.send_email("Subj", "body")
 
     mock_smtp.login.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_send_email_includes_custom_headers():
+    mock_smtp = MagicMock()
+    mock_ctx = MagicMock()
+    mock_ctx.__enter__ = MagicMock(return_value=mock_smtp)
+    mock_ctx.__exit__ = MagicMock(return_value=None)
+
+    with (
+        patch("elnbuildsync.email.smtplib.SMTP", return_value=mock_ctx),
+        patch("elnbuildsync.email.deferToThread", side_effect=_defer_immediately),
+    ):
+        client = Email(MINIMAL_EMAIL_CFG, "secret")
+        await client.send_email(
+            "Subj",
+            "body text",
+            headers={
+                "Reply-To": "reply@example.com",
+                "X-Custom": "value",
+            },
+        )
+
+    msg = mock_smtp.send_message.call_args[0][0]
+    assert msg["Subject"] == "Subj"
+    assert msg["From"] == "from@example.com"
+    assert msg["To"] == "to@example.com"
+    assert msg["Reply-To"] == "reply@example.com"
+    assert msg["X-Custom"] == "value"

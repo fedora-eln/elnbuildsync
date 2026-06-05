@@ -45,12 +45,23 @@ class Email:
         subject: str,
         body: str,
         attachments: Optional[List[bytes]] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> None:
+        """Send an email message.
+
+        Args:
+            subject: The subject of the email.
+            body: The body of the email.
+            attachments: Optional list of attachments to include in the email.
+            headers: Optional dictionary of headers to include in the email.
+        """
         try:
             msg = MIMEMultipart()
             msg["Subject"] = subject
             msg["From"] = self._config["from"]
             msg["To"] = ", ".join(self._config["recipients"])
+            for name, value in (headers or {}).items():
+                msg[name] = value
             msg.attach(MIMEText(body, "plain", "utf-8"))
             for i, blob in enumerate(attachments or [], start=1):
                 part = MIMEApplication(blob, _subtype="octet-stream")
