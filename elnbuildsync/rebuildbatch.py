@@ -23,6 +23,8 @@ import os
 
 from collections import defaultdict
 from typing import Generator
+from urllib.error import URLError
+from urllib.parse import urlparse
 from bodhi.client.bindings import BodhiClient, BodhiClientException
 from tenacity import retry, stop_after_delay, wait_exponential
 
@@ -180,6 +182,18 @@ class RebuildBatch:
 
         return srpm_field.split("/")[-1].partition(".src.rpm")[0]
 
+    @staticmethod
+    def extract_package_name_from_scm_url(url: str) -> str:
+        """Extracts the package name from a SCM URL."""
+
+        try:
+            path = urlparse(url).path
+            return os.path.basename(path).removesuffix(".git")
+        except URLError:
+            # If we couldn't parse it as a string, just return the original
+            # value so we have something to display in the email.
+            return url
+
     async def run(self):
         # Get the SCM URLs and order them
         all_tag_messages = defaultdict(list)
@@ -203,10 +217,18 @@ class RebuildBatch:
 
         # Email notification of failures
         if all_failures and config.emailer is not None:
+            packages = [
+                RebuildBatch.extract_package_name_from_scm_url(url)
+                for url in all_failures
+            ]
+
             await config.emailer.send_email(
                 subject="ELNBuildSync build failures",
                 body="The ELNBuildSync build failed for the following requests: "
                 + "\n".join(all_failures),
+                headers={
+                    "elnbuildsync-packages": ", ".join(packages),
+                },
             )
 
         # Get the list of NVRs that we will need to tag.
