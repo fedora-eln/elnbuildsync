@@ -118,4 +118,4 @@ jobs:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
           file: Dockerfile
-          tags: ${{ env.REGISTRY_IMAGE }}/${{ env.PROJECT_NAME }}:${{ env.IMAGE_TAG }}
+          tags: ${{ env.REGISTRY_IMAGE }}:${{ env.IMAGE_TAG }}
