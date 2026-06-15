@@ -24,6 +24,7 @@
 # ARG_OPTIONAL_SINGLE([config-url],[],[Configuration Git URL],[https://github.com/fedora-eln/elnbuildsync-config.git])
 # ARG_OPTIONAL_SINGLE([config-branch],[],[Configuration Git branch],[main])
 # ARG_OPTIONAL_SINGLE([keytab-principal],[],[Keytab principal],[eln-buildsync@FEDORAPROJECT.ORG])
+# ARG_OPTIONAL_SINGLE([koji-profile],[],[Koji profile],[koji])
 # ARG_POSITIONAL_DOUBLEDASH([])
 # ARG_POSITIONAL_INF([custom],[Additional arguments to pass to the ELNBuildSync daemon])
 # ARG_HELP([],[Run the ELNBuildSync daemon])
@@ -59,17 +60,19 @@ _arg_config_file=
 _arg_config_url="https://github.com/fedora-eln/elnbuildsync-config.git"
 _arg_config_branch="main"
 _arg_keytab_principal="eln-buildsync@FEDORAPROJECT.ORG"
+_arg_koji_profile="koji"
 
 
 print_help()
 {
-	printf 'Usage: %s [--log-level <arg>] [--config-file <arg>] [--config-url <arg>] [--config-branch <arg>] [--keytab-principal <arg>] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
+	printf 'Usage: %s [--log-level <arg>] [--config-file <arg>] [--config-url <arg>] [--config-branch <arg>] [--keytab-principal <arg>] [--koji-profile <arg>] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
 	printf '\t%s\n' "<custom>: Additional arguments to pass to the ELNBuildSync daemon"
 	printf '\t%s\n' "--log-level: Log verbosity (default: 'INFO')"
 	printf '\t%s\n' "--config-file: Configuration file (no default)"
 	printf '\t%s\n' "--config-url: Configuration Git URL (default: 'https://github.com/fedora-eln/elnbuildsync-config.git')"
 	printf '\t%s\n' "--config-branch: Configuration Git branch (default: 'main')"
 	printf '\t%s\n' "--keytab-principal: Keytab principal (default: 'eln-buildsync@FEDORAPROJECT.ORG')"
+	printf '\t%s\n' "--koji-profile: Koji profile (default: 'koji')"
 	printf '\t%s\n' "-h, --help: Prints help"
 	printf '\n%s\n' "Run the ELNBuildSync daemon"
 }
@@ -132,6 +135,14 @@ parse_commandline()
 				;;
 			--keytab-principal=*)
 				_arg_keytab_principal="${_key##--keytab-principal=}"
+				;;
+			--koji-profile)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_koji_profile="$2"
+				shift
+				;;
+			--koji-profile=*)
+				_arg_koji_profile="${_key##--koji-profile=}"
 				;;
 			-h|--help)
 				print_help
@@ -196,7 +207,7 @@ fi
 
 # Make sure Kerberos is working by trying to connect to koji
 while true; do
-  koji hello && break || sleep 1
+  koji -p ${_arg_koji_profile} hello && break || sleep 3
 done
 
 if [ -f /etc/elnbuildsync/elnbuildsync_config.yaml ]; then
