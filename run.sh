@@ -23,6 +23,7 @@
 # ARG_OPTIONAL_SINGLE([config-file],[],[Configuration file])
 # ARG_OPTIONAL_SINGLE([config-url],[],[Configuration Git URL],[https://github.com/fedora-eln/elnbuildsync-config.git])
 # ARG_OPTIONAL_SINGLE([config-branch],[],[Configuration Git branch],[main])
+# ARG_OPTIONAL_SINGLE([keytab-principal],[],[Keytab principal],[eln-buildsync@FEDORAPROJECT.ORG])
 # ARG_POSITIONAL_DOUBLEDASH([])
 # ARG_POSITIONAL_INF([custom],[Additional arguments to pass to the ELNBuildSync daemon])
 # ARG_HELP([],[Run the ELNBuildSync daemon])
@@ -57,16 +58,18 @@ _arg_log_level="INFO"
 _arg_config_file=
 _arg_config_url="https://github.com/fedora-eln/elnbuildsync-config.git"
 _arg_config_branch="main"
+_arg_keytab_principal="eln-buildsync@FEDORAPROJECT.ORG"
 
 
 print_help()
 {
-	printf 'Usage: %s [--log-level <arg>] [--config-file <arg>] [--config-url <arg>] [--config-branch <arg>] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
+	printf 'Usage: %s [--log-level <arg>] [--config-file <arg>] [--config-url <arg>] [--config-branch <arg>] [--keytab-principal <arg>] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
 	printf '\t%s\n' "<custom>: Additional arguments to pass to the ELNBuildSync daemon"
 	printf '\t%s\n' "--log-level: Log verbosity (default: 'INFO')"
 	printf '\t%s\n' "--config-file: Configuration file (no default)"
 	printf '\t%s\n' "--config-url: Configuration Git URL (default: 'https://github.com/fedora-eln/elnbuildsync-config.git')"
 	printf '\t%s\n' "--config-branch: Configuration Git branch (default: 'main')"
+	printf '\t%s\n' "--keytab-principal: Keytab principal (default: 'eln-buildsync@FEDORAPROJECT.ORG')"
 	printf '\t%s\n' "-h, --help: Prints help"
 	printf '\n%s\n' "Run the ELNBuildSync daemon"
 }
@@ -121,6 +124,14 @@ parse_commandline()
 				;;
 			--config-branch=*)
 				_arg_config_branch="${_key##--config-branch=}"
+				;;
+			--keytab-principal)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_keytab_principal="$2"
+				shift
+				;;
+			--keytab-principal=*)
+				_arg_keytab_principal="${_key##--keytab-principal=}"
 				;;
 			-h|--help)
 				print_help
@@ -180,7 +191,7 @@ if [ -f /keytab/distrobaker.keytab ]; then
   export KRB5CCNAME=FILE:${TMPDIR}/tgt
 
   echo "Getting Kerberos TGT every hour"
-  (while true; do kinit -k -t /keytab/distrobaker.keytab eln-buildsync@FEDORAPROJECT.ORG; sleep 55m; done) &
+  (while true; do kinit -k -t /keytab/distrobaker.keytab ${_arg_keytab_principal}; sleep 55m; done) &
 fi
 
 # Make sure Kerberos is working by trying to connect to koji
