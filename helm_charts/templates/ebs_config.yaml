@@ -10,7 +10,10 @@ data:
 {{- if .Values.secrets.smtp_password }}
   ebs_smtp_pw: '{{ .Values.secrets.smtp_password | default "" | b64enc }}'
 {{- end }}
-{{- if .Values.secrets.elnbuildsync_config_file }}
-  elnbuildsync_config.yaml: '{{ .Values.secrets.elnbuildsync_config_file | default "" | b64enc }}'
+{{- if .Values.secrets.elnbuildsync_static_config_file }}
+  elnbuildsync.yaml: '{{ .Values.secrets.elnbuildsync_static_config_file | default "" | b64enc }}'
+{{- end }}
+{{- if .Values.secrets.elnbuildsync_dynamic_config_file }}
+  elnbuildsync_dynamic.yaml: '{{ .Values.secrets.elnbuildsync_dynamic_config_file | default "" | b64enc }}'
 {{- end }}
 type: Opaque

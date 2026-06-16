@@ -17,8 +17,9 @@ secrets:
   fedora_messaging_client_pem:
   fedora_messaging_client_key:
 
-  # Optional: supply with helm --set-file secrets.elnbuildsync_config_file=/path/to/file.yaml
-  elnbuildsync_config_file:
+  # Optional: supply with helm --set-file
+  elnbuildsync_static_config_file:
+  elnbuildsync_dynamic_config_file:
   smtp_password:
 
 git:
