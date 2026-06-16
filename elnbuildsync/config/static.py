@@ -40,6 +40,7 @@ def _parse_open_id_connect(oidc_raw, ConfigError):
         logger.info(
             "OpenID Connect explicitly disabled - /trigger endpoint unprotected"
         )
+        logger.debug("Parsed open_id_connect: disabled")
         return None
     oidc = oidc_raw
     default_scopes = [
@@ -69,6 +70,13 @@ def _parse_open_id_connect(oidc_raw, ConfigError):
     logger.info(
         "OpenID Connect authentication enabled; admin groups: %s",
         result["admin_groups"],
+    )
+    logger.debug(
+        "Parsed open_id_connect: auth_url=%s client_id=%s admin_groups=%d scopes=%d",
+        result["auth_url"],
+        result["client_id"],
+        len(result["admin_groups"]),
+        len(result["scopes"]),
     )
     return result
 
@@ -102,6 +110,16 @@ def _parse_koji(cnf_koji, ConfigError):
             "Configuration warning: koji.fail_fast not defined, assuming false."
         )
         result["fail_fast"] = False
+    logger.debug(
+        "Parsed koji config: profile=%s build_target=%s stable_tag=%s "
+        "scratch_build=%s fail_fast=%s username=%s",
+        result["profile"],
+        result["build_target"],
+        result["stable_tag"],
+        result["scratch_build"],
+        result["fail_fast"],
+        result.get("username"),
+    )
     return result
 
 
@@ -113,6 +131,7 @@ def _parse_bodhi(cnf_bodhi, ConfigError):
             result["batch_size"] = int(cnf_bodhi["batch_size"])
         except ValueError:
             raise ConfigError("bodhi.batch_size must be an integer")
+    logger.debug("Parsed bodhi config: batch_size=%s", result["batch_size"])
     return result
 
 
@@ -123,6 +142,7 @@ def _parse_email(cnf_email, ConfigError):
     """
     if cnf_email is False:
         logger.info("Email explicitly disabled")
+        logger.debug("Parsed email: disabled")
         return None
     required = ("smtp_host", "smtp_port", "smtp_username", "from", "recipients")
     for key in required:
@@ -138,13 +158,22 @@ def _parse_email(cnf_email, ConfigError):
     for r in recipients:
         if not isinstance(r, str) or not r:
             raise ConfigError("email.recipients must be a list of non-empty strings.")
-    return {
+    result = {
         "smtp_host": str(cnf_email["smtp_host"]),
         "smtp_port": port,
         "smtp_username": str(cnf_email["smtp_username"]),
         "from": str(cnf_email["from"]),
         "recipients": [str(x) for x in recipients],
     }
+    logger.debug(
+        "Parsed email: smtp_host=%s smtp_port=%s smtp_username=%s from=%s recipients=%d",
+        result["smtp_host"],
+        result["smtp_port"],
+        result["smtp_username"],
+        result["from"],
+        len(result["recipients"]),
+    )
+    return result
 
 
 def _parse_db(cnf_db, ConfigError):
@@ -165,6 +194,14 @@ def _parse_db(cnf_db, ConfigError):
         }
     except ValueError:
         raise ConfigError("db.port must be an integer")
+    logger.debug(
+        "Parsed db config: host=%s port=%s name=%s driver=%s user=%s",
+        result["host"],
+        result["port"],
+        result["name"],
+        result["driver"],
+        result["user"],
+    )
     return result
 
 
@@ -172,6 +209,7 @@ def _parse_static_configuration(cnf, ConfigError):
     """Parse the static configuration block.
     Returns dict with koji, bodhi, db, open_id_connect, email.
     """
+    logger.debug("Parsing static configuration sections: %s", sorted(cnf.keys()))
     if "control" in cnf:
         logger.warning(
             "Static configuration contains control block; use dynamic config instead."
@@ -199,6 +237,7 @@ def _parse_static_configuration(cnf, ConfigError):
         raise ConfigError("email missing. Set email: false to disable email.")
     n["email"] = _parse_email(cnf["email"], ConfigError)
 
+    logger.debug("Static configuration parsed successfully")
     return n
 
 
@@ -232,6 +271,7 @@ async def load_static_config(
 
     n = _parse_static_configuration(y["configuration"], ConfigError)
     config_module.main = n
+    logger.debug("Static configuration applied to config.main")
 
     if not config_module.db_url:
         try:
@@ -244,11 +284,16 @@ async def load_static_config(
                 username=db_config["user"],
                 password=db_pw,
             )
+            logger.debug("Database URL configured from static config")
         except KeyError as e:
             logger.exception(e)
             raise ConfigError("Missing database configuration (db block)")
+    else:
+        logger.debug("Database URL unchanged (already set)")
 
     if n["email"] is not None:
         config_module.emailer = Email(n["email"], config_module.smtp_password)
+        logger.debug("Emailer configured")
     else:
         config_module.emailer = None
+        logger.debug("Email disabled, emailer not configured")
