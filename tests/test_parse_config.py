@@ -38,6 +38,7 @@ from elnbuildsync.config import (
     _parse_email,
     _parse_koji,
     _parse_open_id_connect,
+    _parse_static_configuration,
     ensure_downstream_name,
     get_config_ref,
     get_order,
@@ -46,6 +47,7 @@ from elnbuildsync.config import (
     is_eligible,
     is_paused,
     load_config,
+    load_dynamic_config,
     loglevel,
     retries,
     skip_tag,
@@ -102,13 +104,11 @@ class TestParseKoji:
         result = _parse_koji(
             {
                 "profile": "koji",
-                "trigger_tag": "f40",
                 "build_target": "eln",
                 "stable_tag": "eln",
             }
         )
         assert result["profile"] == "koji"
-        assert result["trigger_tag"] == "f40"
         assert result["build_target"] == "eln"
         assert result["stable_tag"] == "eln"
         assert result["scratch_build"] is False
@@ -118,7 +118,6 @@ class TestParseKoji:
         result = _parse_koji(
             {
                 "profile": "koji",
-                "trigger_tag": "f40",
                 "build_target": "eln",
                 "stable_tag": "eln",
                 "scratch_build": True,
@@ -126,24 +125,17 @@ class TestParseKoji:
             }
         )
         assert result["profile"] == "koji"
-        assert result["trigger_tag"] == "f40"
         assert result["build_target"] == "eln"
         assert result["scratch_build"] is True
         assert result["fail_fast"] is True
 
     def test_missing_profile_raises(self):
         with pytest.raises(ConfigError, match="koji.profile missing"):
-            _parse_koji(
-                {"trigger_tag": "f40", "build_target": "eln", "stable_tag": "eln"}
-            )
-
-    def test_missing_trigger_tag_raises(self):
-        with pytest.raises(ConfigError, match="koji.trigger_tag missing"):
-            _parse_koji({"profile": "koji", "build_target": "eln", "stable_tag": "eln"})
+            _parse_koji({"build_target": "eln", "stable_tag": "eln"})
 
     def test_missing_build_target_raises(self):
         with pytest.raises(ConfigError, match="koji.build_target missing"):
-            _parse_koji({"profile": "koji", "trigger_tag": "f40", "stable_tag": "eln"})
+            _parse_koji({"profile": "koji", "stable_tag": "eln"})
 
 
 class TestParseBodhi:
@@ -203,6 +195,7 @@ class TestParseDb:
 # Minimal valid control config (no db; db is top-level)
 MINIMAL_CONTROL = {
     "pause": False,
+    "trigger_tag": "f40",
 }
 
 MINIMAL_EMAIL = {
@@ -240,6 +233,7 @@ class TestParseControl:
     def test_minimal_required(self):
         result = _parse_control(MINIMAL_CONTROL)
         assert result["pause"] is False
+        assert result["trigger_tag"] == "f40"
         assert result["skip_tag"] == set()
         assert result["exclude"] == set()
         assert result["ordering"] == {}
@@ -261,15 +255,20 @@ class TestParseControl:
         with pytest.raises(ConfigError, match="control.pause missing"):
             _parse_control({k: v for k, v in MINIMAL_CONTROL.items() if k != "pause"})
 
+    def test_missing_trigger_tag_raises(self):
+        with pytest.raises(ConfigError, match="control.trigger_tag missing"):
+            _parse_control(
+                {k: v for k, v in MINIMAL_CONTROL.items() if k != "trigger_tag"}
+            )
 
-def _minimal_cnf(open_id_connect=None):
-    """Build minimal configuration block for _parse_configuration_block tests."""
+
+def _minimal_static_cnf(open_id_connect=None):
+    """Build minimal static configuration block."""
     if open_id_connect is None:
         open_id_connect = MINIMAL_OIDC
     return {
         "koji": {
             "profile": "koji",
-            "trigger_tag": "f40",
             "build_target": "eln",
             "stable_tag": "eln",
             "scratch_build": False,
@@ -278,9 +277,40 @@ def _minimal_cnf(open_id_connect=None):
         "bodhi": {"batch_size": 0},
         "db": MINIMAL_DB,
         "open_id_connect": open_id_connect,
-        "control": MINIMAL_CONTROL,
         "email": MINIMAL_EMAIL,
     }
+
+
+def _minimal_cnf(open_id_connect=None):
+    """Build minimal configuration block for _parse_configuration_block tests."""
+    return {
+        **_minimal_static_cnf(open_id_connect=open_id_connect),
+        "control": MINIMAL_CONTROL,
+    }
+
+
+class TestParseStaticConfiguration:
+    def test_full_valid_cnf_returns_n(self):
+        cnf = _minimal_static_cnf()
+        n = _parse_static_configuration(cnf)
+        assert n["koji"]["profile"] == "koji"
+        assert n["koji"]["build_target"] == "eln"
+        assert n["koji"]["stable_tag"] == "eln"
+        assert n["bodhi"]["batch_size"] == 0
+        assert n["db"]["host"] == "localhost"
+        assert n["open_id_connect"] is not None
+        assert n["email"]["smtp_host"] == "localhost"
+
+    def test_oidc_disabled(self):
+        cnf = _minimal_static_cnf(open_id_connect=False)
+        n = _parse_static_configuration(cnf)
+        assert n["open_id_connect"] is None
+
+    def test_missing_koji_raises(self):
+        cnf = _minimal_static_cnf()
+        del cnf["koji"]
+        with pytest.raises(ConfigError, match="koji missing"):
+            _parse_static_configuration(cnf)
 
 
 class TestParseConfigurationBlock:
@@ -288,18 +318,9 @@ class TestParseConfigurationBlock:
         cnf = _minimal_cnf()
         n = _parse_configuration_block(cnf)
         assert n["koji"]["profile"] == "koji"
-        assert n["koji"]["trigger_tag"] == "f40"
         assert n["koji"]["build_target"] == "eln"
-        assert n["koji"]["stable_tag"] == "eln"
-        assert n["bodhi"]["batch_size"] == 0
-        assert n["db"]["host"] == "localhost"
-        assert n["db"]["port"] == 5432
-        assert n["db"]["name"] == "testdb"
-        assert n["open_id_connect"] is not None
-        assert n["open_id_connect"]["auth_url"] == MINIMAL_OIDC["auth_url"]
+        assert n["control"]["trigger_tag"] == "f40"
         assert n["control"]["pause"] is False
-        assert n["email"]["smtp_host"] == "localhost"
-        assert n["email"]["from"] == "elnbuildsync@fedoraproject.org"
 
     def test_oidc_disabled(self):
         cnf = _minimal_cnf(open_id_connect=False)
@@ -316,12 +337,6 @@ class TestParseConfigurationBlock:
         cnf = _minimal_cnf()
         del cnf["koji"]["profile"]
         with pytest.raises(ConfigError, match="koji.profile missing"):
-            _parse_configuration_block(cnf)
-
-    def test_missing_koji_trigger_tag_raises(self):
-        cnf = _minimal_cnf()
-        del cnf["koji"]["trigger_tag"]
-        with pytest.raises(ConfigError, match="koji.trigger_tag missing"):
             _parse_configuration_block(cnf)
 
     def test_missing_bodhi_raises(self):
@@ -519,12 +534,11 @@ class TestParseComponents:
             await _parse_components({"overrides": {"kernel": "not-a-dict"}})
 
 
-# Minimal YAML for load_config integration test (components with overrides only, no autopackagelist)
-MINIMAL_LOAD_CONFIG_YAML = """
+# Minimal YAML for load_config integration tests
+MINIMAL_STATIC_CONFIG_YAML = """
 configuration:
   koji:
     profile: koji
-    trigger_tag: f40
     build_target: eln
     stable_tag: eln
     scratch_build: false
@@ -538,8 +552,6 @@ configuration:
     driver: postgresql+asyncpg
     user: testuser
   open_id_connect: false
-  control:
-    pause: false
   email:
     smtp_host: localhost
     smtp_port: 587
@@ -547,25 +559,49 @@ configuration:
     from: elnbuildsync@fedoraproject.org
     recipients:
       - list1@fedoraproject.org
+"""
+
+MINIMAL_DYNAMIC_CONFIG_YAML = """
+configuration:
+  control:
+    trigger_tag: f40
+    pause: false
 components:
   overrides: {}
 """
 
 
 async def _fake_defer_to_thread(fn, *args, **kwargs):
-    """Run fn synchronously and return result; used so load_config works under asyncio."""
+    """Run fn synchronously and return result; used so config loaders work under asyncio."""
     return fn(*args, **kwargs)
+
+
+def _write_split_config_files(static_yaml, dynamic_yaml):
+    static_f = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
+    dynamic_f = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
+    static_f.write(static_yaml)
+    static_f.close()
+    dynamic_f.write(dynamic_yaml)
+    dynamic_f.close()
+    return static_f.name, dynamic_f.name
 
 
 class TestLoadConfig:
     @pytest.mark.asyncio
     async def test_load_config_from_file_sets_main_and_comps(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write(MINIMAL_LOAD_CONFIG_YAML)
-            path = f.name
+        static_path, dynamic_path = _write_split_config_files(
+            MINIMAL_STATIC_CONFIG_YAML, MINIMAL_DYNAMIC_CONFIG_YAML
+        )
         try:
-            with patch(
-                "elnbuildsync.config.deferToThread", side_effect=_fake_defer_to_thread
+            with (
+                patch(
+                    "elnbuildsync.config.static.deferToThread",
+                    side_effect=_fake_defer_to_thread,
+                ),
+                patch(
+                    "elnbuildsync.config.dynamic.deferToThread",
+                    side_effect=_fake_defer_to_thread,
+                ),
             ):
                 with patch(
                     "elnbuildsync.config.get_rawhide_tag", new_callable=AsyncMock
@@ -574,34 +610,44 @@ class TestLoadConfig:
                         "elnbuildsync.config.get_distro_packages",
                         new_callable=AsyncMock,
                     ) as mock_distro:
-                        await load_config(config_file=path, db_pw="testpw")
+                        await load_config(
+                            static_config_file=static_path,
+                            dynamic_config_file=dynamic_path,
+                            db_pw="testpw",
+                        )
                         mock_rawhide.assert_not_called()
                         mock_distro.assert_not_called()
             assert config_mod.main is not None
             assert config_mod.main["koji"]["profile"] == "koji"
-            assert config_mod.main["koji"]["trigger_tag"] == "f40"
             assert config_mod.main["koji"]["build_target"] == "eln"
+            assert config_mod.control["trigger_tag"] == "f40"
             assert config_mod.main["bodhi"]["batch_size"] == 0
             assert config_mod.main["open_id_connect"] is None
             assert config_mod.comps is not None
-            assert "downstream_components" in config_mod.comps
-            assert "upstream_components" in config_mod.comps
             assert config_mod.comps["downstream_components"] == {}
             assert config_mod.comps["upstream_components"] == {}
             assert config_mod.main["email"]["smtp_host"] == "localhost"
             assert config_mod.emailer is not None
         finally:
-            os.unlink(path)
+            os.unlink(static_path)
+            os.unlink(dynamic_path)
 
     @pytest.mark.asyncio
     async def test_load_config_reinstantiates_email_each_load(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write(MINIMAL_LOAD_CONFIG_YAML)
-            path = f.name
+        static_path, dynamic_path = _write_split_config_files(
+            MINIMAL_STATIC_CONFIG_YAML, MINIMAL_DYNAMIC_CONFIG_YAML
+        )
         try:
             config_mod.emailer = None
-            with patch(
-                "elnbuildsync.config.deferToThread", side_effect=_fake_defer_to_thread
+            with (
+                patch(
+                    "elnbuildsync.config.static.deferToThread",
+                    side_effect=_fake_defer_to_thread,
+                ),
+                patch(
+                    "elnbuildsync.config.dynamic.deferToThread",
+                    side_effect=_fake_defer_to_thread,
+                ),
             ):
                 with patch(
                     "elnbuildsync.config.get_rawhide_tag", new_callable=AsyncMock
@@ -610,25 +656,35 @@ class TestLoadConfig:
                         "elnbuildsync.config.get_distro_packages",
                         new_callable=AsyncMock,
                     ):
-                        with patch("elnbuildsync.config.Email") as MockEmail:
-                            await load_config(config_file=path, db_pw="testpw")
+                        with patch("elnbuildsync.config.static.Email") as MockEmail:
+                            await load_config(
+                                static_config_file=static_path,
+                                dynamic_config_file=dynamic_path,
+                                db_pw="testpw",
+                            )
                             assert MockEmail.call_count == 1
-                            await load_config(config_file=path, db_pw="testpw")
+                            await load_config(
+                                static_config_file=static_path,
+                                dynamic_config_file=dynamic_path,
+                                db_pw="testpw",
+                            )
                             assert MockEmail.call_count == 2
         finally:
-            os.unlink(path)
+            os.unlink(static_path)
+            os.unlink(dynamic_path)
 
     @pytest.mark.asyncio
-    async def test_load_config_trigger_tag_rawhide_resolved_via_bodhi(self):
-        """When trigger_tag is 'rawhide', load_config calls get_rawhide_tag() which queries Bodhi; we mock the Bodhi HTTP call."""
-        yaml_with_rawhide = MINIMAL_LOAD_CONFIG_YAML.replace(
+    async def test_load_dynamic_config_trigger_tag_rawhide_resolved_via_bodhi(self):
+        """When trigger_tag is 'rawhide', load_dynamic_config resolves via Bodhi."""
+        dynamic_yaml = MINIMAL_DYNAMIC_CONFIG_YAML.replace(
             "trigger_tag: f40", "trigger_tag: rawhide"
         )
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write(yaml_with_rawhide)
-            path = f.name
+        dynamic_path = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False
+        )
+        dynamic_path.write(dynamic_yaml)
+        dynamic_path.close()
         try:
-            # Mock Bodhi response so get_rawhide_tag() gets rawhide -> f41 without real HTTP
             bodhi_response = MagicMock()
             bodhi_response.text = _bodhi_releases_json("f41")
             bodhi_response.raise_for_status = MagicMock()
@@ -639,24 +695,25 @@ class TestLoadConfig:
             mock_session.__exit__ = MagicMock(return_value=False)
 
             with patch(
-                "elnbuildsync.config.deferToThread", side_effect=_fake_defer_to_thread
+                "elnbuildsync.config.dynamic.deferToThread",
+                side_effect=_fake_defer_to_thread,
             ):
                 with patch("elnbuildsync.config.Session", return_value=mock_session):
                     with patch(
                         "elnbuildsync.config.get_distro_packages",
                         new_callable=AsyncMock,
                     ):
-                        await load_config(config_file=path, db_pw="testpw")
-            assert config_mod.main["koji"]["trigger_tag"] == "f41"
+                        await load_dynamic_config(dynamic_config_file=dynamic_path.name)
+            assert config_mod.control["trigger_tag"] == "f41"
             mock_get.assert_called_once()
         finally:
-            os.unlink(path)
+            os.unlink(dynamic_path.name)
 
     @pytest.mark.asyncio
     async def test_load_config_missing_file_raises(self):
         with pytest.raises(ConfigError, match="Could not parse"):
-            await load_config(
-                config_file="/nonexistent/path/distrobaker.yaml", db_pw=""
+            await load_dynamic_config(
+                dynamic_config_file="/nonexistent/path/distrobaker.yaml"
             )
 
     @pytest.mark.asyncio
@@ -666,7 +723,7 @@ class TestLoadConfig:
             path = f.name
         try:
             with pytest.raises(ConfigError, match="Could not parse"):
-                await load_config(config_file=path, db_pw="")
+                await load_dynamic_config(dynamic_config_file=path)
         finally:
             os.unlink(path)
 
@@ -674,43 +731,22 @@ class TestLoadConfig:
     async def test_load_config_missing_components_raises(self):
         yaml_no_components = """
 configuration:
-  koji:
-    profile: koji
-    trigger_tag: f40
-    build_target: eln
-    stable_tag: eln
-    scratch_build: false
-    fail_fast: false
-  bodhi:
-    batch_size: 0
-  db:
-    host: localhost
-    port: 5432
-    name: testdb
-    driver: postgresql+asyncpg
-    user: testuser
-  open_id_connect: false
   control:
+    trigger_tag: f40
     pause: false
-  email:
-    smtp_host: localhost
-    smtp_port: 587
-    smtp_username: alice
-    from: elnbuildsync@fedoraproject.org
-    recipients:
-      - list1@fedoraproject.org
 """
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_no_components)
             path = f.name
         try:
             with patch(
-                "elnbuildsync.config.deferToThread", side_effect=_fake_defer_to_thread
+                "elnbuildsync.config.dynamic.deferToThread",
+                side_effect=_fake_defer_to_thread,
             ):
                 with pytest.raises(
                     ConfigError, match="required components block is missing"
                 ):
-                    await load_config(config_file=path, db_pw="testpw")
+                    await load_dynamic_config(dynamic_config_file=path)
         finally:
             os.unlink(path)
 
@@ -847,11 +883,9 @@ class TestIsEligible:
     def test_exclude_pattern_matches_returns_false(self, monkeypatch):
         monkeypatch.setattr(
             config_mod,
-            "main",
+            "control",
             {
-                "control": {
-                    "exclude": {"^kernel$"},
-                },
+                "exclude": {"^kernel$"},
             },
         )
         monkeypatch.setattr(
@@ -868,11 +902,9 @@ class TestIsEligible:
     def test_not_excluded_returns_true(self, monkeypatch):
         monkeypatch.setattr(
             config_mod,
-            "main",
+            "control",
             {
-                "control": {
-                    "exclude": set(),
-                },
+                "exclude": set(),
             },
         )
         monkeypatch.setattr(
@@ -891,11 +923,9 @@ class TestSkipTag:
     def test_pattern_matches_returns_true(self, monkeypatch):
         monkeypatch.setattr(
             config_mod,
-            "main",
+            "control",
             {
-                "control": {
-                    "skip_tag": {"^kernel$"},
-                },
+                "skip_tag": {"^kernel$"},
             },
         )
         assert skip_tag("kernel") is True
@@ -903,11 +933,9 @@ class TestSkipTag:
     def test_no_match_returns_false(self, monkeypatch):
         monkeypatch.setattr(
             config_mod,
-            "main",
+            "control",
             {
-                "control": {
-                    "skip_tag": set(),
-                },
+                "skip_tag": set(),
             },
         )
         assert skip_tag("ipa") is False
@@ -925,11 +953,9 @@ class TestGetOrder:
     def test_pattern_matches_returns_order(self, monkeypatch):
         monkeypatch.setattr(
             config_mod,
-            "main",
+            "control",
             {
-                "control": {
-                    "ordering": {"^ocaml$": 0},
-                },
+                "ordering": {"^ocaml$": 0},
             },
         )
         monkeypatch.setattr(
@@ -942,11 +968,9 @@ class TestGetOrder:
     def test_no_pattern_returns_1000(self, monkeypatch):
         monkeypatch.setattr(
             config_mod,
-            "main",
+            "control",
             {
-                "control": {
-                    "ordering": {},
-                },
+                "ordering": {},
             },
         )
         monkeypatch.setattr(
@@ -961,11 +985,9 @@ class TestGetOrder:
     ):
         monkeypatch.setattr(
             config_mod,
-            "main",
+            "control",
             {
-                "control": {
-                    "ordering": {"^rust$": 5},
-                },
+                "ordering": {"^rust$": 5},
             },
         )
         monkeypatch.setattr(
@@ -986,11 +1008,9 @@ class TestGetOrder:
         """Ordering regex applies to the passed name when the component is unknown."""
         monkeypatch.setattr(
             config_mod,
-            "main",
+            "control",
             {
-                "control": {
-                    "ordering": {"^ghost$": 42},
-                },
+                "ordering": {"^ghost$": 42},
             },
         )
         monkeypatch.setattr(
@@ -1012,11 +1032,9 @@ class TestGetOrder:
     ):
         monkeypatch.setattr(
             config_mod,
-            "main",
+            "control",
             {
-                "control": {
-                    "ordering": {},
-                },
+                "ordering": {},
             },
         )
         monkeypatch.setattr(
@@ -1076,16 +1094,16 @@ class TestIsPaused:
     def test_paused_true(self, monkeypatch):
         monkeypatch.setattr(
             config_mod,
-            "main",
-            {"control": {"pause": True}},
+            "control",
+            {"pause": True},
         )
         assert is_paused() is True
 
     def test_paused_false(self, monkeypatch):
         monkeypatch.setattr(
             config_mod,
-            "main",
-            {"control": {"pause": False}},
+            "control",
+            {"pause": False},
         )
         assert is_paused() is False
 
