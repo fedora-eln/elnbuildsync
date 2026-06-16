@@ -29,6 +29,8 @@ from twisted.internet.threads import deferToThread
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONTENT_RESOLVER = "https://tiny.distro.builders"
+DYNAMIC_CONFIG_FILENAME = "elnbuildsync_dynamic.yaml"
+TEMP_DIR_PREFIX = "elnbuildsync-"
 
 
 def _parse_control(cnf_control, ConfigError):
@@ -242,7 +244,7 @@ async def _fetch_dynamic_config_file(
             "Cloning dynamic config from %s at ref %s", scm["link"], scm["ref"]
         )
 
-        with tempfile.TemporaryDirectory(prefix="distrobaker-") as cdir:
+        with tempfile.TemporaryDirectory(prefix=TEMP_DIR_PREFIX) as cdir:
             for attempt in range(retry):
                 try:
                     repo = await deferToThread(git.Repo.clone_from, scm["link"], cdir)
@@ -260,10 +262,10 @@ async def _fetch_dynamic_config_file(
             else:
                 raise ConfigError("Failed to fetch configuration, giving up.")
 
-            config_path = os.path.join(cdir, "distrobaker.yaml")
+            config_path = os.path.join(cdir, DYNAMIC_CONFIG_FILENAME)
             if not os.path.isfile(config_path):
                 raise ConfigError(
-                    "Configuration repository does not contain distrobaker.yaml."
+                    f"Configuration repository does not contain {DYNAMIC_CONFIG_FILENAME}."
                 )
 
             try:

@@ -713,7 +713,7 @@ class TestLoadConfig:
     async def test_load_config_missing_file_raises(self):
         with pytest.raises(ConfigError, match="Could not parse"):
             await load_dynamic_config(
-                dynamic_config_file="/nonexistent/path/distrobaker.yaml"
+                dynamic_config_file="/nonexistent/path/elnbuildsync_dynamic.yaml"
             )
 
     @pytest.mark.asyncio
