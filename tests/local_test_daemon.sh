@@ -23,7 +23,8 @@
 # ARG_OPTIONAL_SINGLE([db-pw-file],[],[Database password file],[tests/ebs_db_pw])
 # ARG_OPTIONAL_SINGLE([smtp-pw-file],[],[SMTP password file],[tests/ebs_smtp_pw])
 # ARG_OPTIONAL_SINGLE([lull-time],[],[Time to wait after the last trigger before starting the batch],[5])
-# ARG_OPTIONAL_SINGLE([config-file],[],[Configuration file],[tests/local_testconfig.yaml])
+# ARG_OPTIONAL_SINGLE([static-config-file],[],[Static configuration file],[tests/etc/local/elnbuildsync.yaml])
+# ARG_OPTIONAL_SINGLE([dynamic-config-file],[],[Dynamic configuration file],[tests/etc/local/elnbuildsync_dynamic.yaml])
 # ARG_OPTIONAL_SINGLE([environment],[],[Environment],[stg])
 # ARG_OPTIONAL_BOOLEAN([persistent-db],[],[Use persistent database],[off])
 # ARG_OPTIONAL_SINGLE([persistent-db-path],[],[Path to persistent database],[tests/persistent_db])
@@ -59,10 +60,11 @@ _positionals=()
 _arg_custom=()
 # THE DEFAULTS INITIALIZATION - OPTIONALS
 _arg_log_level="INFO"
-_arg_db_pw_file="tests/ebs_db_pw"
-_arg_smtp_pw_file="tests/ebs_smtp_pw"
+_arg_db_pw_file="tests/etc/local/ebs_db_pw"
+_arg_smtp_pw_file="tests/etc/local/ebs_smtp_pw"
 _arg_lull_time="5"
-_arg_config_file="tests/local_testconfig.yaml"
+_arg_static_config_file="tests/etc/local/elnbuildsync.yaml"
+_arg_dynamic_config_file="tests/etc/local/elnbuildsync_dynamic.yaml"
 _arg_environment="stg"
 _arg_persistent_db="off"
 _arg_persistent_db_path="tests/persistent_db"
@@ -71,13 +73,14 @@ _arg_build_container="off"
 
 print_help()
 {
-	printf 'Usage: %s [--log-level <arg>] [--db-pw-file <arg>] [--smtp-pw-file <arg>] [--lull-time <arg>] [--config-file <arg>] [--environment <arg>] [--(no-)persistent-db] [--persistent-db-path <arg>] [--(no-)build-container] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
+	printf 'Usage: %s [--log-level <arg>] [--db-pw-file <arg>] [--smtp-pw-file <arg>] [--lull-time <arg>] [--static-config-file <arg>] [--dynamic-config-file <arg>] [--environment <arg>] [--(no-)persistent-db] [--persistent-db-path <arg>] [--(no-)build-container] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
 	printf '\t%s\n' "<custom>: Additional arguments to pass to the ELNBuildSync daemon"
 	printf '\t%s\n' "--log-level: Log verbosity (default: 'INFO')"
-	printf '\t%s\n' "--db-pw-file: Database password file (default: 'tests/ebs_db_pw')"
-	printf '\t%s\n' "--smtp-pw-file: SMTP password file (default: 'tests/ebs_smtp_pw')"
+	printf '\t%s\n' "--db-pw-file: Database password file (default: 'tests/etc/local/ebs_db_pw')"
+	printf '\t%s\n' "--smtp-pw-file: SMTP password file (default: 'tests/etc/local/ebs_smtp_pw')"
 	printf '\t%s\n' "--lull-time: Time to wait after the last trigger before starting the batch (default: '5')"
-	printf '\t%s\n' "--config-file: Configuration file (default: 'tests/local_testconfig.yaml')"
+	printf '\t%s\n' "--static-config-file: Static configuration file (default: 'tests/etc/local/elnbuildsync.yaml')"
+	printf '\t%s\n' "--dynamic-config-file: Dynamic configuration file (default: 'tests/etc/local/elnbuildsync_dynamic.yaml')"
 	printf '\t%s\n' "--environment: Environment (default: 'stg')"
 	printf '\t%s\n' "--persistent-db, --no-persistent-db: Use persistent database (off by default)"
 	printf '\t%s\n' "--persistent-db-path: Path to persistent database (default: 'tests/persistent_db')"
@@ -137,13 +140,21 @@ parse_commandline()
 			--lull-time=*)
 				_arg_lull_time="${_key##--lull-time=}"
 				;;
-			--config-file)
+			--static-config-file)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
-				_arg_config_file="$2"
+				_arg_static_config_file="$2"
 				shift
 				;;
-			--config-file=*)
-				_arg_config_file="${_key##--config-file=}"
+			--static-config-file=*)
+				_arg_static_config_file="${_key##--static-config-file=}"
+				;;
+			--dynamic-config-file)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_dynamic_config_file="$2"
+				shift
+				;;
+			--dynamic-config-file=*)
+				_arg_dynamic_config_file="${_key##--dynamic-config-file=}"
 				;;
 			--environment)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
@@ -239,7 +250,7 @@ pip install -r requirements.txt
 pip install --editable $PROJ_DIR
 
 function check_db_avail() {
-    PGPASSWORD=$(cat tests/secrets/ebs_db_pw) \
+    PGPASSWORD=$(cat "${_arg_db_pw_file}") \
     pg_isready --quiet \
                --dbname elnbuildsync \
                --username elnbuildsync \
@@ -275,7 +286,7 @@ if [ $db_ready -ne 0 ]; then
     ${CONTAINER_ENGINE} run --rm --detach \
 		--publish 5432:5432 \
 	    --network ebs_local_test \
-        --volume ${SCRIPT_DIR}/secrets:/run/secrets:Z \
+        --volume ${SCRIPT_DIR}/etc/local:/run/secrets:Z \
         --name temp_postgres \
         --env POSTGRES_PASSWORD_FILE=/run/secrets/ebs_db_pw \
         --env POSTGRES_USER=elnbuildsync \
@@ -298,6 +309,22 @@ else
     export FEDORA_MESSAGING_CONF="$SCRIPT_DIR/fedora-messaging/fedora.toml"
 fi
 
+DEFAULT_STATIC_CONFIG_FILE="tests/etc/local/elnbuildsync.yaml"
+DEFAULT_DYNAMIC_CONFIG_FILE="tests/etc/local/elnbuildsync_dynamic.yaml"
+CONTAINER_STATIC_CONFIG="/etc/elnbuildsync/elnbuildsync.yaml"
+CONTAINER_DYNAMIC_CONFIG="/etc/elnbuildsync/elnbuildsync_dynamic.yaml"
+CUSTOM_MOUNT_ARGS=()
+
+if [ "${_arg_static_config_file}" != "${DEFAULT_STATIC_CONFIG_FILE}" ]; then
+    CONTAINER_STATIC_CONFIG="/etc/elnbuildsync/custom/static.yaml"
+    CUSTOM_MOUNT_ARGS+=(--volume "$(realpath "${_arg_static_config_file}"):${CONTAINER_STATIC_CONFIG}:ro,Z")
+fi
+
+if [ "${_arg_dynamic_config_file}" != "${DEFAULT_DYNAMIC_CONFIG_FILE}" ]; then
+    CONTAINER_DYNAMIC_CONFIG="/etc/elnbuildsync/custom/dynamic.yaml"
+    CUSTOM_MOUNT_ARGS+=(--volume "$(realpath "${_arg_dynamic_config_file}"):${CONTAINER_DYNAMIC_CONFIG}:ro,Z")
+fi
+
 ${CONTAINER_ENGINE} run --rm --interactive --tty \
 	--publish 8080:8080 \
     --network ebs_local_test \
@@ -306,11 +333,13 @@ ${CONTAINER_ENGINE} run --rm --interactive --tty \
 	--security-opt label=disable \
 	--env KRB5CCNAME=KCM:$(id -u) \
 	--volume /var/run/.heim_org.h5l.kcm-socket:/var/run/.heim_org.h5l.kcm-socket \
-	--volume ${SCRIPT_DIR}/secrets:/etc/elnbuildsync:Z \
+	--volume ${SCRIPT_DIR}/etc/local:/etc/elnbuildsync:Z \
+	"${CUSTOM_MOUNT_ARGS[@]}" \
 	--volume ${PROJ_DIR}:/tmp:Z \
 	localhost/elnbuildsync:local_test_daemon \
 	--log-level "$_arg_log_level" \
-	--config-file "$_arg_config_file" \
+	--static-config-file "${CONTAINER_STATIC_CONFIG}" \
+	--dynamic-config-file "${CONTAINER_DYNAMIC_CONFIG}" \
 	--lull-time "$_arg_lull_time" \
 	${_arg_custom[@]} \
 	2>&1 | tee /tmp/elnbuildsync.log

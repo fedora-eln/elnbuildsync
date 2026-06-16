@@ -177,10 +177,12 @@ skopeo copy \
 	"docker://${FULL_PUSH}"
 
 API_SERVER=$(oc whoami --show-server)
-CRC_TESTCONFIG="${PROJ_DIR}/tests/crc_testconfig.yaml"
-test -r "${CRC_TESTCONFIG}" || die "Cannot read CRC test config: ${CRC_TESTCONFIG}" 1
+CRC_STATIC_CONFIG="${PROJ_DIR}/tests/etc/crc/elnbuildsync.yaml"
+CRC_DYNAMIC_CONFIG="${PROJ_DIR}/tests/etc/crc/elnbuildsync_dynamic.yaml"
+test -r "${CRC_STATIC_CONFIG}" || die "Cannot read CRC static config: ${CRC_STATIC_CONFIG}" 1
+test -r "${CRC_DYNAMIC_CONFIG}" || die "Cannot read CRC dynamic config: ${CRC_DYNAMIC_CONFIG}" 1
 
-HELM_DESC="openshift_test_daemon image.tag=${_arg_image_tag} sidecar_database=true release=${RELEASE_NAME} chart_dir=helm_charts values=helm_charts/values.yaml image.repo_from_values=${IMAGE_REPO} image_push=${FULL_PUSH} api=${API_SERVER} config_file=tests/crc_testconfig.yaml"
+HELM_DESC="openshift_test_daemon image.tag=${_arg_image_tag} sidecar_database=true release=${RELEASE_NAME} chart_dir=helm_charts values=helm_charts/values.yaml image.repo_from_values=${IMAGE_REPO} image_push=${FULL_PUSH} api=${API_SERVER} static_config=${CRC_STATIC_CONFIG} dynamic_config=${CRC_DYNAMIC_CONFIG}"
 if [ -n "${_arg_keytab_file}" ]; then
 	HELM_DESC="${HELM_DESC} keytab_file=${_arg_keytab_file}"
 fi
@@ -192,9 +194,10 @@ helm_cmd=(
 	--set "image.tag=${_arg_image_tag}"
 	--values "${CHART_DIR}/values.yaml"
 	--set sidecar_database=true
-	--set-file secrets.elnbuildsync_config_file="${CRC_TESTCONFIG}"
-	--set-file secrets.database_password="${PROJ_DIR}/tests/secrets/ebs_db_pw"
-	--set-file secrets.smtp_password="${PROJ_DIR}/tests/secrets/ebs_smtp_pw"
+	--set-file secrets.elnbuildsync_static_config_file="${CRC_STATIC_CONFIG}"
+	--set-file secrets.elnbuildsync_dynamic_config_file="${CRC_DYNAMIC_CONFIG}"
+	--set-file secrets.database_password="${PROJ_DIR}/tests/etc/crc/ebs_db_pw"
+	--set-file secrets.smtp_password="${PROJ_DIR}/tests/etc/crc/ebs_smtp_pw"
 	--set-file secrets.fedora_messaging_config="${PROJ_DIR}/tests/fedora-messaging/fedora.toml"
 	--set-file secrets.fedora_messaging_cacert="${PROJ_DIR}/tests/fedora-messaging/cacert.pem"
 	--set-file secrets.fedora_messaging_client_pem="${PROJ_DIR}/tests/fedora-messaging/fedora-cert.pem"

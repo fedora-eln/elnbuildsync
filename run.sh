@@ -20,9 +20,10 @@
 
 # Created by argbash-init v2.11.0
 # ARG_OPTIONAL_SINGLE([log-level],[],[Log verbosity],[INFO])
-# ARG_OPTIONAL_SINGLE([config-file],[],[Configuration file])
-# ARG_OPTIONAL_SINGLE([config-url],[],[Configuration Git URL],[https://github.com/fedora-eln/elnbuildsync-config.git])
-# ARG_OPTIONAL_SINGLE([config-branch],[],[Configuration Git branch],[main])
+# ARG_OPTIONAL_SINGLE([static-config-file],[],[Static configuration file],[/etc/elnbuildsync/elnbuildsync.yaml])
+# ARG_OPTIONAL_SINGLE([dynamic-config-file],[],[Dynamic configuration file])
+# ARG_OPTIONAL_SINGLE([dynamic-config-url],[],[Dynamic configuration Git URL],[https://github.com/fedora-eln/elnbuildsync-config.git])
+# ARG_OPTIONAL_SINGLE([dynamic-config-branch],[],[Dynamic configuration Git branch],[main])
 # ARG_OPTIONAL_SINGLE([keytab-principal],[],[Keytab principal],[eln-buildsync@FEDORAPROJECT.ORG])
 # ARG_OPTIONAL_SINGLE([koji-profile],[],[Koji profile],[koji])
 # ARG_POSITIONAL_DOUBLEDASH([])
@@ -56,21 +57,23 @@ _positionals=()
 _arg_custom=()
 # THE DEFAULTS INITIALIZATION - OPTIONALS
 _arg_log_level="INFO"
-_arg_config_file=
-_arg_config_url="https://github.com/fedora-eln/elnbuildsync-config.git"
-_arg_config_branch="main"
+_arg_static_config_file="/etc/elnbuildsync/elnbuildsync.yaml"
+_arg_dynamic_config_file=
+_arg_dynamic_config_url="https://github.com/fedora-eln/elnbuildsync-config.git"
+_arg_dynamic_config_branch="main"
 _arg_keytab_principal="eln-buildsync@FEDORAPROJECT.ORG"
 _arg_koji_profile="koji"
 
 
 print_help()
 {
-	printf 'Usage: %s [--log-level <arg>] [--config-file <arg>] [--config-url <arg>] [--config-branch <arg>] [--keytab-principal <arg>] [--koji-profile <arg>] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
+	printf 'Usage: %s [--log-level <arg>] [--static-config-file <arg>] [--dynamic-config-file <arg>] [--dynamic-config-url <arg>] [--dynamic-config-branch <arg>] [--keytab-principal <arg>] [--koji-profile <arg>] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
 	printf '\t%s\n' "<custom>: Additional arguments to pass to the ELNBuildSync daemon"
 	printf '\t%s\n' "--log-level: Log verbosity (default: 'INFO')"
-	printf '\t%s\n' "--config-file: Configuration file (no default)"
-	printf '\t%s\n' "--config-url: Configuration Git URL (default: 'https://github.com/fedora-eln/elnbuildsync-config.git')"
-	printf '\t%s\n' "--config-branch: Configuration Git branch (default: 'main')"
+	printf '\t%s\n' "--static-config-file: Static configuration file (default: '/etc/elnbuildsync/elnbuildsync.yaml')"
+	printf '\t%s\n' "--dynamic-config-file: Dynamic configuration file (no default)"
+	printf '\t%s\n' "--dynamic-config-url: Dynamic configuration Git URL (default: 'https://github.com/fedora-eln/elnbuildsync-config.git')"
+	printf '\t%s\n' "--dynamic-config-branch: Dynamic configuration Git branch (default: 'main')"
 	printf '\t%s\n' "--keytab-principal: Keytab principal (default: 'eln-buildsync@FEDORAPROJECT.ORG')"
 	printf '\t%s\n' "--koji-profile: Koji profile (default: 'koji')"
 	printf '\t%s\n' "-h, --help: Prints help"
@@ -104,29 +107,37 @@ parse_commandline()
 			--log-level=*)
 				_arg_log_level="${_key##--log-level=}"
 				;;
-			--config-file)
+			--static-config-file)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
-				_arg_config_file="$2"
+				_arg_static_config_file="$2"
 				shift
 				;;
-			--config-file=*)
-				_arg_config_file="${_key##--config-file=}"
+			--static-config-file=*)
+				_arg_static_config_file="${_key##--static-config-file=}"
 				;;
-			--config-url)
+			--dynamic-config-file)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
-				_arg_config_url="$2"
+				_arg_dynamic_config_file="$2"
 				shift
 				;;
-			--config-url=*)
-				_arg_config_url="${_key##--config-url=}"
+			--dynamic-config-file=*)
+				_arg_dynamic_config_file="${_key##--dynamic-config-file=}"
 				;;
-			--config-branch)
+			--dynamic-config-url)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
-				_arg_config_branch="$2"
+				_arg_dynamic_config_url="$2"
 				shift
 				;;
-			--config-branch=*)
-				_arg_config_branch="${_key##--config-branch=}"
+			--dynamic-config-url=*)
+				_arg_dynamic_config_url="${_key##--dynamic-config-url=}"
+				;;
+			--dynamic-config-branch)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_dynamic_config_branch="$2"
+				shift
+				;;
+			--dynamic-config-branch=*)
+				_arg_dynamic_config_branch="${_key##--dynamic-config-branch=}"
 				;;
 			--keytab-principal)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
@@ -210,17 +221,22 @@ while true; do
   koji -p ${_arg_koji_profile} hello && break || sleep 3
 done
 
-if [ -f /etc/elnbuildsync/elnbuildsync_config.yaml ]; then
-  # Check if we have mounted a config file into the container.
+STATIC_ARG="--static-config-file /etc/elnbuildsync/elnbuildsync.yaml"
+if [ -n "${_arg_static_config_file}" ]; then
+  STATIC_ARG="--static-config-file ${_arg_static_config_file}"
+fi
+
+if [ -n "${_arg_dynamic_config_file}" ]; then
+  echo "Using dynamic config file at ${_arg_dynamic_config_file}"
+  DYNAMIC_ARG="--dynamic-config-file ${_arg_dynamic_config_file}"
+elif [ -f /etc/elnbuildsync/elnbuildsync_dynamic.yaml ]; then
+  # Check if we have mounted a dynamic config file into the container.
   # This is mostly useful for OpenShift Local testing.
-  echo "Using config file at /etc/elnbuildsync/elnbuildsync_config.yaml"
-  CONFIG_ARG="--config-file /etc/elnbuildsync/elnbuildsync_config.yaml"
-elif [ -n "${_arg_config_file}" ]; then
-  echo "Using config file at ${_arg_config_file}"
-  CONFIG_ARG="--config-file ${_arg_config_file}"
+  echo "Using dynamic config file at /etc/elnbuildsync/elnbuildsync_dynamic.yaml"
+  DYNAMIC_ARG="--dynamic-config-file /etc/elnbuildsync/elnbuildsync_dynamic.yaml"
 else
-  echo "Using config URL at ${_arg_config_url}#${_arg_config_branch}"
-  CONFIG_ARG="--config-url ${_arg_config_url}#${_arg_config_branch}"
+  echo "Using dynamic config URL at ${_arg_dynamic_config_url}#${_arg_dynamic_config_branch}"
+  DYNAMIC_ARG="--dynamic-config-url ${_arg_dynamic_config_url}#${_arg_dynamic_config_branch}"
 fi
 
 # Check that the DB password file exists
@@ -251,7 +267,8 @@ pip install "${SCRIPT_DIR}"
 export FEDORA_MESSAGING_CONF=/etc/fedora-messaging/config.toml
 
 elnbuildsync \
-  $CONFIG_ARG \
+  $STATIC_ARG \
+  $DYNAMIC_ARG \
   --log-level ${_arg_log_level} \
   --db-pw-file /etc/elnbuildsync/ebs_db_pw \
   $SMTP_ARG \

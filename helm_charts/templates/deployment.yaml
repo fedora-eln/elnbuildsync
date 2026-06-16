@@ -53,7 +53,7 @@ spec:
         volumeMounts:
         - mountPath: /keytab
           name: keytab
-        # DB password and optional elnbuildsync_config.yaml
+        # DB password and optional elnbuildsync.yaml / elnbuildsync_dynamic.yaml
         - mountPath: /etc/elnbuildsync
           name: ebs-config
         - mountPath: /etc/fedora-messaging
