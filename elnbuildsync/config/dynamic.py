@@ -74,6 +74,16 @@ def _parse_control(cnf_control, ConfigError):
             raise ConfigError("control.status_interval must be a positive integer.")
         result["status_interval"] = val
 
+    logger.debug(
+        "Parsed control: trigger_tag=%s pause=%s skip_tag=%d exclude=%d "
+        "ordering=%d status_interval=%s",
+        result["trigger_tag"],
+        result["pause"],
+        len(result["skip_tag"]),
+        len(result["exclude"]),
+        len(result["ordering"]),
+        result["status_interval"],
+    )
     return result
 
 
@@ -81,6 +91,11 @@ async def _parse_components(cnf_components, get_distro_packages, ConfigError):
     """Parse the components block (top-level). Requires at least one of autopackagelist
     or overrides.
     """
+    logger.debug(
+        "Parsing components (autopackagelist=%s override_count=%d)",
+        "autopackagelist" in cnf_components,
+        len(cnf_components.get("overrides", {})),
+    )
     if "autopackagelist" not in cnf_components and "overrides" not in cnf_components:
         raise ConfigError(
             "At least one of components.autopackagelist or components.overrides must be present."
@@ -102,6 +117,12 @@ async def _parse_components(cnf_components, get_distro_packages, ConfigError):
                 "content_resolver", DEFAULT_CONTENT_RESOLVER
             ),
         }
+        logger.debug(
+            "Autopackagelist: views=%s sources=%s content_resolver=%s",
+            apl["view"],
+            apl["source"],
+            apl["content_resolver"],
+        )
         downstream_components = await get_distro_packages(
             distro_url=apl["content_resolver"],
             distro_view=apl["view"],
@@ -154,6 +175,11 @@ async def _parse_components(cnf_components, get_distro_packages, ConfigError):
             downstream_name
         ].copy()
 
+    logger.debug(
+        "Parsed components: downstream=%d upstream=%d",
+        len(downstream_components),
+        len(upstream_components),
+    )
     return {
         "downstream_components": downstream_components,
         "upstream_components": upstream_components,
@@ -173,6 +199,12 @@ async def _load_dynamic_yaml(
         raise ConfigError("The required components block is missing.")
 
     cnf = y["configuration"]
+    static_keys = set(cnf.keys()) - {"control"}
+    if static_keys:
+        logger.debug(
+            "Ignoring static configuration sections in dynamic config: %s",
+            sorted(static_keys),
+        )
     if "control" not in cnf:
         raise ConfigError("control missing.")
 
@@ -206,6 +238,9 @@ async def _fetch_dynamic_config_file(
         scm = split_scmurl(scmurl)
         if scm["ref"] is None:
             scm["ref"] = "main"
+        logger.debug(
+            "Cloning dynamic config from %s at ref %s", scm["link"], scm["ref"]
+        )
 
         with tempfile.TemporaryDirectory(prefix="distrobaker-") as cdir:
             for attempt in range(retry):
@@ -286,3 +321,8 @@ async def load_dynamic_config(
     )
     config_module.control = control
     config_module.comps = comps
+    logger.debug(
+        "Dynamic configuration applied: trigger_tag=%s downstream_components=%d",
+        control["trigger_tag"],
+        len(comps["downstream_components"]),
+    )
