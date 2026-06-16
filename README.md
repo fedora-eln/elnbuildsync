@@ -152,13 +152,18 @@ port **8080** exposes:
 
 ### Configuration
 
-Runtime behavior is driven by a YAML file (production: `distrobuildsync-config`
-repository; local testing: `tests/local_testconfig.yaml`). Important sections:
+Runtime behavior is driven by static and dynamic YAML configuration.
+Production static settings live in `/etc/elnbuildsync/elnbuildsync.yaml`;
+dynamic settings come from the `distrobuildsync-config` git repository or
+`/etc/elnbuildsync/elnbuildsync_dynamic.yaml`. Local testing uses
+`tests/etc/local/elnbuildsync.yaml` and `tests/etc/local/elnbuildsync_dynamic.yaml`.
 
-- **`configuration.koji`**: Koji profile, trigger tag, build target, stable
-  tag, scratch/fail-fast flags.
-- **`configuration.control`**: `skip_tag`, `exclude`, `ordering`, pause
-  flag, status interval.
+Important sections:
+
+- **`configuration.koji`**: Koji profile, build target, stable tag,
+  scratch/fail-fast flags (static).
+- **`configuration.control`**: `trigger_tag`, `skip_tag`, `exclude`, `ordering`,
+  pause flag, status interval (dynamic).
 - **`configuration.bodhi`**: Maximum builds per Bodhi update (`batch_size`;
   `0` means no splitting).
 - **`configuration.db`**: PostgreSQL connection settings.
@@ -211,12 +216,13 @@ You also need:
   koji hello
   ```
 
-- **Test secrets** under `tests/secrets/`. At minimum:
+- **Test secrets** under `tests/etc/local/` (and `tests/etc/crc/` for
+  OpenShift testing). At minimum:
 
   | File | Purpose |
   |------|---------|
-  | `tests/secrets/ebs_db_pw` | PostgreSQL password (one line) |
-  | `tests/secrets/ebs_smtp_pw` | SMTP password (one line) |
+  | `tests/etc/local/ebs_db_pw` | PostgreSQL password (one line) |
+  | `tests/etc/local/ebs_smtp_pw` | SMTP password (one line) |
 
   These may be overridden with `--db-pw-file` and `--smtp-pw-file` when
   calling `tests/local_test_daemon.sh`.
@@ -224,7 +230,8 @@ You also need:
 - **Fedora Messaging certificates** are vendored under
   `tests/fedora-messaging/` (see `tests/fedora-messaging/README.md`).
 
-Optionally, edit `tests/local_testconfig.yaml` for your environment (Koji
+Optionally, edit `tests/etc/local/elnbuildsync.yaml` and
+`tests/etc/local/elnbuildsync_dynamic.yaml` for your environment (Koji
 tags, OIDC client credentials for `/trigger`, package lists). The default
 file points at tinystage for OIDC; register a client at
 [tiny-stage](https://github.com/fedora-infra/tiny-stage) if you need
@@ -257,8 +264,9 @@ The script:
 3. Starts a temporary PostgreSQL 18 container (`temp_postgres`) unless a
    persistent one is already reachable on port 5432.
 4. Runs the EBS container with:
-   - `tests/local_testconfig.yaml` mounted via `--config-file`
-   - Secrets mounted at `/etc/elnbuildsync/`
+   - `tests/etc/local/` mounted at `/etc/elnbuildsync/` (static and dynamic
+     config plus secrets)
+   - `--static-config-file` and `--dynamic-config-file` passed to the daemon
    - Fedora Messaging staging config (`--environment stg`, the default)
    - Port **8080** published for the web UI and APIs
    - A short **lull time** of 5 seconds (production uses 60)
@@ -318,10 +326,12 @@ day-to-day code changes.
 
 ## Production configuration
 
-Production deployments load configuration from the
+Production deployments load static configuration from
+`/etc/elnbuildsync/elnbuildsync.yaml` and dynamic configuration from the
 [elnbuildsync-config](https://github.com/fedora-eln/elnbuildsync-config)
-git repository (see `run.sh --config-url`), mount database and SMTP secrets at
-`/etc/elnbuildsync/`, and use a service keytab for
+git repository (see `run.sh --dynamic-config-url`) or
+`/etc/elnbuildsync/elnbuildsync_dynamic.yaml`. Database and SMTP secrets
+mount at `/etc/elnbuildsync/`, and a service keytab is used for
 `eln-buildsync@FEDORAPROJECT.ORG`. See `helm_charts/` for Kubernetes
 resources.
 
