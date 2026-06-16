@@ -1,0 +1,288 @@
+# This file is part of ELNBuildSync
+# Copyright (C) 2023-2026 Stephen Gallagher <sgallagh@redhat.com>
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+# SPDX-License-Identifier: 	GPL-3.0-or-later
+
+
+import git
+import logging
+import os
+import tempfile
+
+import yaml
+from twisted.internet.threads import deferToThread
+
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_CONTENT_RESOLVER = "https://tiny.distro.builders"
+
+
+def _parse_control(cnf_control, ConfigError):
+    """Parse control configuration. Returns dict with trigger_tag, pause, skip_tag,
+    exclude, ordering, status_interval, etc.
+    """
+    result = dict()
+    for k in ("pause",):
+        if k in cnf_control:
+            result[k] = bool(cnf_control[k])
+        else:
+            raise ConfigError(f"control.{k} missing.")
+
+    if "trigger_tag" in cnf_control:
+        result["trigger_tag"] = str(cnf_control["trigger_tag"])
+    else:
+        raise ConfigError("control.trigger_tag missing.")
+
+    result["skip_tag"] = set()
+    if "skip_tag" in cnf_control:
+        result["skip_tag"].update(cnf_control["skip_tag"])
+
+    result["exclude"] = set()
+    if "exclude" in cnf_control:
+        result["exclude"].update(cnf_control["exclude"])
+
+    if result["exclude"]:
+        logger.info(
+            "Excluding %d component(s).",
+            len(result["exclude"]),
+        )
+    else:
+        logger.info("Not excluding any components.")
+
+    result["ordering"] = dict()
+    if "ordering" in cnf_control:
+        result["ordering"].update(cnf_control["ordering"])
+
+    result["status_interval"] = 600  # 10 minutes
+    if "status_interval" in cnf_control:
+        val = cnf_control["status_interval"]
+        if not isinstance(val, int) or val <= 0:
+            raise ConfigError("control.status_interval must be a positive integer.")
+        result["status_interval"] = val
+
+    return result
+
+
+async def _parse_components(cnf_components, get_distro_packages, ConfigError):
+    """Parse the components block (top-level). Requires at least one of autopackagelist
+    or overrides.
+    """
+    if "autopackagelist" not in cnf_components and "overrides" not in cnf_components:
+        raise ConfigError(
+            "At least one of components.autopackagelist or components.overrides must be present."
+        )
+    if "autopackagelist" in cnf_components:
+        apl_raw = cnf_components["autopackagelist"]
+        if "view" not in apl_raw:
+            raise ConfigError("components.autopackagelist.view missing.")
+        if "source" not in apl_raw:
+            raise ConfigError("components.autopackagelist.source missing.")
+        apl = {
+            "view": apl_raw["view"]
+            if isinstance(apl_raw["view"], list)
+            else [apl_raw["view"]],
+            "source": apl_raw["source"]
+            if isinstance(apl_raw["source"], list)
+            else [apl_raw["source"]],
+            "content_resolver": apl_raw.get(
+                "content_resolver", DEFAULT_CONTENT_RESOLVER
+            ),
+        }
+        downstream_components = await get_distro_packages(
+            distro_url=apl["content_resolver"],
+            distro_view=apl["view"],
+            which_source=apl["source"],
+        )
+        for comp_name, comp_entry in downstream_components.items():
+            if not isinstance(comp_entry, dict):
+                raise ConfigError(
+                    f"components.autopackagelist entry '{comp_name}' must be a dictionary."
+                )
+            if "upstream_name" not in comp_entry:
+                raise ConfigError(
+                    f"components.autopackagelist entry '{comp_name}' missing upstream_name."
+                )
+            if "downstream_name" not in comp_entry:
+                raise ConfigError(
+                    f"components.autopackagelist entry '{comp_name}' missing downstream_name."
+                )
+    else:
+        downstream_components = {}
+    upstream_components = downstream_components.copy()
+
+    overrides = cnf_components.get("overrides", {})
+    if not isinstance(overrides, dict):
+        raise ConfigError("components.overrides must be a dictionary.")
+
+    for downstream_name, override_options in overrides.items():
+        if not isinstance(override_options, dict):
+            raise ConfigError(
+                f"components.overrides.{downstream_name} must be a dictionary"
+            )
+
+        upstream_name = override_options.get("upstream_name", downstream_name)
+
+        if downstream_name not in downstream_components:
+            downstream_components[downstream_name] = {
+                "view": "override",
+                "source": "override",
+                "upstream_name": upstream_name,
+                "downstream_name": downstream_name,
+            }
+        downstream_components[downstream_name].update(override_options)
+        downstream_components[downstream_name].setdefault(
+            "upstream_name", downstream_name
+        )
+        downstream_components[downstream_name].setdefault(
+            "downstream_name", downstream_name
+        )
+        upstream_components[upstream_name] = downstream_components[
+            downstream_name
+        ].copy()
+
+    return {
+        "downstream_components": downstream_components,
+        "upstream_components": upstream_components,
+    }
+
+
+async def _load_dynamic_yaml(
+    y,
+    get_distro_packages,
+    get_rawhide_tag,
+    ConfigError,
+):
+    """Parse loaded dynamic YAML into control and components."""
+    if "configuration" not in y:
+        raise ConfigError("The required configuration block is missing.")
+    if "components" not in y:
+        raise ConfigError("The required components block is missing.")
+
+    cnf = y["configuration"]
+    if "control" not in cnf:
+        raise ConfigError("control missing.")
+
+    control = _parse_control(cnf["control"], ConfigError)
+    comps = await _parse_components(y["components"], get_distro_packages, ConfigError)
+    logger.info("Found %d component(s).", len(comps["downstream_components"]))
+
+    if control["trigger_tag"] == "rawhide":
+        control["trigger_tag"] = await get_rawhide_tag()
+        logger.info("Detected rawhide tag %s", control["trigger_tag"])
+
+    return control, comps
+
+
+async def _fetch_dynamic_config_file(
+    dynamic_config_git_url,
+    dynamic_config_file,
+    split_scmurl,
+    retry,
+    ConfigError,
+):
+    """Resolve dynamic config to a local file path, cloning git repos when needed."""
+    if not (dynamic_config_git_url or dynamic_config_file):
+        raise ValueError(
+            "One of 'dynamic_config_git_url' or 'dynamic_config_file' must be specified"
+        )
+
+    if dynamic_config_git_url:
+        scmurl = dynamic_config_git_url
+        logger.info("Fetching dynamic configuration from %s", scmurl)
+        scm = split_scmurl(scmurl)
+        if scm["ref"] is None:
+            scm["ref"] = "main"
+
+        with tempfile.TemporaryDirectory(prefix="distrobaker-") as cdir:
+            for attempt in range(retry):
+                try:
+                    repo = await deferToThread(git.Repo.clone_from, scm["link"], cdir)
+                    await deferToThread(repo.git.checkout, scm["ref"])
+                except Exception:
+                    logger.warning(
+                        "Failed to fetch configuration, retrying (#%d).",
+                        attempt + 1,
+                        exc_info=True,
+                    )
+                    continue
+                else:
+                    logger.info("Configuration fetched successfully.")
+                    break
+            else:
+                raise ConfigError("Failed to fetch configuration, giving up.")
+
+            config_path = os.path.join(cdir, "distrobaker.yaml")
+            if not os.path.isfile(config_path):
+                raise ConfigError(
+                    "Configuration repository does not contain distrobaker.yaml."
+                )
+
+            try:
+                with open(config_path) as f:
+                    y = await deferToThread(yaml.safe_load, f)
+                logger.debug(
+                    "%s loaded, processing dynamic configuration.", config_path
+                )
+            except Exception as e:
+                logger.info(e)
+                raise ConfigError(f"Could not parse {config_path}.")
+
+            return scmurl, y
+
+    try:
+        with open(dynamic_config_file) as f:
+            y = await deferToThread(yaml.safe_load, f)
+        logger.debug(
+            "%s loaded, processing dynamic configuration.", dynamic_config_file
+        )
+    except Exception as e:
+        logger.info(e)
+        raise ConfigError(f"Could not parse {dynamic_config_file}.")
+
+    return None, y
+
+
+async def load_dynamic_config(
+    dynamic_config_git_url=None,
+    dynamic_config_file=None,
+    *,
+    config_module,
+    ConfigError,
+    split_scmurl,
+    get_distro_packages,
+    get_rawhide_tag,
+):
+    """Load dynamic configuration from a file or git URL.
+
+    Sets config.control, config.comps, and config.scmurl when loading from git.
+    """
+    scmurl, y = await _fetch_dynamic_config_file(
+        dynamic_config_git_url,
+        dynamic_config_file,
+        split_scmurl,
+        config_module.retry,
+        ConfigError,
+    )
+
+    if scmurl is not None:
+        config_module.scmurl = scmurl
+
+    control, comps = await _load_dynamic_yaml(
+        y, get_distro_packages, get_rawhide_tag, ConfigError
+    )
+    config_module.control = control
+    config_module.comps = comps

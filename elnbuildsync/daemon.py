@@ -52,6 +52,8 @@ from . import web  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_STATIC_CONFIG_FILE = "/etc/elnbuildsync/elnbuildsync.yaml"
+
 
 def log_filter(record):
     if record.name.startswith("elnbuildsync"):
@@ -61,6 +63,20 @@ def log_filter(record):
         return True
 
     return False
+
+
+def _resolve_dynamic_source(dynamic_config_url, dynamic_config_file):
+    if dynamic_config_file and dynamic_config_url:
+        raise click.UsageError(
+            "Only one of --dynamic-config-file or --dynamic-config-url may be set."
+        )
+    if dynamic_config_file:
+        return None, dynamic_config_file
+    if dynamic_config_url:
+        return dynamic_config_url, None
+    raise click.UsageError(
+        "One of --dynamic-config-file or --dynamic-config-url is required."
+    )
 
 
 @click.command()
@@ -84,8 +100,14 @@ def log_filter(record):
     type=int,
     help="How long (in seconds) to wait after the last trigger before starting the batch",
 )
-@click.option("--config-url", default=None)
-@click.option("--config-file", default=None)
+@click.option(
+    "--static-config-file",
+    default=DEFAULT_STATIC_CONFIG_FILE,
+    show_default=True,
+    type=click.Path(exists=True, dir_okay=False),
+)
+@click.option("--dynamic-config-url", default=None)
+@click.option("--dynamic-config-file", default=None, type=click.Path(dir_okay=False))
 @click.option("--db-pw-file", type=click.File(mode="r"), default="/etc/ebs_db_pw")
 @click.option(
     "--smtp-pw-file",
@@ -102,8 +124,9 @@ def main(
     log_level,
     dry_run,
     lull_time,
-    config_url,
-    config_file,
+    static_config_file,
+    dynamic_config_url,
+    dynamic_config_file,
     db_pw_file,
     smtp_pw_file,
     untagging,
@@ -125,16 +148,32 @@ def main(
     config.do_untagging = untagging
     config.message_batch_timer = lull_time
 
+    dynamic_url, dynamic_file = _resolve_dynamic_source(
+        dynamic_config_url, dynamic_config_file
+    )
+
     logger.debug("Starting Twisted mainloop")
     return task.react(
         lambda reactor: Deferred.fromCoroutine(
-            _main(reactor, db_pw_file, smtp_pw_file, config_url, config_file)
+            _main(
+                reactor,
+                db_pw_file,
+                smtp_pw_file,
+                static_config_file,
+                dynamic_url,
+                dynamic_file,
+            )
         )
     )
 
 
 async def _main(
-    reactor, db_pw_file, smtp_pw_file, config_url=None, config_file=None
+    reactor,
+    db_pw_file,
+    smtp_pw_file,
+    static_config_file,
+    dynamic_config_url=None,
+    dynamic_config_file=None,
 ) -> None:
     config.terminator = Deferred()
     with tempfile.TemporaryDirectory(prefix="elnbuildsync-") as cdir:
@@ -148,10 +187,11 @@ async def _main(
         else:
             config.smtp_password = ""
 
-        # Read in the config file
         try:
-            await config.load_config(
-                db_pw, config_git_url=config_url, config_file=config_file
+            await config.load_static_config(static_config_file, db_pw)
+            await config.load_dynamic_config(
+                dynamic_config_git_url=dynamic_config_url,
+                dynamic_config_file=dynamic_config_file,
             )
         except Exception as e:
             logger.exception(e)
@@ -175,9 +215,7 @@ async def _main(
 
         # Schedule periodic status page and run it once at startup
         config.status_processor = task.LoopingCall(status.create_status_page)
-        config.status_processor.start(
-            config.main["control"]["status_interval"], now=True
-        )
+        config.status_processor.start(config.control["status_interval"], now=True)
 
         # Schedule periodic cleanup
         config.cleanup_processor = task.LoopingCall(cleanup.periodic_cleanup)
