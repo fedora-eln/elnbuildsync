@@ -25,6 +25,7 @@
 # ARG_OPTIONAL_SINGLE([dynamic-config-url],[],[Dynamic configuration Git URL],[https://github.com/fedora-eln/elnbuildsync-config.git])
 # ARG_OPTIONAL_SINGLE([dynamic-config-branch],[],[Dynamic configuration Git branch],[main])
 # ARG_OPTIONAL_SINGLE([keytab-principal],[],[Keytab principal],[eln-buildsync@FEDORAPROJECT.ORG])
+# ARG_OPTIONAL_SINGLE([keytab-file],[],[Keytab file],[])
 # ARG_OPTIONAL_SINGLE([koji-profile],[],[Koji profile],[koji])
 # ARG_POSITIONAL_DOUBLEDASH([])
 # ARG_POSITIONAL_INF([custom],[Additional arguments to pass to the ELNBuildSync daemon])
@@ -62,12 +63,13 @@ _arg_dynamic_config_file=
 _arg_dynamic_config_url="https://github.com/fedora-eln/elnbuildsync-config.git"
 _arg_dynamic_config_branch="main"
 _arg_keytab_principal="eln-buildsync@FEDORAPROJECT.ORG"
+_arg_keytab_file=
 _arg_koji_profile="koji"
 
 
 print_help()
 {
-	printf 'Usage: %s [--log-level <arg>] [--static-config-file <arg>] [--dynamic-config-file <arg>] [--dynamic-config-url <arg>] [--dynamic-config-branch <arg>] [--keytab-principal <arg>] [--koji-profile <arg>] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
+	printf 'Usage: %s [--log-level <arg>] [--static-config-file <arg>] [--dynamic-config-file <arg>] [--dynamic-config-url <arg>] [--dynamic-config-branch <arg>] [--keytab-principal <arg>] [--keytab-file <arg>] [--koji-profile <arg>] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
 	printf '\t%s\n' "<custom>: Additional arguments to pass to the ELNBuildSync daemon"
 	printf '\t%s\n' "--log-level: Log verbosity (default: 'INFO')"
 	printf '\t%s\n' "--static-config-file: Static configuration file (default: '/etc/elnbuildsync/elnbuildsync.yaml')"
@@ -75,6 +77,7 @@ print_help()
 	printf '\t%s\n' "--dynamic-config-url: Dynamic configuration Git URL (default: 'https://github.com/fedora-eln/elnbuildsync-config.git')"
 	printf '\t%s\n' "--dynamic-config-branch: Dynamic configuration Git branch (default: 'main')"
 	printf '\t%s\n' "--keytab-principal: Keytab principal (default: 'eln-buildsync@FEDORAPROJECT.ORG')"
+	printf '\t%s\n' "--keytab-file: Keytab file (no default)"
 	printf '\t%s\n' "--koji-profile: Koji profile (default: 'koji')"
 	printf '\t%s\n' "-h, --help: Prints help"
 	printf '\n%s\n' "Run the ELNBuildSync daemon"
@@ -147,6 +150,14 @@ parse_commandline()
 			--keytab-principal=*)
 				_arg_keytab_principal="${_key##--keytab-principal=}"
 				;;
+			--keytab-file)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_keytab_file="$2"
+				shift
+				;;
+			--keytab-file=*)
+				_arg_keytab_file="${_key##--keytab-file=}"
+				;;
 			--koji-profile)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
 				_arg_koji_profile="$2"
@@ -206,14 +217,14 @@ set -eo pipefail
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 export TMPDIR=/var/tmp
 
-if [ -f /keytab/distrobaker.keytab ]; then
+if [ -n "${_arg_keytab_file}" ]; then
   # If we have a keytab, use it to get a Kerberos TGT
   # Otherwise, this is probably being run locally for testing and the
   # host KCM configuration will be used (see local_test_daemon.sh).
   export KRB5CCNAME=FILE:${TMPDIR}/tgt
 
-  echo "Getting Kerberos TGT every hour"
-  (while true; do kinit -k -t /keytab/distrobaker.keytab ${_arg_keytab_principal}; sleep 55m; done) &
+  echo "Getting Kerberos TGT every hour from ${_arg_keytab_file} for ${_arg_keytab_principal}"
+  (while true; do kinit -k -t "${_arg_keytab_file}" ${_arg_keytab_principal}; sleep 55m; done) &
 fi
 
 # Make sure Kerberos is working by trying to connect to koji
