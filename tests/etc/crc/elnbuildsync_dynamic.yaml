@@ -1,43 +1,6 @@
 configuration:
-  koji:
-    profile: koji
-    trigger_tag: f40
-    build_target: eln
-    stable_tag: eln
-    scratch_build: true
-    fail_fast: true
-    username: eln-buildsync
-  bodhi:
-    batch_size: 750
-  db:
-    # Use the sidecar database for testing
-    host: 127.0.0.1
-    port: 5432
-    name: elnbuildsync
-    driver: postgresql+asyncpg
-    user: elnbuildsync
-  # OpenID Connect authentication configuration
-  # Uses Fedora tinystage test OIDC server for development/testing
-  # See: https://github.com/fedora-infra/tiny-stage
-  open_id_connect:
-    # Tinystage Ipsilon Authorization endpoint
-    auth_url: "https://ipsilon.tinystage.test/idp/openidc/Authorization"
-    # Client credentials (register with tinystage)
-    client_id: "YOUR_CLIENT_ID"
-    client_secret: "YOUR_CLIENT_SECRET"
-    # Token endpoint for exchanging authorization code
-    token_endpoint: "https://ipsilon.tinystage.test/idp/openidc/Token"
-    # UserInfo endpoint for fetching user details and groups
-    userinfo_endpoint: "https://ipsilon.tinystage.test/idp/openidc/UserInfo"
-    # OAuth2 scopes to request (groups scope required for authorization)
-    scopes:
-      - openid
-      - profile
-      - https://id.fedoraproject.org/scope/groups
-    # Users must be a member of at least one of these groups to access /trigger
-    admin_groups:
-      - eln
   control:
+    trigger_tag: f40
     status_interval: 600 # 10 minutes
     pause: false
     skip_tag:
@@ -130,14 +93,6 @@ configuration:
       ^llvm[0-9\.]*$: 0
       ^clang[0-9\.]*$: 1
       ^fedora-repos.*$: 0
-  email:
-    smtp_host: localhost
-    smtp_port: 587
-    smtp_username: alice
-    from: elnbuildsync@fedoraproject.org
-    recipients:
-      - list1@fedoraproject.org
-      - list2@redhat.com
 components:
   autopackagelist:
     view: [ eln, eln-extras ]
