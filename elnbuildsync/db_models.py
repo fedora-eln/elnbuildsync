@@ -107,14 +107,6 @@ class DBBuildTrigger(Base):
     )
     batch: Mapped[DBRebuildBatch | None] = relationship(back_populates="build_triggers")
 
-    # The slice this build trigger is associated with
-    slice_id: Mapped[int | None] = mapped_column(
-        ForeignKey("rebuild_batch_slice.id"), nullable=True
-    )
-    slice: Mapped[DBRebuildBatchSlice | None] = relationship(
-        back_populates="build_triggers"
-    )
-
 
 class DBRebuildBatch(Base):
     __tablename__ = "rebuild_batch"
@@ -132,9 +124,6 @@ class DBRebuildBatch(Base):
     # Batches are triggered by one or more build triggers
     build_triggers: Mapped[List["DBBuildTrigger"]] = relationship(back_populates="batch")
 
-    # Batches may be divided into one or more slices
-    slices: Mapped[List["DBRebuildBatchSlice"]] = relationship(back_populates="batch")
-
     # The Koji build options for this batch
     # This is stored as a JSON blob
     # Example: `{ "scratch": true, "fail_fast": true }`
@@ -144,24 +133,6 @@ class DBRebuildBatch(Base):
     # whether to resume watching a batch at startup (such as after a crash or
     # service upgrade.
     completed: Mapped[bool] = mapped_column(nullable=False)
-
-
-class DBRebuildBatchSlice(Base):
-    __tablename__ = "rebuild_batch_slice"
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-
-    # The ordering value of this slice
-    ordering: Mapped[int] = mapped_column(nullable=False)
-
-    # The set of build triggers being processed in this slice
-    build_triggers: Mapped[List["DBBuildTrigger"]] = relationship()
-
-    # The current state of the slice processing
-    state: Mapped[int] = mapped_column(nullable=False)
-
-    # Link back to the batch that started this attempt
-    batch_id: Mapped[int] = mapped_column(ForeignKey("rebuild_batch.id"), nullable=True)
-    batch: Mapped["DBRebuildBatch"] = relationship(back_populates="slices")
 
 
 @as_deferred

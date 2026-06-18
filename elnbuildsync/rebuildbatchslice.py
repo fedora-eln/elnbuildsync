@@ -19,32 +19,9 @@
 
 import logging
 
-from enum import IntEnum
-
-from . import db_models
-from .decorators import as_deferred
 from .rebuildattempt import RebuildAttempt
 
 logger = logging.getLogger(__name__)
-
-
-class RebuildBatchSliceStatus(IntEnum):
-    # __init__() has been called on this slice, but it's not in the DB yet
-    INITIALIZING = 0
-
-    # The slice has been fully initialized and recorded in the DB, but has not
-    # yet started running.
-    QUEUED = 1
-
-    # The slice has begun running
-    # Note: this state may be inaccurate; it is possible that the slice has
-    # completed or otherwise terminated and we haven't yet detected that.
-    # This is particularly likely when loading from the database on a process
-    # restart.
-    RUNNING = 2
-
-    # The slice has terminated and the results are available.
-    FINISHED = 3
 
 
 class RebuildBatchSlice:
@@ -54,56 +31,12 @@ class RebuildBatchSlice:
     """
 
     def __init__(self, ordering, build_triggers, rebuild_batch):
-        """
-        Never call this function on its own. Invoke via
-        ```
-        await RebuildBatchSlice(ordering, build_triggers, rebuild_batch).async_init()
-        ```
-        """
-
         self.ordering = ordering
         self.build_triggers = build_triggers
         self.rebuild_batch = rebuild_batch
-        self.status = RebuildBatchSliceStatus.INITIALIZING
-
-        # Database object
-        self._db_obj = None
-
-    async def async_init(self):
-        # Create database entry and mark it as "queued"
-        await self._async_db_init()
-
-        return self
-
-    @as_deferred
-    async def _async_db_init(self):
-        # Create the object in the database
-        async with db_models.async_session() as session:
-            self.status = RebuildBatchSliceStatus.QUEUED
-            msg_objs = [msg._db_obj for msg in self.build_triggers]
-            db_slice = db_models.DBRebuildBatchSlice(
-                ordering=self.ordering,
-                state=self.status,
-                build_triggers=msg_objs,
-                batch=self.rebuild_batch._db_obj,
-            )
-            session.add(db_slice)
-            await session.commit()
-            self._db_obj = db_slice
-
-    @as_deferred
-    async def _update_status(self, status):
-        async with db_models.async_session() as session:
-            self.status = status
-            self._db_obj.state = status
-            session.add(self._db_obj)
-            await session.commit()
 
     async def run(self):
         logger.debug(f"Processing components at ordering {self.ordering}.")
-
-        # Update database state to be "running"
-        await self._update_status(RebuildBatchSliceStatus.RUNNING)
 
         # Set up the RebuildAttempt
         all_successes = {}
@@ -177,8 +110,5 @@ class RebuildBatchSlice:
                     # If something goes wrong here, just log that the task failed.
                     logger.warning(f"FAILED: {task_id}")
                     failure_requests.append(f"Task: {task_id}")
-
-        # Update database state to "finished"
-        await self._update_status(RebuildBatchSliceStatus.FINISHED)
 
         return all_successes, failure_requests
