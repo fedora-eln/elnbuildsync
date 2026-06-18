@@ -30,10 +30,14 @@ from tenacity import retry, stop_after_delay, wait_exponential
 from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 from twisted.internet.threads import deferToThread
 
-from . import config, db_models, kojihelpers
+from . import config, kojihelpers
+from .buildtrigger import BuildTrigger
+
+from . import config
+from . import kojihelpers
+from . import db_models
 from .decorators import as_deferred
-from .rebuildbatchslice import RebuildBatchSlice
-from .tagmessage import TagMessage
+
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +50,7 @@ class RebuildBatch:
     def __init__(
         self,
         target: str,
-        tag_messages: list[TagMessage],
+        build_triggers: list[BuildTrigger],
         scratch=False,
         fail_fast=False,
     ):
@@ -56,7 +60,7 @@ class RebuildBatch:
         This ensures that the database actions will settle before the object
         is used.
         """
-        self.tag_messages = {}
+        self.build_triggers = {}
         self.target = target
         self.scratch = scratch
         self.fail_fast = fail_fast
@@ -64,22 +68,22 @@ class RebuildBatch:
         self.slices = []
         self._dest_tag = None
         self._side_tag_base = None
-        self._unprocessed_tag_messages = tag_messages
+        self._unprocessed_build_triggers = build_triggers
 
         # Database object
         self._db_obj = None
 
         logger.debug(
-            f"Creating batch from {len(self._unprocessed_tag_messages)} messages"
+            f"Creating batch from {len(self._unprocessed_build_triggers)} build triggers"
         )
 
     async def async_init(self):
         build_ids = []
-        for tag_message in self._unprocessed_tag_messages:
-            await self.add_tag_message(tag_message)
+        for build_trigger in self._unprocessed_build_triggers:
+            await self.add_build_trigger(build_trigger)
 
-            if not config.skip_tag(tag_message.component):
-                build_ids.append(tag_message.build_id)
+            if not config.skip_tag(build_trigger.component):
+                build_ids.append(build_trigger.build_id)
 
         (
             self._side_tag_base,
@@ -125,7 +129,7 @@ class RebuildBatch:
     @as_deferred
     async def _async_db_init(self):
         async with db_models.async_session() as session:
-            tag_msg_objs = [msg._db_obj for msg in self.tag_messages.values()]
+            build_trigger_objs = [msg._db_obj for msg in self.build_triggers.values()]
             koji_opts = {
                 "scratch": self.scratch,
                 "fail_fast": self.fail_fast,
@@ -133,7 +137,7 @@ class RebuildBatch:
             db_batch = db_models.DBRebuildBatch(
                 side_tag=self.side_tag,
                 dest_tag=self._dest_tag,
-                tag_messages=tag_msg_objs,
+                build_triggers=build_trigger_objs,
                 options=json.dumps(koji_opts),
                 completed=False,
             )
@@ -142,19 +146,19 @@ class RebuildBatch:
 
         self._db_obj = db_batch
 
-    async def add_tag_message(self, message: TagMessage):
+    async def add_build_trigger(self, message: BuildTrigger):
         # Overwrite any earlier instance of this component, since we only want
         # to rebuild the most recent one. This is necessary to avoid races
         # where the older build is tagged in after the newer one.
-        if message.component in self.tag_messages:
+        if message.component in self.build_triggers:
             # There's an earlier build already queued.
-            drop_message = self.tag_messages[message.component]
+            drop_message = self.build_triggers[message.component]
 
             # Remove this entry from the database so it doesn't get
             # re-loaded in the future
             await drop_message.drop()
 
-        self.tag_messages[message.component] = message
+        self.build_triggers[message.component] = message
 
     @staticmethod
     def _get_srpm_nvr_from_task_msg(msg_body) -> str:
@@ -187,17 +191,17 @@ class RebuildBatch:
 
     async def run(self):
         # Get the SCM URLs and order them
-        all_tag_messages = defaultdict(list)
-        for tag_message in self.tag_messages.values():
-            order = config.get_order(tag_message.component)
-            all_tag_messages[order].append(tag_message)
+        all_build_triggers = defaultdict(list)
+        for build_trigger in self.build_triggers.values():
+            order = config.get_order(build_trigger.component)
+            all_build_triggers[order].append(build_trigger)
 
         all_successes = {}
         all_failures = []
 
         # Create RebuildBatchSlices for each ordering value
-        for order, tag_messages in sorted(all_tag_messages.items()):
-            slice = await RebuildBatchSlice(order, tag_messages, self).async_init()
+        for order, build_triggers in sorted(all_build_triggers.items()):
+            slice = await RebuildBatchSlice(order, build_triggers, self).async_init()
             self.slices.append(slice)
 
         # Process each of the slices

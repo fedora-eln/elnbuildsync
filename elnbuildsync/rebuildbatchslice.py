@@ -18,6 +18,7 @@
 
 
 import logging
+
 from enum import IntEnum
 
 from . import db_models
@@ -52,16 +53,16 @@ class RebuildBatchSlice:
     an ordering value. Triggers one or more RebuildAttempts.
     """
 
-    def __init__(self, ordering, tag_messages, rebuild_batch):
+    def __init__(self, ordering, build_triggers, rebuild_batch):
         """
         Never call this function on its own. Invoke via
         ```
-        await RebuildBatchSlice(ordering, tag_messages, rebuild_batch).async_init()
+        await RebuildBatchSlice(ordering, build_triggers, rebuild_batch).async_init()
         ```
         """
 
         self.ordering = ordering
-        self.tag_messages = tag_messages
+        self.build_triggers = build_triggers
         self.rebuild_batch = rebuild_batch
         self.status = RebuildBatchSliceStatus.INITIALIZING
 
@@ -79,11 +80,11 @@ class RebuildBatchSlice:
         # Create the object in the database
         async with db_models.async_session() as session:
             self.status = RebuildBatchSliceStatus.QUEUED
-            msg_objs = [msg._db_obj for msg in self.tag_messages]
+            msg_objs = [msg._db_obj for msg in self.build_triggers]
             db_slice = db_models.DBRebuildBatchSlice(
                 ordering=self.ordering,
                 state=self.status,
-                tag_messages=msg_objs,
+                build_triggers=msg_objs,
                 batch=self.rebuild_batch._db_obj,
             )
             session.add(db_slice)
@@ -106,7 +107,7 @@ class RebuildBatchSlice:
 
         # Set up the RebuildAttempt
         all_successes = {}
-        scm_urls = [await msg.get_scmurl() for msg in self.tag_messages]
+        scm_urls = [await msg.get_scmurl() for msg in self.build_triggers]
         attempt = await RebuildAttempt(scm_urls=scm_urls, slice=self).async_init()
 
         successes, failures = await attempt.async_await()
