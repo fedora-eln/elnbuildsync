@@ -68,27 +68,25 @@ async def process_message_batch():
         except Exception:
             # If something goes unrecoverably wrong here, always log it and skip
             # to the next batch.
-<<<<<<< HEAD
-            logger.exception("Unrecoverable error while running rebuild batch")
-=======
             logger.exception("Unexpected error while processing batch")
->>>>>>> 0d23438 (Fix logging of unlikely exception)
-        finally:
-            # Mark all the tag messages as completed
-            for tag_message in tag_messages:
-                try:
-                    await tag_message.mark_completed()
-                except Exception:
-                    logger.exception(
-                        f"Could not mark tag message {tag_message.id} as completed"
-                    )
 
-            running = False
+        # Mark all the tag messages as completed
+        # If the batch failed badly enough that the exception above fired,
+        # it would be unsafe to retry those builds.
+        for tag_message in tag_messages:
+            try:
+                await tag_message.mark_completed()
+            except Exception:
+                logger.exception(
+                    f"Could not mark tag message {tag_message.id} as completed"
+                )
     except Exception:
         # We need to catch all exceptions here. If we allow them to bubble up,
         # they will cause the entire process to fall into an infinite traceback
         # loop.
         logger.exception("Unexpected error in process_message_batch")
+
+    running = False
 
 
 async def rebuild_from_components(downstream_components):
