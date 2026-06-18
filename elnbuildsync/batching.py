@@ -68,7 +68,11 @@ async def process_message_batch():
         except Exception:
             # If something goes unrecoverably wrong here, always log it and skip
             # to the next batch.
+<<<<<<< HEAD
             logger.exception("Unrecoverable error while running rebuild batch")
+=======
+            logger.exception("Unexpected error while processing batch")
+>>>>>>> 0d23438 (Fix logging of unlikely exception)
         finally:
             # Mark all the tag messages as completed
             for tag_message in tag_messages:
