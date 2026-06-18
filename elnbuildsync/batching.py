@@ -21,10 +21,11 @@ import re
 from datetime import datetime
 
 import rpm
+
 from . import config, kojihelpers
+from .buildtrigger import BuildTrigger
 from .kojihelpers.connection import call_koji
 from .rebuildbatch import RebuildBatch
-from .tagmessage import TagMessage
 
 message_batch_processor = None
 
@@ -43,10 +44,10 @@ class ComponentNotFoundError(Exception):
 async def process_message_batch():
     global running
     try:
-        # Get all the unprocessed tag messages from the database
-        tag_messages = await TagMessage.get_unprocessed_messages()
+        # Get all the unprocessed build triggers from the database
+        build_triggers = await BuildTrigger.get_unprocessed_build_triggers()
 
-        if not tag_messages:
+        if not build_triggers:
             # Nothing to do here
             return
 
@@ -54,7 +55,7 @@ async def process_message_batch():
         running = True
         batch = await RebuildBatch(
             target=config.main["koji"]["build_target"],
-            tag_messages=tag_messages,
+            build_triggers=build_triggers,
             scratch=config.main["koji"]["scratch_build"],
             fail_fast=config.main["koji"]["fail_fast"],
         ).async_init()
@@ -70,15 +71,15 @@ async def process_message_batch():
             # to the next batch.
             logger.exception("Unexpected error while processing batch")
 
-        # Mark all the tag messages as completed
+        # Mark all the build triggers as completed
         # If the batch failed badly enough that the exception above fired,
         # it would be unsafe to retry those builds.
-        for tag_message in tag_messages:
+        for build_trigger in build_triggers:
             try:
-                await tag_message.mark_completed()
+                await build_trigger.mark_completed()
             except Exception:
                 logger.exception(
-                    f"Could not mark tag message {tag_message.id} as completed"
+                    f"Could not mark build trigger {build_trigger.id} as completed"
                 )
     except Exception:
         # We need to catch all exceptions here. If we allow them to bubble up,
@@ -92,7 +93,7 @@ async def process_message_batch():
 async def rebuild_from_components(downstream_components):
     """Takes an iterable of downstream component names and rebuilds them."""
 
-    # Fake up a TagMessage for each of these to enqueue into the next batch
+    # Enqueue components into the next batch
     src_tag = config.control["trigger_tag"]
     latest_tagged_rawhide_pkgs = await call_koji(
         "listTagged", src_tag, latest=True, inherit=True
@@ -173,16 +174,16 @@ async def rebuild_from_components(downstream_components):
                 logger.info(f"Rebuilding {buildinfo['nvr']} for ELN.")
 
                 message_batch_processor.reset()
-                await TagMessage(buildinfo["name"], buildinfo["build_id"]).async_init()
+                await BuildTrigger(
+                    buildinfo["name"], buildinfo["build_id"]
+                ).async_init()
 
             except ComponentNotFoundError:
                 logger.exception(
-                    "Cannot determine commit ID to build %s",
-                    downstream_component,
+                    f"Cannot determine commit ID to build {downstream_component}"
                 )
             except Exception:
                 # Unexpected exception, log it so we don't crash
                 logger.exception(
-                    "Unexpected error while handling %s",
-                    downstream_component,
+                    f"Unexpected error while handling {downstream_component}"
                 )

@@ -130,7 +130,7 @@ work (Koji calls, Bodhi submission, Git operations) is delegated via
 | `rebuildbatchslice.py` | Per-ordering slice execution and retries. |
 | `rebuildattempt.py` | Koji build submission and per-task tracking. |
 | `rebuildtask.py` | Individual rebuild task state. |
-| `tagmessage.py` | Tag messages; SCM URLs and DB records. |
+| `buildtrigger.py` | Build triggers; SCM URLs and DB records. |
 | `kojihelpers/` | Koji connection pooling, tags, builds, errors. |
 | `config.py` | YAML load/refresh; eligibility and ordering. |
 | `db_models.py` | SQLAlchemy models for batches and sessions. |

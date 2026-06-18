@@ -27,8 +27,8 @@ from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 from twisted.internet.threads import blockingCallFromThread
 
 from . import batching, config, kojihelpers
+from .buildtrigger import BuildTrigger
 from .state import ELNBuildSyncState as state
-from .tagmessage import TagMessage
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +147,7 @@ def _handle_trigger_tag(msg):
     logger.debug(f"Adding {msg.body['name']} to the next batch.")
     blockingCallFromThread(
         reactor,
-        TagMessage(msg.body["name"], msg.body["build_id"]).async_init,
+        BuildTrigger(msg.body["name"], msg.body["build_id"]).async_init,
     )
 
 
@@ -197,7 +197,7 @@ def message_handler(msg):
         raise
 
     except Exception as e:
-        logger.exception("Unexpected error on message %s", msg.id)
+        logger.exception(f"Unexpected error handling message {msg.id}")
         # If anything goes wrong during the message handler, Nack() the
         # message so it will get retried.
         raise Nack(f"Unexpected error on message {msg.id}, will retry") from e
@@ -242,7 +242,7 @@ async def check_tasks():
 
         except Exception:
             # Log any failures so we don't block future checks.
-            logger.exception("Unexpected failure in task %s", task)
+            logger.exception(f"Unexpected failure in task {task}")
 
             # Try to claim the Deferred and cancel it
             deferred = state.active_tasks.pop(task, None)
@@ -285,7 +285,7 @@ def fire_task_callback(deferred, data):
         deferred.callback(data)
     except AlreadyCalledError:
         # Most likely due to a timeout, so ignore it
-        logger.exception("Deferred already called when firing task callback")
+        logger.exception("Deferred already called")
 
 
 def fire_task_errback(deferred, data):
@@ -295,7 +295,7 @@ def fire_task_errback(deferred, data):
         deferred.errback(err)
     except AlreadyCalledError:
         # Most likely due to a timeout, so ignore it
-        logger.exception("Deferred already called when firing task errback")
+        logger.exception("Deferred already called")
 
 
 def register_task_id(task_id, timeout=config.task_timeout):

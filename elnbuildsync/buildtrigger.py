@@ -17,8 +17,8 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
-from datetime import datetime, timezone
 import logging
+from datetime import datetime, timezone
 
 from sqlalchemy.sql.expression import select
 
@@ -28,15 +28,15 @@ from .decorators import as_deferred
 logger = logging.getLogger(__name__)
 
 
-class TagMessage:
+class BuildTrigger:
     # Most often this will be initialized from a message received from the AMQP queue.
     # Tag JSON samples:
     # https://apps.fedoraproject.org/datagrepper/v2/search?topic=org.fedoraproject.prod.buildsys.tag
 
     def __init__(self, component: str, build_id: int) -> None:
         """
-        Do not call TagMessage() alone. Instantiate via
-        `await TagMessage(component, build_id).async_init()` instead. This
+        Do not call BuildTrigger() alone. Instantiate via
+        `await BuildTrigger(component, build_id).async_init()` instead. This
         ensures that the database entry is created before the object is used.
         :param component: The name of the component that was tagged
         :param build_id: The ID of the build that was tagged
@@ -55,14 +55,14 @@ class TagMessage:
     @as_deferred
     async def async_init(self):
         async with db_models.async_session() as session:
-            db_tag_msg = db_models.DBTagMessage(
+            db_build_trigger = db_models.DBBuildTrigger(
                 component=self.component,
                 build_id=self.build_id,
             )
-            session.add(db_tag_msg)
+            session.add(db_build_trigger)
             await session.commit()
-            logger.debug(f"TagMessage DB ID: {db_tag_msg.id}")
-            self._db_obj = db_tag_msg
+            logger.debug(f"BuildTrigger DB ID: {db_build_trigger.id}")
+            self._db_obj = db_build_trigger
 
         return self
 
@@ -77,7 +77,7 @@ class TagMessage:
 
         :returns: A string containing the full, dereferenced SCMURL for the build
         """
-        # Imported here to avoid circular import: builds → listener → tagmessage.
+        # Imported here to avoid circular import: builds → listener → buildtrigger.
         from .kojihelpers.builds import get_buildinfo
 
         # Store the SCM URL to avoid multiple retrievals.
@@ -97,31 +97,31 @@ class TagMessage:
 
     @staticmethod
     @as_deferred
-    async def get_unprocessed_messages():
+    async def get_unprocessed_build_triggers():
         async with db_models.async_session() as session:
-            db_tag_messages = await session.execute(
-                select(db_models.DBTagMessage)
-                .where(db_models.DBTagMessage.completed_at.is_(None))
-                .order_by(db_models.DBTagMessage.created_at.asc())
+            db_build_triggers = await session.execute(
+                select(db_models.DBBuildTrigger)
+                .where(db_models.DBBuildTrigger.completed_at.is_(None))
+                .order_by(db_models.DBBuildTrigger.created_at.asc())
             )
 
-            tag_messages = dict[str, TagMessage]()
-            for db_tag_message in db_tag_messages.scalars().all():
-                # If this component already has a tag message, drop the older one.
+            build_triggers = dict[str, BuildTrigger]()
+            for db_build_trigger in db_build_triggers.scalars().all():
+                # If this component already has a build trigger, drop the older one.
                 # We only want to rebuild the most recent build for each component.
                 # (OR do we want to build both, but in different slices?)
-                if db_tag_message.component in tag_messages:
-                    await tag_messages[db_tag_message.component].drop()
-                    del tag_messages[db_tag_message.component]
+                if db_build_trigger.component in build_triggers:
+                    await build_triggers[db_build_trigger.component].drop()
+                    del build_triggers[db_build_trigger.component]
 
-                tag_message = TagMessage(
-                    component=db_tag_message.component,
-                    build_id=db_tag_message.build_id,
+                build_trigger = BuildTrigger(
+                    component=db_build_trigger.component,
+                    build_id=db_build_trigger.build_id,
                 )
-                tag_message._db_obj = db_tag_message
-                tag_messages[db_tag_message.component] = tag_message
+                build_trigger._db_obj = db_build_trigger
+                build_triggers[db_build_trigger.component] = build_trigger
 
-            return list(tag_messages.values())
+            return list(build_triggers.values())
 
     @as_deferred
     async def mark_completed(self):
