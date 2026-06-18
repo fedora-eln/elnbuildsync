@@ -17,7 +17,6 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
-import json
 import logging
 import os
 from collections import defaultdict
@@ -32,21 +31,12 @@ from twisted.internet.threads import deferToThread
 
 from . import config, kojihelpers
 from .buildtrigger import BuildTrigger
-
-from . import config
-from . import kojihelpers
-from . import db_models
-from .decorators import as_deferred
-
+from .rebuildbatchslice import RebuildBatchSlice
 
 logger = logging.getLogger(__name__)
 
 
 class RebuildBatch:
-    # Temporary internal variable to store the latest batch ID
-    # Remove this once we are getting this from the DB
-    _latest_batch_id = 0
-
     def __init__(
         self,
         target: str,
@@ -56,9 +46,7 @@ class RebuildBatch:
     ):
         """
         Do not call RebuildBatch() alone. Instantiate via
-        `await RebuildBatch(target, msgs).async_init()` instead.
-        This ensures that the database actions will settle before the object
-        is used.
+        `await RebuildBatch(target, build_triggers).async_init()` instead.
         """
         self.build_triggers = {}
         self.target = target
@@ -69,9 +57,6 @@ class RebuildBatch:
         self._dest_tag = None
         self._side_tag_base = None
         self._unprocessed_build_triggers = build_triggers
-
-        # Database object
-        self._db_obj = None
 
         logger.debug(
             f"Creating batch from {len(self._unprocessed_build_triggers)} build triggers"
@@ -92,9 +77,6 @@ class RebuildBatch:
 
         # Create the side-tag for this batch
         self.side_tag = await self._create_and_populate_side_tag(build_ids)
-
-        # Create the RebuildBatch record in the database here.
-        await self._async_db_init()
 
         return self
 
@@ -125,26 +107,6 @@ class RebuildBatch:
             # Side-tag is ready. Proceed.
             break
         return side_tag
-
-    @as_deferred
-    async def _async_db_init(self):
-        async with db_models.async_session() as session:
-            build_trigger_objs = [msg._db_obj for msg in self.build_triggers.values()]
-            koji_opts = {
-                "scratch": self.scratch,
-                "fail_fast": self.fail_fast,
-            }
-            db_batch = db_models.DBRebuildBatch(
-                side_tag=self.side_tag,
-                dest_tag=self._dest_tag,
-                build_triggers=build_trigger_objs,
-                options=json.dumps(koji_opts),
-                completed=False,
-            )
-            session.add(db_batch)
-            await session.commit()
-
-        self._db_obj = db_batch
 
     async def add_build_trigger(self, message: BuildTrigger):
         # Overwrite any earlier instance of this component, since we only want
@@ -275,8 +237,6 @@ class RebuildBatch:
         logger.info(f"Removing side-tag {self.side_tag}")
         await kojihelpers.tags.remove_side_tag(self.side_tag)
 
-        await self._finalize()
-
     async def _create_and_submit_bodhi_updates(self, build_nvrs: list[str]) -> None:
         def _build_batch_generator(
             build_nvrs: list[str],
@@ -349,9 +309,3 @@ class RebuildBatch:
             logger.exception("Failed to submit Bodhi update")
             raise
 
-    @as_deferred
-    async def _finalize(self):
-        async with db_models.async_session() as session:
-            self._db_obj.completed = True
-            session.add(self._db_obj)
-            await session.commit()

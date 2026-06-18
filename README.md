@@ -88,8 +88,8 @@ Scratch builds (used in local testing) skip Bodhi submission and tagging.
 
 ### 5. Completion
 
-The batch is marked complete in PostgreSQL, `batching.running` is cleared,
-and queued Fedora Messages can be processed again.
+When `RebuildBatch.run()` finishes, `batching.running` is cleared and
+queued Fedora Messages can be processed again.
 
 ## Software architecture
 
@@ -113,7 +113,7 @@ work (Koji calls, Bodhi submission, Git operations) is delegated via
 │       │                                                      ▼          │
 │  HTTP :8080 ◄── web.py (status, trigger, OIDC)    RebuildBatchSlice     │
 │                                                      RebuildAttempt     │
-│  PostgreSQL ◄── db_models.py (batches, build triggers, sessions)         │
+│  PostgreSQL ◄── db_models.py (build triggers, sessions)                  │
 │  Koji / Bodhi ◄── kojihelpers/ + bodhi-client                           │
 │  Config YAML ◄── config.py (file, URL, or git checkout)                 │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -132,7 +132,7 @@ work (Koji calls, Bodhi submission, Git operations) is delegated via
 | `buildtrigger.py` | Build triggers; SCM URLs and DB records. |
 | `kojihelpers/` | Koji connection pooling, tags, builds, errors. |
 | `config.py` | YAML load/refresh; eligibility and ordering. |
-| `db_models.py` | SQLAlchemy models for batches and sessions. |
+| `db_models.py` | SQLAlchemy models for build triggers and sessions. |
 | `web.py` | Health, status, `/trigger`, OIDC login/logout. |
 | `status.py` | Periodic status page generation. |
 | `cleanup.py` | Periodic cleanup of stale state. |

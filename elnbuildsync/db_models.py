@@ -20,20 +20,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import ForeignKey
-from sqlalchemy import JSON
-from sqlalchemy import DateTime
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.ext.asyncio import async_sessionmaker
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import JSON, DateTime
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.pool import NullPool
-from sqlalchemy.orm import Mapped
-from sqlalchemy.orm import mapped_column
-from sqlalchemy.orm import relationship
-from typing import List
-from typing import Optional
-
 
 from .decorators import as_deferred
 
@@ -100,39 +90,6 @@ class DBBuildTrigger(Base):
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
-
-    # The RebuildBatch this build trigger is associated with
-    batch_id: Mapped[int | None] = mapped_column(
-        ForeignKey("rebuild_batch.id"), nullable=True
-    )
-    batch: Mapped[DBRebuildBatch | None] = relationship(back_populates="build_triggers")
-
-
-class DBRebuildBatch(Base):
-    __tablename__ = "rebuild_batch"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-
-    # Each batch generates a side-tag
-    # If this is NULL, the side tag has not yet been requested
-    side_tag: Mapped[str] = mapped_column(unique=True, nullable=True)
-
-    # Once a batch completes, the built packages need to be tagged into a
-    # destination tag.
-    dest_tag: Mapped[str] = mapped_column(nullable=False)
-
-    # Batches are triggered by one or more build triggers
-    build_triggers: Mapped[List["DBBuildTrigger"]] = relationship(back_populates="batch")
-
-    # The Koji build options for this batch
-    # This is stored as a JSON blob
-    # Example: `{ "scratch": true, "fail_fast": true }`
-    options: Mapped[str] = mapped_column(nullable=False)
-
-    # Whether this batch has concluded. This is mostly useful for knowing
-    # whether to resume watching a batch at startup (such as after a crash or
-    # service upgrade.
-    completed: Mapped[bool] = mapped_column(nullable=False)
 
 
 @as_deferred
