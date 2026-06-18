@@ -80,21 +80,30 @@ class RebuildBatch:
 
         return self
 
-    async def _create_and_populate_side_tag(self, build_ids: list[int]) -> str:
+    async def _create_and_populate_side_tag(
+        self, build_ids: list[int], promote_builds: bool = False
+    ) -> str:
         """
         Creates a side-tag for this batch.
 
         :param build_ids: The list of build_ids to tag into the side-tag.
         :type build_ids: list[int]
+        :param promote_builds: Whether to promote draft builds before tagging.
 
         :return: The name of the side-tag.
         :rtype: str
         """
+
+        if promote_builds:
+            build_nvrs = await kojihelpers.builds.promote_builds(build_ids)
+        else:
+            build_nvrs = build_ids
+
         while True:
             try:
                 side_tag = await kojihelpers.tags.prepare_side_tag(
                     self._side_tag_base,
-                    build_ids,
+                    build_nvrs,
                 )
             except DeferredTimeoutError:
                 # Keep retrying to create a side-tag.
@@ -204,9 +213,8 @@ class RebuildBatch:
         # Only try to tag builds in if they're non-scratch builds.
         if self.scratch:
             for nvr in build_nvrs:
-                # This message is out of date now, since we are using Bodhi
-                # updates, but it's not exposed to users anyway.
-                logger.info(f"Not tagging scratch-build of {nvr} into {self._dest_tag}")
+                # We won't promote this draft build and submit it to Bodhi.
+                logger.info(f"Not submitting Bodhi update for {nvr}")
 
         else:
             # Submit Bodhi updates for the builds

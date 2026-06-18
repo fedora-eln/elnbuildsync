@@ -139,20 +139,18 @@ async def get_taskinfo(task_id, **kwargs):
     return taskinfo
 
 
-async def perform_builds(target, scm_urls, scratch=False, fail_fast=False):
-    task_index = await start_builds(target, scm_urls, scratch, fail_fast)
+async def perform_builds(target, scm_urls, fail_fast=False):
+    task_index = await start_builds(target, scm_urls, fail_fast)
     results = await wait_for_tasks(task_index.values())
     return results
 
 
-async def start_builds(target, scm_urls, scratch=False, fail_fast=False):
-    task_index = await call_koji(
-        _start_builds_thread, target, scm_urls, scratch, fail_fast
-    )
+async def start_builds(target, scm_urls, fail_fast=False):
+    task_index = await call_koji(_start_builds_thread, target, scm_urls, fail_fast)
     return task_index
 
 
-def _start_builds_thread(bsys, target, scm_urls, scratch=False, fail_fast=False):
+def _start_builds_thread(bsys, target, scm_urls, fail_fast=False):
     build_vcalls = {}
     try:
         with bsys.multicall(batch=config.koji_batch) as mc:
@@ -163,7 +161,7 @@ def _start_builds_thread(bsys, target, scm_urls, scratch=False, fail_fast=False)
                     scmurl,
                     target,
                     {
-                        "scratch": scratch,
+                        "draft": True,
                         "fail_fast": fail_fast,
                         "wait_repo": config.main["koji"]["wait_repo"],
                     },
@@ -213,3 +211,35 @@ async def cancel_task(task_id):
     except Exception:
         # Cancellation is best-effort
         logger.exception("Could not cancel task %s. Ignoring.", task_id)
+
+
+async def promote_builds(draft_build_ids):
+    promoted_nvrs = await call_koji(_promote_builds_thread, draft_build_ids)
+    return promoted_nvrs
+
+
+def _promote_builds_thread(bsys, draft_build_ids):
+    promote_vcalls = {}
+
+    with bsys.multicall(batch=config.koji_batch) as mc:
+        for build_id in draft_build_ids:
+            promote_vcalls[build_id] = mc.promoteBuild(build_id)
+
+    promoted_nvrs = []
+    for build_id in draft_build_ids:
+        try:
+            promoted_nvrs.append(promote_vcalls[build_id].result["nvr"])
+        except koji.GenericError:
+            # Koji has returned an error. Log it and skip this build;
+            # we can't do anything about it.
+            logger.exception("Could not promote build %s", build_id)
+            continue
+        except Exception:
+            # Any exception here is not recoverable, so just log and continue.
+            # As of this writing, it's possible to get a 400 error here if
+            # another draft build was already promoted with the same NVR.
+            # https://forge.fedoraproject.org/koji/koji/issues/4605
+            logger.exception("Could not promote %s. Unknown error.", build_id)
+            continue
+
+    return promoted_nvrs
