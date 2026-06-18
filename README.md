@@ -113,7 +113,7 @@ work (Koji calls, Bodhi submission, Git operations) is delegated via
 │       │                                                      ▼          │
 │  HTTP :8080 ◄── web.py (status, trigger, OIDC)    RebuildBatchSlice     │
 │                                                      RebuildAttempt     │
-│  PostgreSQL ◄── db_models.py (batches, slices, build triggers, sessions) │
+│  PostgreSQL ◄── db_models.py (batches, build triggers, sessions)         │
 │  Koji / Bodhi ◄── kojihelpers/ + bodhi-client                           │
 │  Config YAML ◄── config.py (file, URL, or git checkout)                 │
 └─────────────────────────────────────────────────────────────────────────┘

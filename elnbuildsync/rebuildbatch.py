@@ -201,7 +201,7 @@ class RebuildBatch:
 
         # Create RebuildBatchSlices for each ordering value
         for order, build_triggers in sorted(all_build_triggers.items()):
-            slice = await RebuildBatchSlice(order, build_triggers, self).async_init()
+            slice = RebuildBatchSlice(order, build_triggers, self)
             self.slices.append(slice)
 
         # Process each of the slices
