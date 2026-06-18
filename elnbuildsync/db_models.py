@@ -163,26 +163,6 @@ class DBRebuildBatchSlice(Base):
     batch_id: Mapped[int] = mapped_column(ForeignKey("rebuild_batch.id"), nullable=True)
     batch: Mapped["DBRebuildBatch"] = relationship(back_populates="slices")
 
-    # Slices may make one or more attempts
-    attempts: Mapped[List["DBRebuildAttempt"]] = relationship(back_populates="slice")
-
-
-class DBRebuildAttempt(Base):
-    __tablename__ = "rebuild_attempt"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-
-    # Link back to the batch that started this attempt
-    slice_id: Mapped[int] = mapped_column(
-        ForeignKey("rebuild_batch_slice.id"), nullable=False
-    )
-    slice: Mapped["DBRebuildBatchSlice"] = relationship(back_populates="attempts")
-
-    # Whether this batch has concluded. This is mostly useful for knowing
-    # whether to resume watching an attempt at startup (such as after a crash
-    # or service upgrade.
-    completed: Mapped[bool] = mapped_column(nullable=False)
-
 
 @as_deferred
 async def init_db(db_url, echo=False):
