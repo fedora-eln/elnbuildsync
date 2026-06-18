@@ -105,23 +105,23 @@ class BuildTrigger:
                 .order_by(db_models.DBBuildTrigger.created_at.asc())
             )
 
-            build_triggers = dict[str, BuildTrigger]()
-            for db_build_trigger in db_build_triggers.scalars().all():
-                # If this component already has a build trigger, drop the older one.
-                # We only want to rebuild the most recent build for each component.
-                # (OR do we want to build both, but in different slices?)
-                if db_build_trigger.component in build_triggers:
-                    await build_triggers[db_build_trigger.component].drop()
-                    del build_triggers[db_build_trigger.component]
+        build_triggers = dict[str, BuildTrigger]()
+        for db_build_trigger in db_build_triggers.scalars().all():
+            # If this component already has a build trigger, drop the older one.
+            # We only want to rebuild the most recent build for each component.
+            # (OR do we want to build both, but in different slices?)
+            if db_build_trigger.component in build_triggers:
+                await build_triggers[db_build_trigger.component].drop()
+                del build_triggers[db_build_trigger.component]
 
-                build_trigger = BuildTrigger(
-                    component=db_build_trigger.component,
-                    build_id=db_build_trigger.build_id,
-                )
-                build_trigger._db_obj = db_build_trigger
-                build_triggers[db_build_trigger.component] = build_trigger
+            build_trigger = BuildTrigger(
+                component=db_build_trigger.component,
+                build_id=db_build_trigger.build_id,
+            )
+            build_trigger._db_obj = db_build_trigger
+            build_triggers[db_build_trigger.component] = build_trigger
 
-            return list(build_triggers.values())
+        return list(build_triggers.values())
 
     @as_deferred
     async def mark_completed(self):
