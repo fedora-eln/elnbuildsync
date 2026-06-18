@@ -35,7 +35,6 @@ class RebuildAttempt:
         task_index = await kojihelpers.builds.start_builds(
             self.slice.rebuild_batch.side_tag,
             self.scm_urls,
-            scratch=self.slice.rebuild_batch.scratch,
             fail_fast=self.slice.rebuild_batch.fail_fast,
         )
         self.koji_task_ids = list(task_index.values())
