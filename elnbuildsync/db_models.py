@@ -178,32 +178,10 @@ class DBRebuildAttempt(Base):
     )
     slice: Mapped["DBRebuildBatchSlice"] = relationship(back_populates="attempts")
 
-    # Attempts may have one or more tasks associated with them
-    tasks: Mapped[List["DBRebuildTask"]] = relationship(back_populates="attempt")
-
     # Whether this batch has concluded. This is mostly useful for knowing
     # whether to resume watching an attempt at startup (such as after a crash
     # or service upgrade.
     completed: Mapped[bool] = mapped_column(nullable=False)
-
-
-class DBRebuildTask(Base):
-    __tablename__ = "rebuild_task"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-
-    # The task ID for the build in Koji
-    koji_task_id: Mapped[int] = mapped_column(unique=True)
-
-    # If NULL, the task is either still running or hasn't been checked for
-    # status. Otherwise, contains the result status of the task.
-    koji_task_result: Mapped[int] = mapped_column(nullable=True)
-
-    # Link back to the attempt associated with this task
-    attempt_id: Mapped[int] = mapped_column(
-        ForeignKey("rebuild_attempt.id"), nullable=False
-    )
-    attempt: Mapped["DBRebuildAttempt"] = relationship(back_populates="tasks")
 
 
 @as_deferred
