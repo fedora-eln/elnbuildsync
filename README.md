@@ -128,8 +128,7 @@ work (Koji calls, Bodhi submission, Git operations) is delegated via
 | `batching.py` | Message queue, lull timer, manual rebuild helper. |
 | `rebuildbatch.py` | Side-tag lifecycle, slices, Bodhi updates. |
 | `rebuildbatchslice.py` | Per-ordering slice execution and retries. |
-| `rebuildattempt.py` | Koji build submission and per-task tracking. |
-| `rebuildtask.py` | Individual rebuild task state. |
+| `rebuildattempt.py` | Koji build submission and in-memory task tracking. |
 | `buildtrigger.py` | Build triggers; SCM URLs and DB records. |
 | `kojihelpers/` | Koji connection pooling, tags, builds, errors. |
 | `config.py` | YAML load/refresh; eligibility and ordering. |

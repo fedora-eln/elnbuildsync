@@ -19,18 +19,16 @@
 
 import logging
 
-import koji
-
-from . import db_models, kojihelpers
+from . import kojihelpers
+from . import db_models
 from .decorators import as_deferred
-from .rebuildtask import RebuildTask
 
 logger = logging.getLogger(__name__)
 
 
 class RebuildAttempt:
     def __init__(self, scm_urls, slice):
-        self.tasks = {}
+        self.koji_task_ids = []
         self.scm_urls = scm_urls
         self.slice = slice
 
@@ -45,14 +43,10 @@ class RebuildAttempt:
             scratch=self.slice.rebuild_batch.scratch,
             fail_fast=self.slice.rebuild_batch.fail_fast,
         )
-        tasks = task_index.values()
+        self.koji_task_ids = list(task_index.values())
 
         # Create the RebuildAttempt in the database
         await self._async_db_init()
-
-        # Create the associated RebuildTask objects
-        for task in tasks:
-            await self.add_task(task)
 
         return self
 
@@ -68,39 +62,14 @@ class RebuildAttempt:
             logger.debug(f"RebuildAttempt DB ID: {db_attempt.id}")
             self._db_obj = db_attempt
 
-    async def add_task(self, task):
-        if task in self.tasks:
-            raise ValueError("You may only register the same task_id once")
-
-        try:
-            rtask = await RebuildTask(task, self).async_init()
-        except Exception:
-            logger.critical("Failed to create RebuildTask", exc_info=True)
-            raise
-
-        self.tasks[task] = rtask
-
     async def async_await(self):
-        successes = {}
-        failures = {}
+        successes = dict()
+        failures = dict()
 
-        task_ids = [task.koji_task_id for task in self.tasks.values()]
-        results = await kojihelpers.builds.wait_for_tasks(task_ids)
+        results = await kojihelpers.builds.wait_for_tasks(self.koji_task_ids)
         for success, value in results:
             if success:
                 successes[value["id"]] = value
-
-                # TODO: Get the build_id here by parsing the result
-                # section of a child task of type 'builSRPMfromSCM'
-                # It will have the form:
-                # "result": {
-                #   "srpm": "tasks/7581/104277581/fedora-release-39-0.22.eln128.src.rpm",
-                #  ...
-                # },
-
-                # Store the results in the DB
-                await self.tasks[value["id"]].finish(koji.TASK_STATES["CLOSED"])
-
             else:
                 try:
                     try:
@@ -110,9 +79,6 @@ class RebuildAttempt:
 
                     id = data["id"]
                     failures[id] = data
-
-                    # Store the results in the DB
-                    await self.tasks[id].finish(koji.TASK_STATES["FAILED"])
                 except Exception:
                     logger.exception("Unexpected error while awaiting a task")
                     raise
