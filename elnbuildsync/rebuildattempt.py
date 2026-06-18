@@ -20,8 +20,6 @@
 import logging
 
 from . import kojihelpers
-from . import db_models
-from .decorators import as_deferred
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +29,6 @@ class RebuildAttempt:
         self.koji_task_ids = []
         self.scm_urls = scm_urls
         self.slice = slice
-
-        # DB Object
-        self._db_obj = None
 
     async def async_init(self):
         # Kick off the builds and get their task IDs
@@ -45,26 +40,11 @@ class RebuildAttempt:
         )
         self.koji_task_ids = list(task_index.values())
 
-        # Create the RebuildAttempt in the database
-        await self._async_db_init()
-
         return self
 
-    @as_deferred
-    async def _async_db_init(self):
-        # Create the object in the database
-        async with db_models.async_session() as session:
-            db_attempt = db_models.DBRebuildAttempt(
-                slice=self.slice._db_obj, completed=False
-            )
-            session.add(db_attempt)
-            await session.commit()
-            logger.debug(f"RebuildAttempt DB ID: {db_attempt.id}")
-            self._db_obj = db_attempt
-
     async def async_await(self):
-        successes = dict()
-        failures = dict()
+        successes = {}
+        failures = {}
 
         results = await kojihelpers.builds.wait_for_tasks(self.koji_task_ids)
         for success, value in results:
@@ -84,12 +64,3 @@ class RebuildAttempt:
                     raise
 
         return (successes, failures)
-
-    @as_deferred
-    async def _async_db_finish(self):
-        # Save this to the database here
-        async with db_models.async_session() as session:
-            self._db_obj.completed = True
-            session.add(self._db_obj)
-            await session.commit()
-            logger.debug(f"Rebuild Attempt {self._db_obj.id}: COMPLETE")
