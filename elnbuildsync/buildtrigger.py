@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.sql.expression import select
 
-from . import db_models
+from . import config, db_models
 from .decorators import as_deferred
 
 logger = logging.getLogger(__name__)
@@ -98,28 +98,35 @@ class BuildTrigger:
     @staticmethod
     @as_deferred
     async def get_unprocessed_build_triggers():
+        build_triggers = dict[str, BuildTrigger]()
+        to_drop = list[BuildTrigger]()
         async with db_models.async_session() as session:
-            db_build_triggers = await session.execute(
+            result = await session.stream(
                 select(db_models.DBBuildTrigger)
                 .where(db_models.DBBuildTrigger.completed_at.is_(None))
                 .order_by(db_models.DBBuildTrigger.created_at.asc())
+                .execution_options(yield_per=config.main["db"]["page_size"])
             )
+            async for db_build_trigger in result.scalars():
+                # If this component already has a build trigger, drop the older one.
+                # We only want to rebuild the most recent build for each component.
+                # (OR do we want to build both, but in different slices?)
+                if db_build_trigger.component in build_triggers:
+                    # Save the build trigger to drop later, so we aren't
+                    # modifying the dictionary while iterating over it.
+                    to_drop.append(build_triggers[db_build_trigger.component])
+                    del build_triggers[db_build_trigger.component]
 
-        build_triggers = dict[str, BuildTrigger]()
-        for db_build_trigger in db_build_triggers.scalars().all():
-            # If this component already has a build trigger, drop the older one.
-            # We only want to rebuild the most recent build for each component.
-            # (OR do we want to build both, but in different slices?)
-            if db_build_trigger.component in build_triggers:
-                await build_triggers[db_build_trigger.component].drop()
-                del build_triggers[db_build_trigger.component]
+                build_trigger = BuildTrigger(
+                    component=db_build_trigger.component,
+                    build_id=db_build_trigger.build_id,
+                )
+                build_trigger._db_obj = db_build_trigger
+                build_triggers[db_build_trigger.component] = build_trigger
 
-            build_trigger = BuildTrigger(
-                component=db_build_trigger.component,
-                build_id=db_build_trigger.build_id,
-            )
-            build_trigger._db_obj = db_build_trigger
-            build_triggers[db_build_trigger.component] = build_trigger
+        # If we have any expired build triggers to drop, do so now.
+        for build_trigger in to_drop:
+            await build_trigger.drop()
 
         return list(build_triggers.values())
 

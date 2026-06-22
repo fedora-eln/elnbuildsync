@@ -240,8 +240,8 @@ def _parse_email(cnf_email, ConfigError):
 
 
 def _parse_db(cnf_db, ConfigError):
-    """Parse database configuration. Returns dict with host, port, name, driver, user.
-    All keys are mandatory.
+    """Parse database configuration. Returns dict with host, port, name, driver, user,
+    and optionally page_size (defaults to 500).
     """
     required = ("host", "port", "name", "driver", "user")
     for key in required:
@@ -257,13 +257,23 @@ def _parse_db(cnf_db, ConfigError):
         }
     except ValueError:
         raise ConfigError("db.port must be an integer")
+    if "page_size" in cnf_db:
+        try:
+            result["page_size"] = int(cnf_db["page_size"])
+        except (TypeError, ValueError):
+            raise ConfigError("db.page_size must be an integer")
+        if result["page_size"] <= 0:
+            raise ConfigError("db.page_size must be a positive integer")
+    else:
+        result["page_size"] = 500
     logger.debug(
-        "Parsed db config: host=%s port=%s name=%s driver=%s user=%s",
+        "Parsed db config: host=%s port=%s name=%s driver=%s user=%s page_size=%s",
         result["host"],
         result["port"],
         result["name"],
         result["driver"],
         result["user"],
+        result["page_size"],
     )
     return result
 

@@ -239,6 +239,22 @@ class TestParseDb:
         assert result["name"] == "testdb"
         assert result["driver"] == "postgresql+asyncpg"
         assert result["user"] == "testuser"
+        assert result["page_size"] == 500
+
+    def test_page_size_override(self):
+        result = _parse_db({**MINIMAL_DB, "page_size": 100})
+        assert result["page_size"] == 100
+
+    def test_invalid_page_size_raises(self):
+        with pytest.raises(ConfigError, match="db.page_size must be an integer"):
+            _parse_db({**MINIMAL_DB, "page_size": "not-an-int"})
+
+    @pytest.mark.parametrize("page_size", [0, -1])
+    def test_nonpositive_page_size_raises(self, page_size):
+        with pytest.raises(
+            ConfigError, match="db.page_size must be a positive integer"
+        ):
+            _parse_db({**MINIMAL_DB, "page_size": page_size})
 
     def test_missing_host_raises(self):
         with pytest.raises(ConfigError, match="db.host missing"):
