@@ -20,8 +20,8 @@
 
 # Created by argbash-init v2.11.0
 # ARG_OPTIONAL_SINGLE([log-level],[],[Log verbosity],[INFO])
-# ARG_OPTIONAL_SINGLE([db-pw-file],[],[Database password file],[tests/ebs_db_pw])
-# ARG_OPTIONAL_SINGLE([smtp-pw-file],[],[SMTP password file],[tests/ebs_smtp_pw])
+# ARG_OPTIONAL_SINGLE([db-pw-file],[],[Database password file],[tests/etc/local/ebs_db_pw])
+# ARG_OPTIONAL_SINGLE([smtp-pw-file],[],[SMTP password file],[tests/etc/local/ebs_smtp_pw])
 # ARG_OPTIONAL_SINGLE([openid-client-secret-file],[],[OIDC client secret file],[tests/etc/local/ebs_oidc_client_secret])
 # ARG_OPTIONAL_SINGLE([lull-time],[],[Time to wait after the last trigger before starting the batch],[5])
 # ARG_OPTIONAL_SINGLE([static-config-file],[],[Static configuration file],[tests/etc/local/elnbuildsync.yaml])
@@ -61,8 +61,8 @@ _positionals=()
 _arg_custom=()
 # THE DEFAULTS INITIALIZATION - OPTIONALS
 _arg_log_level="INFO"
-_arg_db_pw_file="tests/ebs_db_pw"
-_arg_smtp_pw_file="tests/ebs_smtp_pw"
+_arg_db_pw_file="tests/etc/local/ebs_db_pw"
+_arg_smtp_pw_file="tests/etc/local/ebs_smtp_pw"
 _arg_openid_client_secret_file="tests/etc/local/ebs_oidc_client_secret"
 _arg_lull_time="5"
 _arg_static_config_file="tests/etc/local/elnbuildsync.yaml"
@@ -78,8 +78,8 @@ print_help()
 	printf 'Usage: %s [--log-level <arg>] [--db-pw-file <arg>] [--smtp-pw-file <arg>] [--openid-client-secret-file <arg>] [--lull-time <arg>] [--static-config-file <arg>] [--dynamic-config-file <arg>] [--environment <arg>] [--(no-)persistent-db] [--persistent-db-path <arg>] [--(no-)build-container] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
 	printf '\t%s\n' "<custom>: Additional arguments to pass to the ELNBuildSync daemon"
 	printf '\t%s\n' "--log-level: Log verbosity (default: 'INFO')"
-	printf '\t%s\n' "--db-pw-file: Database password file (default: 'tests/ebs_db_pw')"
-	printf '\t%s\n' "--smtp-pw-file: SMTP password file (default: 'tests/ebs_smtp_pw')"
+	printf '\t%s\n' "--db-pw-file: Database password file (default: 'tests/etc/local/ebs_db_pw')"
+	printf '\t%s\n' "--smtp-pw-file: SMTP password file (default: 'tests/etc/local/ebs_smtp_pw')"
 	printf '\t%s\n' "--openid-client-secret-file: OIDC client secret file (default: 'tests/etc/local/ebs_oidc_client_secret')"
 	printf '\t%s\n' "--lull-time: Time to wait after the last trigger before starting the batch (default: '5')"
 	printf '\t%s\n' "--static-config-file: Static configuration file (default: 'tests/etc/local/elnbuildsync.yaml')"
