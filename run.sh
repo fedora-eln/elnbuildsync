@@ -251,20 +251,20 @@ else
 fi
 
 # Check that the DB password file exists
-if [ ! -f /etc/elnbuildsync/ebs_db_pw ]; then
+if [ ! -f /etc/elnbuildsync/secrets/ebs_db_pw ]; then
   echo "Error: DB password file /etc/elnbuildsync/ebs_db_pw is missing. Mount it with --volume /local/dir:/etc/elnbuildsync:Z"
   exit 1
 fi
 
 # Check that the SMTP password file exists
-if [ ! -f /etc/elnbuildsync/ebs_smtp_pw ]; then
+if [ ! -f /etc/elnbuildsync/secrets/ebs_smtp_pw ]; then
   echo "Warning: SMTP password file /etc/elnbuildsync/ebs_smtp_pw is missing. If using SMTP, mount it with --volume /local/dir:/etc/elnbuildsync:Z"
 else
   SMTP_ARG="--smtp-pw-file /etc/elnbuildsync/ebs_smtp_pw"
 fi
 
 # OIDC client secret (when mounted under /etc/elnbuildsync/)
-if [ -f /etc/elnbuildsync/ebs_oidc_client_secret ]; then
+if [ -f /etc/elnbuildsync/secrets/ebs_oidc_client_secret ]; then
   OIDC_ARG="--openid-client-secret-file /etc/elnbuildsync/ebs_oidc_client_secret"
 fi
 
