@@ -116,6 +116,13 @@ def _resolve_dynamic_source(dynamic_config_url, dynamic_config_file):
     help="File containing one line: SMTP password for configuration.email",
 )
 @click.option(
+    "--openid-client-secret-file",
+    default="/etc/ebs_oidc_client_secret",
+    show_default=True,
+    type=click.Path(dir_okay=False),
+    help="File containing one line: OIDC client secret for configuration.open_id_connect",
+)
+@click.option(
     "--untagging/--no-untagging",
     default=False,
     help="Untag all but the most recent builds in the destination target",
@@ -129,6 +136,7 @@ def main(
     dynamic_config_file,
     db_pw_file,
     smtp_pw_file,
+    openid_client_secret_file,
     untagging,
 ):
     logging.basicConfig(
@@ -162,6 +170,7 @@ def main(
                 static_config_file,
                 dynamic_url,
                 dynamic_file,
+                openid_client_secret_file,
             )
         )
     )
@@ -174,6 +183,7 @@ async def _main(
     static_config_file,
     dynamic_config_url=None,
     dynamic_config_file=None,
+    openid_client_secret_file="/etc/ebs_oidc_client_secret",
 ) -> None:
     config.terminator = Deferred()
     with tempfile.TemporaryDirectory(prefix="elnbuildsync-") as cdir:
@@ -188,7 +198,11 @@ async def _main(
             config.smtp_password = ""
 
         try:
-            await config.load_static_config(static_config_file, db_pw)
+            await config.load_static_config(
+                static_config_file,
+                db_pw,
+                oidc_client_secret_file=openid_client_secret_file,
+            )
             await config.load_dynamic_config(
                 dynamic_config_git_url=dynamic_config_url,
                 dynamic_config_file=dynamic_config_file,

@@ -32,6 +32,22 @@ logger = logging.getLogger(__name__)
 DEFAULT_CONTENT_RESOLVER = "https://tiny.distro.builders"
 
 
+def _read_oidc_client_secret(oidc_client_secret_file, ConfigError):
+    """Read the OIDC client secret from a one-line file."""
+    try:
+        with open(oidc_client_secret_file) as f:
+            secret = f.readline().rstrip()
+    except OSError as e:
+        raise ConfigError(
+            f"Could not read OIDC client secret from {oidc_client_secret_file}: {e}"
+        ) from e
+    if not secret:
+        raise ConfigError(
+            f"OIDC client secret file {oidc_client_secret_file} is empty."
+        )
+    return secret
+
+
 def _parse_open_id_connect(oidc_raw, ConfigError):
     """Parse OpenID Connect configuration. Returns None if disabled, else a dict.
     Raises ConfigError on invalid or missing required fields.
@@ -48,10 +64,14 @@ def _parse_open_id_connect(oidc_raw, ConfigError):
         "profile",
         "https://id.fedoraproject.org/scope/groups",
     ]
+    if "client_secret" in oidc:
+        raise ConfigError(
+            "open_id_connect.client_secret must not be set in configuration; "
+            "use --openid-client-secret-file"
+        )
     required_fields = [
         "auth_url",
         "client_id",
-        "client_secret",
         "token_endpoint",
         "admin_groups",
     ]
@@ -61,7 +81,6 @@ def _parse_open_id_connect(oidc_raw, ConfigError):
     result = {
         "auth_url": str(oidc["auth_url"]),
         "client_id": str(oidc["client_id"]),
-        "client_secret": str(oidc["client_secret"]),
         "token_endpoint": str(oidc["token_endpoint"]),
         "userinfo_endpoint": str(oidc.get("userinfo_endpoint", "")),
         "scopes": list(oidc.get("scopes", default_scopes)),
@@ -244,6 +263,7 @@ def _parse_static_configuration(cnf, ConfigError):
 async def load_static_config(
     static_config_file,
     db_pw=None,
+    oidc_client_secret_file=None,
     *,
     config_module,
     ConfigError,
@@ -270,6 +290,16 @@ async def load_static_config(
         raise ConfigError("The required configuration block is missing.")
 
     n = _parse_static_configuration(y["configuration"], ConfigError)
+    if n["open_id_connect"] is not None:
+        if not oidc_client_secret_file:
+            raise ConfigError(
+                "open_id_connect is enabled but no OIDC client secret file was "
+                "provided; use --openid-client-secret-file"
+            )
+        n["open_id_connect"]["client_secret"] = _read_oidc_client_secret(
+            oidc_client_secret_file, ConfigError
+        )
+        logger.debug("OIDC client secret loaded from %s", oidc_client_secret_file)
     config_module.main = n
     logger.debug("Static configuration applied to config.main")
 

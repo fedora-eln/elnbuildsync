@@ -198,6 +198,7 @@ helm_cmd=(
 	--set-file secrets.elnbuildsync_dynamic_config_file="${CRC_DYNAMIC_CONFIG}"
 	--set-file secrets.database_password="${PROJ_DIR}/tests/etc/crc/ebs_db_pw"
 	--set-file secrets.smtp_password="${PROJ_DIR}/tests/etc/crc/ebs_smtp_pw"
+	--set-file secrets.oidc_client_secret="${PROJ_DIR}/tests/etc/crc/ebs_oidc_client_secret"
 	--set-file secrets.fedora_messaging_config="${PROJ_DIR}/tests/fedora-messaging/fedora.toml"
 	--set-file secrets.fedora_messaging_cacert="${PROJ_DIR}/tests/fedora-messaging/cacert.pem"
 	--set-file secrets.fedora_messaging_client_pem="${PROJ_DIR}/tests/fedora-messaging/fedora-cert.pem"

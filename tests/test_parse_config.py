@@ -48,6 +48,7 @@ from elnbuildsync.config import (
     is_paused,
     load_config,
     load_dynamic_config,
+    load_static_config,
     loglevel,
     retries,
     skip_tag,
@@ -56,11 +57,10 @@ from elnbuildsync.config import (
 )
 
 
-# Minimal valid OIDC config for tests
+# Minimal valid OIDC config for tests (client_secret supplied via file at load time)
 MINIMAL_OIDC = {
     "auth_url": "https://id.example.com/auth",
     "client_id": "client",
-    "client_secret": "secret",
     "token_endpoint": "https://id.example.com/token",
     "admin_groups": ["admins"],
 }
@@ -75,12 +75,16 @@ class TestParseOpenIdConnect:
         assert result is not None
         assert result["auth_url"] == "https://id.example.com/auth"
         assert result["client_id"] == "client"
-        assert result["client_secret"] == "secret"
+        assert "client_secret" not in result
         assert result["token_endpoint"] == "https://id.example.com/token"
         assert result["admin_groups"] == ["admins"]
         assert result["userinfo_endpoint"] == ""
         assert "openid" in result["scopes"]
         assert "profile" in result["scopes"]
+
+    def test_client_secret_in_yaml_raises(self):
+        with pytest.raises(ConfigError, match="client_secret must not be set"):
+            _parse_open_id_connect({**MINIMAL_OIDC, "client_secret": "secret"})
 
     def test_missing_required_field_raises(self):
         for key in MINIMAL_OIDC:
@@ -570,6 +574,29 @@ components:
   overrides: {}
 """
 
+MINIMAL_STATIC_CONFIG_OIDC_YAML = """
+configuration:
+  koji:
+    profile: koji
+    build_target: eln
+    stable_tag: eln
+  bodhi:
+    batch_size: 0
+  db:
+    host: localhost
+    port: 5432
+    name: testdb
+    driver: postgresql+asyncpg
+    user: testuser
+  open_id_connect:
+    auth_url: https://id.example.com/auth
+    client_id: client
+    token_endpoint: https://id.example.com/token
+    admin_groups:
+      - admins
+  email: false
+"""
+
 
 async def _fake_defer_to_thread(fn, *args, **kwargs):
     """Run fn synchronously and return result; used so config loaders work under asyncio."""
@@ -631,6 +658,102 @@ class TestLoadConfig:
         finally:
             os.unlink(static_path)
             os.unlink(dynamic_path)
+
+    @pytest.mark.asyncio
+    async def test_load_static_config_injects_oidc_secret_from_file(self):
+        static_path = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False
+        )
+        static_path.write(MINIMAL_STATIC_CONFIG_OIDC_YAML)
+        static_path.close()
+        secret_path = tempfile.NamedTemporaryFile(mode="w", delete=False)
+        secret_path.write("oidc-secret-value\n")
+        secret_path.close()
+        try:
+            with patch(
+                "elnbuildsync.config.static.deferToThread",
+                side_effect=_fake_defer_to_thread,
+            ):
+                await load_static_config(
+                    static_path.name,
+                    db_pw="testpw",
+                    oidc_client_secret_file=secret_path.name,
+                )
+            assert config_mod.main["open_id_connect"]["client_secret"] == (
+                "oidc-secret-value"
+            )
+        finally:
+            os.unlink(static_path.name)
+            os.unlink(secret_path.name)
+
+    @pytest.mark.asyncio
+    async def test_load_static_config_oidc_enabled_missing_secret_file_raises(self):
+        static_path = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False
+        )
+        static_path.write(MINIMAL_STATIC_CONFIG_OIDC_YAML)
+        static_path.close()
+        try:
+            with patch(
+                "elnbuildsync.config.static.deferToThread",
+                side_effect=_fake_defer_to_thread,
+            ):
+                with pytest.raises(
+                    ConfigError, match="Could not read OIDC client secret"
+                ):
+                    await load_static_config(
+                        static_path.name,
+                        db_pw="testpw",
+                        oidc_client_secret_file="/nonexistent/oidc_secret",
+                    )
+        finally:
+            os.unlink(static_path.name)
+
+    @pytest.mark.asyncio
+    async def test_load_static_config_oidc_enabled_empty_secret_file_raises(self):
+        static_path = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False
+        )
+        static_path.write(MINIMAL_STATIC_CONFIG_OIDC_YAML)
+        static_path.close()
+        secret_path = tempfile.NamedTemporaryFile(mode="w", delete=False)
+        secret_path.write("\n")
+        secret_path.close()
+        try:
+            with patch(
+                "elnbuildsync.config.static.deferToThread",
+                side_effect=_fake_defer_to_thread,
+            ):
+                with pytest.raises(ConfigError, match="is empty"):
+                    await load_static_config(
+                        static_path.name,
+                        db_pw="testpw",
+                        oidc_client_secret_file=secret_path.name,
+                    )
+        finally:
+            os.unlink(static_path.name)
+            os.unlink(secret_path.name)
+
+    @pytest.mark.asyncio
+    async def test_load_static_config_oidc_disabled_ignores_secret_file(self):
+        static_path = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False
+        )
+        static_path.write(MINIMAL_STATIC_CONFIG_YAML)
+        static_path.close()
+        try:
+            with patch(
+                "elnbuildsync.config.static.deferToThread",
+                side_effect=_fake_defer_to_thread,
+            ):
+                await load_static_config(
+                    static_path.name,
+                    db_pw="testpw",
+                    oidc_client_secret_file="/nonexistent/oidc_secret",
+                )
+            assert config_mod.main["open_id_connect"] is None
+        finally:
+            os.unlink(static_path.name)
 
     @pytest.mark.asyncio
     async def test_load_config_reinstantiates_email_each_load(self):

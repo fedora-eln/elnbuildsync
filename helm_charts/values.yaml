@@ -21,6 +21,7 @@ secrets:
   elnbuildsync_static_config_file:
   elnbuildsync_dynamic_config_file:
   smtp_password:
+  oidc_client_secret:
 
 git:
   uri: https://github.com/fedora-eln/elnbuildsync.git
