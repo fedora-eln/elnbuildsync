@@ -263,6 +263,11 @@ else
   SMTP_ARG="--smtp-pw-file /etc/elnbuildsync/ebs_smtp_pw"
 fi
 
+# OIDC client secret (when mounted under /etc/elnbuildsync/)
+if [ -f /etc/elnbuildsync/ebs_oidc_client_secret ]; then
+  OIDC_ARG="--openid-client-secret-file /etc/elnbuildsync/ebs_oidc_client_secret"
+fi
+
 echo "EXECUTING klist"
 KRB5_TRACE=/dev/stderr klist -A
 
@@ -283,6 +288,7 @@ elnbuildsync \
   --log-level ${_arg_log_level} \
   --db-pw-file /etc/elnbuildsync/ebs_db_pw \
   $SMTP_ARG \
+  $OIDC_ARG \
   ${_arg_custom[@]}
 
 # ] <-- needed because of Argbash

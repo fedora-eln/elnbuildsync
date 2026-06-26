@@ -168,7 +168,7 @@ Important sections:
   `0` means no splitting).
 - **`configuration.db`**: PostgreSQL connection settings.
 - **`configuration.open_id_connect`**: OIDC settings for `/trigger`
-  (tinystage in the sample test config).
+  (client secret via `--openid-client-secret-file`, not in YAML)
 - **`components`**: Autopackagelist resolver and per-package overrides.
 
 ### Deployment artifacts
@@ -223,19 +223,21 @@ You also need:
   |------|---------|
   | `tests/etc/local/ebs_db_pw` | PostgreSQL password (one line) |
   | `tests/etc/local/ebs_smtp_pw` | SMTP password (one line) |
+  | `tests/etc/local/ebs_oidc_client_secret` | OIDC client secret (one line) |
 
-  These may be overridden with `--db-pw-file` and `--smtp-pw-file` when
-  calling `tests/local_test_daemon.sh`.
+  These may be overridden with `--db-pw-file`, `--smtp-pw-file`, and
+  `--openid-client-secret-file` when calling `tests/local_test_daemon.sh`.
 
 - **Fedora Messaging certificates** are vendored under
   `tests/fedora-messaging/` (see `tests/fedora-messaging/README.md`).
 
 Optionally, edit `tests/etc/local/elnbuildsync.yaml` and
 `tests/etc/local/elnbuildsync_dynamic.yaml` for your environment (Koji
-tags, OIDC client credentials for `/trigger`, package lists). The default
-file points at tinystage for OIDC; register a client at
-[tiny-stage](https://github.com/fedora-infra/tiny-stage) if you need
-authenticated triggering. It can be disabled by setting
+tags, OIDC client ID for `/trigger`, package lists). The OIDC client
+secret belongs in `tests/etc/local/ebs_oidc_client_secret`, not in the
+YAML file. The default config points at tinystage for OIDC; register a
+client at [tiny-stage](https://github.com/fedora-infra/tiny-stage) if you
+need authenticated triggering. OIDC can be disabled by setting
 `open_id_connect: false`.
 
 ### First run: build the container image
@@ -330,10 +332,12 @@ Production deployments load static configuration from
 `/etc/elnbuildsync/elnbuildsync.yaml` and dynamic configuration from the
 [elnbuildsync-config](https://github.com/fedora-eln/elnbuildsync-config)
 git repository (see `run.sh --dynamic-config-url`) or
-`/etc/elnbuildsync/elnbuildsync_dynamic.yaml`. Database and SMTP secrets
-mount at `/etc/elnbuildsync/`, and a service keytab is used for
-`eln-buildsync@FEDORAPROJECT.ORG`. See `helm_charts/` for Kubernetes
-resources.
+`/etc/elnbuildsync/elnbuildsync_dynamic.yaml`. Database, SMTP, and OIDC
+client secrets mount at `/etc/elnbuildsync/` (or use daemon defaults:
+`/etc/ebs_db_pw`, `/etc/ebs_oidc_client_secret`). Pass
+`--openid-client-secret-file` when the secret is mounted elsewhere. A
+service keytab is used for `eln-buildsync@FEDORAPROJECT.ORG`. See
+`helm_charts/` for Kubernetes resources.
 
 ## License
 

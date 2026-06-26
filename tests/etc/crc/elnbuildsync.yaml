@@ -21,9 +21,8 @@ configuration:
   open_id_connect:
     # Tinystage Ipsilon Authorization endpoint
     auth_url: "https://ipsilon.tinystage.test/idp/openidc/Authorization"
-    # Client credentials (register with tinystage)
+    # Client ID (register with tinystage); secret in ebs_oidc_client_secret file
     client_id: "YOUR_CLIENT_ID"
-    client_secret: "YOUR_CLIENT_SECRET"
     # Token endpoint for exchanging authorization code
     token_endpoint: "https://ipsilon.tinystage.test/idp/openidc/Token"
     # UserInfo endpoint for fetching user details and groups

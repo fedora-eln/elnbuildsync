@@ -10,6 +10,9 @@ data:
 {{- if .Values.secrets.smtp_password }}
   ebs_smtp_pw: '{{ .Values.secrets.smtp_password | default "" | b64enc }}'
 {{- end }}
+{{- if .Values.secrets.oidc_client_secret }}
+  ebs_oidc_client_secret: '{{ .Values.secrets.oidc_client_secret | default "" | b64enc }}'
+{{- end }}
 {{- if .Values.secrets.elnbuildsync_static_config_file }}
   elnbuildsync.yaml: '{{ .Values.secrets.elnbuildsync_static_config_file | default "" | b64enc }}'
 {{- end }}

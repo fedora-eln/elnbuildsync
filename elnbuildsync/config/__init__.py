@@ -359,13 +359,16 @@ async def get_rawhide_tag():
     return stable_tag
 
 
-async def load_static_config(static_config_file, db_pw=None):
+async def load_static_config(
+    static_config_file, db_pw=None, oidc_client_secret_file=None
+):
     """Load static configuration from a YAML file."""
     import sys
 
     await static_config.load_static_config(
         static_config_file,
         db_pw=db_pw,
+        oidc_client_secret_file=oidc_client_secret_file,
         config_module=sys.modules[__name__],
         ConfigError=ConfigError,
     )
@@ -391,6 +394,7 @@ async def load_config(
     static_config_file=None,
     dynamic_config_git_url=None,
     dynamic_config_file=None,
+    oidc_client_secret_file=None,
     *,
     config_git_url=None,
     config_file=None,
@@ -406,7 +410,11 @@ async def load_config(
         dynamic_config_file = config_file
 
     if static_config_file:
-        await load_static_config(static_config_file, db_pw=db_pw)
+        await load_static_config(
+            static_config_file,
+            db_pw=db_pw,
+            oidc_client_secret_file=oidc_client_secret_file,
+        )
     await load_dynamic_config(
         dynamic_config_git_url=dynamic_config_git_url,
         dynamic_config_file=dynamic_config_file,
