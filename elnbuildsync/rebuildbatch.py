@@ -26,11 +26,7 @@ from collections import defaultdict
 from typing import Generator
 from bodhi.client.bindings import BodhiClient, BodhiClientException
 
-from twisted.internet.defer import (
-    DeferredList,
-    TimeoutError as DeferredTimeoutError,
-    ensureDeferred,
-)
+from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 from twisted.internet.threads import deferToThread
 
 from .rebuildbatchslice import RebuildBatchSlice
@@ -286,11 +282,11 @@ class RebuildBatch:
                 raise
             logger.debug(f"Submitted Bodhi update for {batch_nvrs}")
 
-        batches = [
-            ensureDeferred(_process_batch(batch_nvrs))
-            for batch_nvrs in _build_batch_generator(build_nvrs)
-        ]
-        await DeferredList(batches, consumeErrors=True)
+        for batch_nvrs in _build_batch_generator(build_nvrs):
+            # If an exception is raised here, we want it to bubble up so we
+            # don't inadvertently remove the build side-tag. This will be
+            # caught up in batching.process_message_batch().
+            await _process_batch(batch_nvrs)
 
     @backoff.on_exception(backoff.expo, Exception, max_time=900)
     def _submit_bodhi_update(self, update_tag: str) -> None:
