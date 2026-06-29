@@ -28,11 +28,7 @@ from urllib.parse import urlparse
 from bodhi.client.bindings import BodhiClient, BodhiClientException
 from tenacity import retry, stop_after_delay, wait_exponential
 
-from twisted.internet.defer import (
-    DeferredList,
-    TimeoutError as DeferredTimeoutError,
-    ensureDeferred,
-)
+from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 from twisted.internet.threads import deferToThread
 
 from .rebuildbatchslice import RebuildBatchSlice
@@ -308,11 +304,11 @@ class RebuildBatch:
                 raise
             logger.debug(f"Submitted Bodhi update for {batch_nvrs}")
 
-        batches = [
-            ensureDeferred(_process_batch(batch_nvrs))
-            for batch_nvrs in _build_batch_generator(build_nvrs)
-        ]
-        await DeferredList(batches, consumeErrors=True)
+        for batch_nvrs in _build_batch_generator(build_nvrs):
+            # If an exception is raised here, we want it to bubble up so we
+            # don't inadvertently remove the build side-tag. This will be
+            # caught up in batching.process_message_batch().
+            await _process_batch(batch_nvrs)
 
     @retry(
         wait=wait_exponential(),
