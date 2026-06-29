@@ -5,9 +5,7 @@ __pycache__
 .vscode
 build/
 tests/persistent_db
-/tests/ebs_db_pw
-/tests/ebs_smtp_pw
-/tests/ebs_oidc_client_secret
+/tests/etc/custom
 /.cache
 /.local
 

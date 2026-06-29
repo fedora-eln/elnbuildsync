@@ -20,12 +20,12 @@
 
 # Created by argbash-init v2.11.0
 # ARG_OPTIONAL_SINGLE([log-level],[],[Log verbosity],[INFO])
-# ARG_OPTIONAL_SINGLE([db-pw-file],[],[Database password file],[tests/etc/local/ebs_db_pw])
-# ARG_OPTIONAL_SINGLE([smtp-pw-file],[],[SMTP password file],[tests/etc/local/ebs_smtp_pw])
-# ARG_OPTIONAL_SINGLE([openid-client-secret-file],[],[OIDC client secret file],[tests/etc/local/ebs_oidc_client_secret])
+# ARG_OPTIONAL_SINGLE([db-pw-file],[],[Database password file],[tests/etc/secrets/ebs_db_pw])
+# ARG_OPTIONAL_SINGLE([smtp-pw-file],[],[SMTP password file],[tests/etc/secrets/ebs_smtp_pw])
+# ARG_OPTIONAL_SINGLE([openid-client-secret-file],[],[OIDC client secret file],[tests/etc/secrets/ebs_oidc_client_secret])
 # ARG_OPTIONAL_SINGLE([lull-time],[],[Time to wait after the last trigger before starting the batch],[5])
-# ARG_OPTIONAL_SINGLE([static-config-file],[],[Static configuration file],[tests/etc/local/elnbuildsync.yaml])
-# ARG_OPTIONAL_SINGLE([dynamic-config-file],[],[Dynamic configuration file],[tests/etc/local/elnbuildsync_dynamic.yaml])
+# ARG_OPTIONAL_SINGLE([static-config-file],[],[Static configuration file],[tests/etc/static-config/elnbuildsync.yaml])
+# ARG_OPTIONAL_SINGLE([dynamic-config-file],[],[Dynamic configuration file],[tests/etc/dynamic-config/elnbuildsync_dynamic.yaml])
 # ARG_OPTIONAL_SINGLE([environment],[],[Environment],[stg])
 # ARG_OPTIONAL_BOOLEAN([persistent-db],[],[Use persistent database],[off])
 # ARG_OPTIONAL_SINGLE([persistent-db-path],[],[Path to persistent database],[tests/persistent_db])
@@ -61,12 +61,12 @@ _positionals=()
 _arg_custom=()
 # THE DEFAULTS INITIALIZATION - OPTIONALS
 _arg_log_level="INFO"
-_arg_db_pw_file="tests/etc/local/ebs_db_pw"
-_arg_smtp_pw_file="tests/etc/local/ebs_smtp_pw"
-_arg_openid_client_secret_file="tests/etc/local/ebs_oidc_client_secret"
+_arg_db_pw_file="tests/etc/secrets/ebs_db_pw"
+_arg_smtp_pw_file="tests/etc/secrets/ebs_smtp_pw"
+_arg_openid_client_secret_file="tests/etc/secrets/ebs_oidc_client_secret"
 _arg_lull_time="5"
-_arg_static_config_file="tests/etc/local/elnbuildsync.yaml"
-_arg_dynamic_config_file="tests/etc/local/elnbuildsync_dynamic.yaml"
+_arg_static_config_file="tests/etc/static-config/elnbuildsync.yaml"
+_arg_dynamic_config_file="tests/etc/dynamic-config/elnbuildsync_dynamic.yaml"
 _arg_environment="stg"
 _arg_persistent_db="off"
 _arg_persistent_db_path="tests/persistent_db"
@@ -78,12 +78,12 @@ print_help()
 	printf 'Usage: %s [--log-level <arg>] [--db-pw-file <arg>] [--smtp-pw-file <arg>] [--openid-client-secret-file <arg>] [--lull-time <arg>] [--static-config-file <arg>] [--dynamic-config-file <arg>] [--environment <arg>] [--(no-)persistent-db] [--persistent-db-path <arg>] [--(no-)build-container] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
 	printf '\t%s\n' "<custom>: Additional arguments to pass to the ELNBuildSync daemon"
 	printf '\t%s\n' "--log-level: Log verbosity (default: 'INFO')"
-	printf '\t%s\n' "--db-pw-file: Database password file (default: 'tests/etc/local/ebs_db_pw')"
-	printf '\t%s\n' "--smtp-pw-file: SMTP password file (default: 'tests/etc/local/ebs_smtp_pw')"
-	printf '\t%s\n' "--openid-client-secret-file: OIDC client secret file (default: 'tests/etc/local/ebs_oidc_client_secret')"
+	printf '\t%s\n' "--db-pw-file: Database password file (default: 'tests/etc/secrets/ebs_db_pw')"
+	printf '\t%s\n' "--smtp-pw-file: SMTP password file (default: 'tests/etc/secrets/ebs_smtp_pw')"
+	printf '\t%s\n' "--openid-client-secret-file: OIDC client secret file (default: 'tests/etc/secrets/ebs_oidc_client_secret')"
 	printf '\t%s\n' "--lull-time: Time to wait after the last trigger before starting the batch (default: '5')"
-	printf '\t%s\n' "--static-config-file: Static configuration file (default: 'tests/etc/local/elnbuildsync.yaml')"
-	printf '\t%s\n' "--dynamic-config-file: Dynamic configuration file (default: 'tests/etc/local/elnbuildsync_dynamic.yaml')"
+	printf '\t%s\n' "--static-config-file: Static configuration file (default: 'tests/etc/static-config/elnbuildsync.yaml')"
+	printf '\t%s\n' "--dynamic-config-file: Dynamic configuration file (default: 'tests/etc/dynamic-config/elnbuildsync_dynamic.yaml')"
 	printf '\t%s\n' "--environment: Environment (default: 'stg')"
 	printf '\t%s\n' "--persistent-db, --no-persistent-db: Use persistent database (off by default)"
 	printf '\t%s\n' "--persistent-db-path: Path to persistent database (default: 'tests/persistent_db')"
@@ -297,7 +297,7 @@ if [ $db_ready -ne 0 ]; then
     ${CONTAINER_ENGINE} run --rm --detach \
 		--publish 5432:5432 \
 	    --network ebs_local_test \
-        --volume ${SCRIPT_DIR}/etc/local:/run/secrets:Z \
+        --volume ${SCRIPT_DIR}/etc/secrets:/run/secrets:Z \
         --name temp_postgres \
         --env POSTGRES_PASSWORD_FILE=/run/secrets/ebs_db_pw \
         --env POSTGRES_USER=elnbuildsync \
@@ -320,12 +320,12 @@ else
     export FEDORA_MESSAGING_CONF="$SCRIPT_DIR/fedora-messaging/fedora.toml"
 fi
 
-DEFAULT_STATIC_CONFIG_FILE="tests/etc/local/elnbuildsync.yaml"
-DEFAULT_DYNAMIC_CONFIG_FILE="tests/etc/local/elnbuildsync_dynamic.yaml"
-DEFAULT_OIDC_CLIENT_SECRET_FILE="tests/etc/local/ebs_oidc_client_secret"
-CONTAINER_STATIC_CONFIG="/etc/elnbuildsync/elnbuildsync.yaml"
-CONTAINER_DYNAMIC_CONFIG="/etc/elnbuildsync/elnbuildsync_dynamic.yaml"
-CONTAINER_OIDC_CLIENT_SECRET="/etc/elnbuildsync/ebs_oidc_client_secret"
+DEFAULT_STATIC_CONFIG_FILE="tests/etc/static-config/elnbuildsync.yaml"
+DEFAULT_DYNAMIC_CONFIG_FILE="tests/etc/dynamic-config/elnbuildsync_dynamic.yaml"
+DEFAULT_OIDC_CLIENT_SECRET_FILE="tests/etc/secrets/ebs_oidc_client_secret"
+CONTAINER_STATIC_CONFIG="/etc/elnbuildsync/static-config/elnbuildsync.yaml"
+CONTAINER_DYNAMIC_CONFIG="/etc/elnbuildsync/dynamic-config/elnbuildsync_dynamic.yaml"
+CONTAINER_OIDC_CLIENT_SECRET="/etc/elnbuildsync/secrets/ebs_oidc_client_secret"
 CUSTOM_MOUNT_ARGS=()
 
 if [ "${_arg_openid_client_secret_file}" != "${DEFAULT_OIDC_CLIENT_SECRET_FILE}" ]; then
@@ -351,7 +351,7 @@ ${CONTAINER_ENGINE} run --rm --interactive --tty \
 	--security-opt label=disable \
 	--env KRB5CCNAME=KCM:$(id -u) \
 	--volume /var/run/.heim_org.h5l.kcm-socket:/var/run/.heim_org.h5l.kcm-socket \
-	--volume ${SCRIPT_DIR}/etc/local:/etc/elnbuildsync:Z \
+	--volume ${SCRIPT_DIR}/etc:/etc/elnbuildsync:Z \
 	"${CUSTOM_MOUNT_ARGS[@]}" \
 	--volume ${PROJ_DIR}:/tmp:Z \
 	localhost/elnbuildsync:local_test_daemon \

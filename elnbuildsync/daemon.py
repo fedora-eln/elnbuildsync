@@ -52,7 +52,9 @@ from . import web  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_STATIC_CONFIG_FILE = "/etc/elnbuildsync/elnbuildsync.yaml"
+DEFAULT_STATIC_CONFIG_FILE = "/etc/elnbuildsync/static-config/elnbuildsync.yaml"
+DEFAULT_DB_PW_FILE = "/etc/elnbuildsync/secrets/ebs_db_pw"
+DEFAULT_OIDC_CLIENT_SECRET_FILE = "/etc/elnbuildsync/secrets/ebs_oidc_client_secret"
 
 
 def log_filter(record):
@@ -108,7 +110,11 @@ def _resolve_dynamic_source(dynamic_config_url, dynamic_config_file):
 )
 @click.option("--dynamic-config-url", default=None)
 @click.option("--dynamic-config-file", default=None, type=click.Path(dir_okay=False))
-@click.option("--db-pw-file", type=click.File(mode="r"), default="/etc/ebs_db_pw")
+@click.option(
+    "--db-pw-file",
+    type=click.File(mode="r"),
+    default=DEFAULT_DB_PW_FILE,
+)
 @click.option(
     "--smtp-pw-file",
     type=click.File(mode="r"),
@@ -117,7 +123,7 @@ def _resolve_dynamic_source(dynamic_config_url, dynamic_config_file):
 )
 @click.option(
     "--openid-client-secret-file",
-    default="/etc/ebs_oidc_client_secret",
+    default=DEFAULT_OIDC_CLIENT_SECRET_FILE,
     show_default=True,
     type=click.Path(dir_okay=False),
     help="File containing one line: OIDC client secret for configuration.open_id_connect",
@@ -183,7 +189,7 @@ async def _main(
     static_config_file,
     dynamic_config_url=None,
     dynamic_config_file=None,
-    openid_client_secret_file="/etc/ebs_oidc_client_secret",
+    openid_client_secret_file=None,
 ) -> None:
     config.terminator = Deferred()
     with tempfile.TemporaryDirectory(prefix="elnbuildsync-") as cdir:
