@@ -20,7 +20,7 @@
 
 # Created by argbash-init v2.11.0
 # ARG_OPTIONAL_SINGLE([log-level],[],[Log verbosity],[INFO])
-# ARG_OPTIONAL_SINGLE([static-config-file],[],[Static configuration file],[/etc/elnbuildsync/elnbuildsync.yaml])
+# ARG_OPTIONAL_SINGLE([static-config-file],[],[Static configuration file],[/etc/elnbuildsync/static-config/elnbuildsync.yaml])
 # ARG_OPTIONAL_SINGLE([dynamic-config-file],[],[Dynamic configuration file])
 # ARG_OPTIONAL_SINGLE([dynamic-config-url],[],[Dynamic configuration Git URL],[https://github.com/fedora-eln/elnbuildsync-config.git])
 # ARG_OPTIONAL_SINGLE([dynamic-config-branch],[],[Dynamic configuration Git branch],[main])
@@ -58,7 +58,7 @@ _positionals=()
 _arg_custom=()
 # THE DEFAULTS INITIALIZATION - OPTIONALS
 _arg_log_level="INFO"
-_arg_static_config_file="/etc/elnbuildsync/elnbuildsync.yaml"
+_arg_static_config_file="/etc/elnbuildsync/static-config/elnbuildsync.yaml"
 _arg_dynamic_config_file=
 _arg_dynamic_config_url="https://github.com/fedora-eln/elnbuildsync-config.git"
 _arg_dynamic_config_branch="main"
@@ -72,7 +72,7 @@ print_help()
 	printf 'Usage: %s [--log-level <arg>] [--static-config-file <arg>] [--dynamic-config-file <arg>] [--dynamic-config-url <arg>] [--dynamic-config-branch <arg>] [--keytab-principal <arg>] [--keytab-file <arg>] [--koji-profile <arg>] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
 	printf '\t%s\n' "<custom>: Additional arguments to pass to the ELNBuildSync daemon"
 	printf '\t%s\n' "--log-level: Log verbosity (default: 'INFO')"
-	printf '\t%s\n' "--static-config-file: Static configuration file (default: '/etc/elnbuildsync/elnbuildsync.yaml')"
+	printf '\t%s\n' "--static-config-file: Static configuration file (default: '/etc/elnbuildsync/static-config/elnbuildsync.yaml')"
 	printf '\t%s\n' "--dynamic-config-file: Dynamic configuration file (no default)"
 	printf '\t%s\n' "--dynamic-config-url: Dynamic configuration Git URL (default: 'https://github.com/fedora-eln/elnbuildsync-config.git')"
 	printf '\t%s\n' "--dynamic-config-branch: Dynamic configuration Git branch (default: 'main')"
@@ -232,7 +232,7 @@ while true; do
   koji -p ${_arg_koji_profile} hello && break || sleep 3
 done
 
-STATIC_ARG="--static-config-file /etc/elnbuildsync/elnbuildsync.yaml"
+STATIC_ARG="--static-config-file /etc/elnbuildsync/static-config/elnbuildsync.yaml"
 if [ -n "${_arg_static_config_file}" ]; then
   STATIC_ARG="--static-config-file ${_arg_static_config_file}"
 fi
@@ -240,11 +240,11 @@ fi
 if [ -n "${_arg_dynamic_config_file}" ]; then
   echo "Using dynamic config file at ${_arg_dynamic_config_file}"
   DYNAMIC_ARG="--dynamic-config-file ${_arg_dynamic_config_file}"
-elif [ -f /etc/elnbuildsync/elnbuildsync_dynamic.yaml ]; then
+elif [ -f /etc/elnbuildsync/dynamic-config/elnbuildsync_dynamic.yaml ]; then
   # Check if we have mounted a dynamic config file into the container.
-  # This is mostly useful for OpenShift Local testing.
-  echo "Using dynamic config file at /etc/elnbuildsync/elnbuildsync_dynamic.yaml"
-  DYNAMIC_ARG="--dynamic-config-file /etc/elnbuildsync/elnbuildsync_dynamic.yaml"
+  # This is mostly useful for local development with a mounted dynamic config.
+  echo "Using dynamic config file at /etc/elnbuildsync/dynamic-config/elnbuildsync_dynamic.yaml"
+  DYNAMIC_ARG="--dynamic-config-file /etc/elnbuildsync/dynamic-config/elnbuildsync_dynamic.yaml"
 else
   echo "Using dynamic config URL at ${_arg_dynamic_config_url}#${_arg_dynamic_config_branch}"
   DYNAMIC_ARG="--dynamic-config-url ${_arg_dynamic_config_url}#${_arg_dynamic_config_branch}"
@@ -252,20 +252,22 @@ fi
 
 # Check that the DB password file exists
 if [ ! -f /etc/elnbuildsync/secrets/ebs_db_pw ]; then
-  echo "Error: DB password file /etc/elnbuildsync/ebs_db_pw is missing. Mount it with --volume /local/dir:/etc/elnbuildsync:Z"
+  echo "Error: DB password file /etc/elnbuildsync/secrets/ebs_db_pw is missing. Mount it with --volume /local/dir:/etc/elnbuildsync/secrets:Z"
   exit 1
 fi
 
 # Check that the SMTP password file exists
 if [ ! -f /etc/elnbuildsync/secrets/ebs_smtp_pw ]; then
-  echo "Warning: SMTP password file /etc/elnbuildsync/ebs_smtp_pw is missing. If using SMTP, mount it with --volume /local/dir:/etc/elnbuildsync:Z"
+  echo "Warning: SMTP password file /etc/elnbuildsync/secrets/ebs_smtp_pw is missing. If using SMTP, mount it with --volume /local/dir:/etc/elnbuildsync/secrets:Z"
 else
-  SMTP_ARG="--smtp-pw-file /etc/elnbuildsync/ebs_smtp_pw"
+  SMTP_ARG="--smtp-pw-file /etc/elnbuildsync/secrets/ebs_smtp_pw"
 fi
 
 # OIDC client secret (when mounted under /etc/elnbuildsync/)
-if [ -f /etc/elnbuildsync/secrets/ebs_oidc_client_secret ]; then
-  OIDC_ARG="--openid-client-secret-file /etc/elnbuildsync/ebs_oidc_client_secret"
+if [ ! -f /etc/elnbuildsync/secrets/ebs_oidc_client_secret ]; then
+  echo "Warning: OIDC client secret file /etc/elnbuildsync/secrets/ebs_oidc_client_secret is missing. If using OIDC, mount it with --volume /local/dir:/etc/elnbuildsync/secrets:Z"
+else
+  OIDC_ARG="--openid-client-secret-file /etc/elnbuildsync/secrets/ebs_oidc_client_secret"
 fi
 
 echo "EXECUTING klist"
@@ -286,7 +288,7 @@ elnbuildsync \
   $STATIC_ARG \
   $DYNAMIC_ARG \
   --log-level ${_arg_log_level} \
-  --db-pw-file /etc/elnbuildsync/ebs_db_pw \
+  --db-pw-file /etc/elnbuildsync/secrets/ebs_db_pw \
   $SMTP_ARG \
   $OIDC_ARG \
   ${_arg_custom[@]}

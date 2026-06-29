@@ -153,10 +153,13 @@ port **8080** exposes:
 ### Configuration
 
 Runtime behavior is driven by static and dynamic YAML configuration.
-Production static settings live in `/etc/elnbuildsync/elnbuildsync.yaml`;
-dynamic settings come from the `distrobuildsync-config` git repository or
-`/etc/elnbuildsync/elnbuildsync_dynamic.yaml`. Local testing uses
-`tests/etc/local/elnbuildsync.yaml` and `tests/etc/local/elnbuildsync_dynamic.yaml`.
+Production static settings live in
+`/etc/elnbuildsync/static-config/elnbuildsync.yaml`; dynamic settings come
+from the [elnbuildsync-config](https://github.com/fedora-eln/elnbuildsync-config)
+git repository (see `run.sh --dynamic-config-url`) or
+`/etc/elnbuildsync/dynamic-config/elnbuildsync_dynamic.yaml`. Database,
+SMTP, and OIDC client secrets live under `/etc/elnbuildsync/secrets/`. Local
+testing uses the same layout under `tests/etc/` (see Getting started).
 
 Important sections:
 
@@ -176,8 +179,8 @@ Important sections:
 | Path | Purpose |
 |------|---------|
 | `Dockerfile` / `run.sh` | Container image and entrypoint. |
-| `helm_charts/` | Kubernetes/OpenShift deployment. |
 | `requirements.txt` | Python dependencies |
+| `tests/etc/` | Sample static/dynamic config and secrets for local testing. |
 
 ## Getting started (development on Fedora)
 
@@ -216,25 +219,28 @@ You also need:
   koji hello
   ```
 
-- **Test secrets** under `tests/etc/local/` (and `tests/etc/crc/` for
-  OpenShift testing). At minimum:
+- **Test configuration** under `tests/etc/`, mirroring the container layout
+  at `/etc/elnbuildsync/`:
 
-  | File | Purpose |
+  | Path | Purpose |
   |------|---------|
-  | `tests/etc/local/ebs_db_pw` | PostgreSQL password (one line) |
-  | `tests/etc/local/ebs_smtp_pw` | SMTP password (one line) |
-  | `tests/etc/local/ebs_oidc_client_secret` | OIDC client secret (one line) |
+  | `tests/etc/static-config/elnbuildsync.yaml` | Static configuration |
+  | `tests/etc/dynamic-config/elnbuildsync_dynamic.yaml` | Dynamic configuration |
+  | `tests/etc/secrets/ebs_db_pw` | PostgreSQL password (one line) |
+  | `tests/etc/secrets/ebs_smtp_pw` | SMTP password (one line) |
+  | `tests/etc/secrets/ebs_oidc_client_secret` | OIDC client secret (one line) |
 
-  These may be overridden with `--db-pw-file`, `--smtp-pw-file`, and
+  These may be overridden with `--static-config-file`,
+  `--dynamic-config-file`, `--db-pw-file`, `--smtp-pw-file`, and
   `--openid-client-secret-file` when calling `tests/local_test_daemon.sh`.
 
 - **Fedora Messaging certificates** are vendored under
   `tests/fedora-messaging/` (see `tests/fedora-messaging/README.md`).
 
-Optionally, edit `tests/etc/local/elnbuildsync.yaml` and
-`tests/etc/local/elnbuildsync_dynamic.yaml` for your environment (Koji
-tags, OIDC client ID for `/trigger`, package lists). The OIDC client
-secret belongs in `tests/etc/local/ebs_oidc_client_secret`, not in the
+Optionally, edit `tests/etc/static-config/elnbuildsync.yaml` and
+`tests/etc/dynamic-config/elnbuildsync_dynamic.yaml` for your environment
+(Koji tags, OIDC client ID for `/trigger`, package lists). The OIDC client
+secret belongs in `tests/etc/secrets/ebs_oidc_client_secret`, not in the
 YAML file. The default config points at tinystage for OIDC; register a
 client at [tiny-stage](https://github.com/fedora-infra/tiny-stage) if you
 need authenticated triggering. OIDC can be disabled by setting
@@ -266,7 +272,7 @@ The script:
 3. Starts a temporary PostgreSQL 18 container (`temp_postgres`) unless a
    persistent one is already reachable on port 5432.
 4. Runs the EBS container with:
-   - `tests/etc/local/` mounted at `/etc/elnbuildsync/` (static and dynamic
+   - `tests/etc/` mounted at `/etc/elnbuildsync/` (static and dynamic
      config plus secrets)
    - `--static-config-file` and `--dynamic-config-file` passed to the daemon
    - Fedora Messaging staging config (`--environment stg`, the default)
@@ -318,26 +324,21 @@ pytest
 Configuration parsing tests live in `tests/test_parse_config.py`; other
 modules have targeted tests under `tests/`.
 
-### OpenShift / CRC testing
-
-For deployment-style testing on OpenShift Local, use
-`tests/openshift_test_daemon.sh`, which builds the image, pushes to a
-cluster registry, and installs using the Helm chart. That path requires a
-service keytab and is intended for integration testing rather than
-day-to-day code changes.
-
 ## Production configuration
 
 Production deployments load static configuration from
-`/etc/elnbuildsync/elnbuildsync.yaml` and dynamic configuration from the
+`/etc/elnbuildsync/static-config/elnbuildsync.yaml` and dynamic
+configuration from the
 [elnbuildsync-config](https://github.com/fedora-eln/elnbuildsync-config)
 git repository (see `run.sh --dynamic-config-url`) or
-`/etc/elnbuildsync/elnbuildsync_dynamic.yaml`. Database, SMTP, and OIDC
-client secrets mount at `/etc/elnbuildsync/` (or use daemon defaults:
-`/etc/ebs_db_pw`, `/etc/ebs_oidc_client_secret`). Pass
+`/etc/elnbuildsync/dynamic-config/elnbuildsync_dynamic.yaml`. Database,
+SMTP, and OIDC client secrets mount at `/etc/elnbuildsync/secrets/`
+(`ebs_db_pw`, `ebs_smtp_pw`, `ebs_oidc_client_secret`). Pass
 `--openid-client-secret-file` when the secret is mounted elsewhere. A
-service keytab is used for `eln-buildsync@FEDORAPROJECT.ORG`. See
-`helm_charts/` for Kubernetes resources.
+service keytab is used for `eln-buildsync@FEDORAPROJECT.ORG`. OpenShift
+deployment is managed via
+[infra-ansible](https://forge.fedoraproject.org/infra/ansible)
+(`playbooks/openshift-apps/elnbuildsync.yml`).
 
 ## License
 
