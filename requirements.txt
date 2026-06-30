@@ -2,7 +2,7 @@ asyncpg
 bodhi-client
 cachetools
 click >= 8
-fedora_messaging ~= 3.7.1
+fedora_messaging >= 3.7.1, < 4
 GitPython
 koji
 legacy-cgi
