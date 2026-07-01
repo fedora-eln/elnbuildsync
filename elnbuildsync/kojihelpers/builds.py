@@ -190,7 +190,7 @@ def _start_builds_thread(target, scm_urls, scratch=False, fail_fast=False):
                     {
                         "scratch": scratch,
                         "fail_fast": fail_fast,
-                        "wait_repo": True,
+                        "wait_repo": config.main["koji"]["wait_repo"],
                     },
                     priority=KOJI_BACKGROUND_PRIORITY,
                 )
