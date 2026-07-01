@@ -324,7 +324,8 @@ class RebuildBatch:
             # a full OIDC authentication flow every time unless the token
             # has expired.
             bodhi = BodhiClient(
-                oidc_storage_path=os.path.join(config.tmpdir, "bodhi_client.json")
+                staging=config.main["bodhi"]["staging"],
+                oidc_storage_path=os.path.join(config.tmpdir, "bodhi_client.json"),
             )
 
             # Authenticate with Bodhi. This will use Kerberos the first time

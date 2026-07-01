@@ -144,16 +144,54 @@ class TestParseKoji:
 
 class TestParseBodhi:
     def test_default_batch_size_zero(self):
-        result = _parse_bodhi({})
+        result = _parse_bodhi({}, koji_profile="koji")
         assert result["batch_size"] == 0
+        assert result["staging"] is False
 
     def test_custom_batch_size(self):
-        result = _parse_bodhi({"batch_size": 750})
+        result = _parse_bodhi({"batch_size": 750}, koji_profile="koji")
         assert result["batch_size"] == 750
+        assert result["staging"] is False
 
     def test_invalid_batch_size_raises(self):
         with pytest.raises(ConfigError, match="bodhi.batch_size must be an integer"):
-            _parse_bodhi({"batch_size": "not-an-int"})
+            _parse_bodhi({"batch_size": "not-an-int"}, koji_profile="koji")
+
+    def test_staging_inferred_false_for_koji_profile(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            result = _parse_bodhi({}, koji_profile="koji")
+        assert result["staging"] is False
+        assert "bodhi.staging not defined" in caplog.text
+
+    def test_staging_inferred_true_for_stg_profile(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            result = _parse_bodhi({}, koji_profile="stg")
+        assert result["staging"] is True
+        assert "bodhi.staging not defined" in caplog.text
+
+    def test_staging_required_for_unknown_koji_profile(self):
+        with pytest.raises(ConfigError, match="bodhi.staging must be set explicitly"):
+            _parse_bodhi({}, koji_profile="custom")
+
+    def test_explicit_staging_for_unknown_koji_profile(self):
+        result = _parse_bodhi({"staging": True}, koji_profile="custom")
+        assert result["staging"] is True
+
+    def test_explicit_staging_mismatch_koji_profile_raises(self):
+        with pytest.raises(
+            ConfigError, match="koji.profile is 'koji' but bodhi.staging is true"
+        ):
+            _parse_bodhi({"staging": True}, koji_profile="koji")
+
+    def test_explicit_staging_mismatch_stg_profile_raises(self):
+        with pytest.raises(
+            ConfigError, match="koji.profile is 'stg' but bodhi.staging is false"
+        ):
+            _parse_bodhi({"staging": False}, koji_profile="stg")
+
+    def test_explicit_staging_matching_koji_profile(self):
+        result = _parse_bodhi({"staging": False}, koji_profile="koji")
+        assert result["staging"] is False
 
 
 # Minimal valid db config (all keys mandatory)
@@ -301,6 +339,7 @@ class TestParseStaticConfiguration:
         assert n["koji"]["build_target"] == "eln"
         assert n["koji"]["stable_tag"] == "eln"
         assert n["bodhi"]["batch_size"] == 0
+        assert n["bodhi"]["staging"] is False
         assert n["db"]["host"] == "localhost"
         assert n["open_id_connect"] is not None
         assert n["email"]["smtp_host"] == "localhost"

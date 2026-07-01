@@ -100,8 +100,8 @@ def _parse_koji(cnf_koji):
     return static_config._parse_koji(cnf_koji, ConfigError)
 
 
-def _parse_bodhi(cnf_bodhi):
-    return static_config._parse_bodhi(cnf_bodhi, ConfigError)
+def _parse_bodhi(cnf_bodhi, koji_profile="koji"):
+    return static_config._parse_bodhi(cnf_bodhi, koji_profile, ConfigError)
 
 
 def _parse_email(cnf_email):
