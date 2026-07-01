@@ -142,15 +142,51 @@ def _parse_koji(cnf_koji, ConfigError):
     return result
 
 
-def _parse_bodhi(cnf_bodhi, ConfigError):
-    """Parse bodhi configuration. Returns dict with batch_size."""
+def _parse_bodhi(cnf_bodhi, koji_profile, ConfigError):
+    """Parse bodhi configuration. Returns dict with batch_size and staging."""
     result = {"batch_size": 0}
     if "batch_size" in cnf_bodhi:
         try:
             result["batch_size"] = int(cnf_bodhi["batch_size"])
         except ValueError:
             raise ConfigError("bodhi.batch_size must be an integer")
-    logger.debug("Parsed bodhi config: batch_size=%s", result["batch_size"])
+
+    explicit_staging = "staging" in cnf_bodhi
+    if explicit_staging:
+        result["staging"] = bool(cnf_bodhi["staging"])
+    else:
+        logger.warning(
+            "Configuration warning: bodhi.staging not defined; inferring from "
+            "koji.profile=%r",
+            koji_profile,
+        )
+        if koji_profile == "koji":
+            result["staging"] = False
+        elif koji_profile == "stg":
+            result["staging"] = True
+        else:
+            raise ConfigError(
+                "bodhi.staging must be set explicitly when koji.profile is "
+                f"{koji_profile!r} (not 'koji' or 'stg')."
+            )
+
+    if explicit_staging:
+        if koji_profile == "koji" and result["staging"] is True:
+            raise ConfigError(
+                "koji.profile is 'koji' but bodhi.staging is true; "
+                "production Koji requires production Bodhi (staging: false)."
+            )
+        if koji_profile == "stg" and result["staging"] is False:
+            raise ConfigError(
+                "koji.profile is 'stg' but bodhi.staging is false; "
+                "staging Koji requires staging Bodhi (staging: true)."
+            )
+
+    logger.debug(
+        "Parsed bodhi config: batch_size=%s staging=%s",
+        result["batch_size"],
+        result["staging"],
+    )
     return result
 
 
@@ -240,7 +276,7 @@ def _parse_static_configuration(cnf, ConfigError):
 
     if "bodhi" not in cnf:
         raise ConfigError("bodhi missing.")
-    n["bodhi"] = _parse_bodhi(cnf["bodhi"], ConfigError)
+    n["bodhi"] = _parse_bodhi(cnf["bodhi"], n["koji"]["profile"], ConfigError)
 
     if "db" not in cnf:
         raise ConfigError("db missing.")
