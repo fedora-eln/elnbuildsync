@@ -352,6 +352,7 @@ ${CONTAINER_ENGINE} run --rm --interactive --tty \
 	--env KRB5CCNAME=KCM:$(id -u) \
 	--volume /var/run/.heim_org.h5l.kcm-socket:/var/run/.heim_org.h5l.kcm-socket \
 	--volume ${SCRIPT_DIR}/etc:/etc/elnbuildsync:Z \
+	--volume ${SCRIPT_DIR}/fedora-messaging:/etc/fedora-messaging:Z \
 	"${CUSTOM_MOUNT_ARGS[@]}" \
 	--volume ${PROJ_DIR}:/tmp:Z \
 	localhost/elnbuildsync:local_test_daemon \
