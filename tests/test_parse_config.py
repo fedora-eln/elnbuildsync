@@ -117,6 +117,7 @@ class TestParseKoji:
         assert result["stable_tag"] == "eln"
         assert result["scratch_build"] is False
         assert result["fail_fast"] is False
+        assert result["wait_repo"] is True
 
     def test_scratch_build_and_fail_fast_true(self):
         result = _parse_koji(
@@ -132,6 +133,31 @@ class TestParseKoji:
         assert result["build_target"] == "eln"
         assert result["scratch_build"] is True
         assert result["fail_fast"] is True
+
+    def test_wait_repo_false(self):
+        result = _parse_koji(
+            {
+                "profile": "stg",
+                "build_target": "eln",
+                "stable_tag": "eln",
+                "wait_repo": False,
+            }
+        )
+        assert result["wait_repo"] is False
+
+    def test_wait_repo_false_with_koji_profile_raises(self):
+        with pytest.raises(
+            ConfigError,
+            match="koji.wait_repo cannot be false when koji.profile is 'koji'",
+        ):
+            _parse_koji(
+                {
+                    "profile": "koji",
+                    "build_target": "eln",
+                    "stable_tag": "eln",
+                    "wait_repo": False,
+                }
+            )
 
     def test_missing_profile_raises(self):
         with pytest.raises(ConfigError, match="koji.profile missing"):

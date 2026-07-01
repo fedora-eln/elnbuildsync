@@ -102,7 +102,7 @@ def _parse_open_id_connect(oidc_raw, ConfigError):
 
 def _parse_koji(cnf_koji, ConfigError):
     """Parse koji configuration. Returns dict with profile, build_target, stable_tag,
-    scratch_build, fail_fast, and optionally username.
+    scratch_build, fail_fast, wait_repo, and optionally username.
     """
     if "profile" not in cnf_koji:
         raise ConfigError("koji.profile missing.")
@@ -129,14 +129,24 @@ def _parse_koji(cnf_koji, ConfigError):
             "Configuration warning: koji.fail_fast not defined, assuming false."
         )
         result["fail_fast"] = False
+    if "wait_repo" in cnf_koji:
+        result["wait_repo"] = bool(cnf_koji["wait_repo"])
+    else:
+        result["wait_repo"] = True
+    if result["profile"] == "koji" and result["wait_repo"] is False:
+        raise ConfigError(
+            "koji.wait_repo cannot be false when koji.profile is 'koji'; "
+            "disabling wait_repo is unacceptable in the production deployment."
+        )
     logger.debug(
         "Parsed koji config: profile=%s build_target=%s stable_tag=%s "
-        "scratch_build=%s fail_fast=%s username=%s",
+        "scratch_build=%s fail_fast=%s wait_repo=%s username=%s",
         result["profile"],
         result["build_target"],
         result["stable_tag"],
         result["scratch_build"],
         result["fail_fast"],
+        result["wait_repo"],
         result.get("username"),
     )
     return result
