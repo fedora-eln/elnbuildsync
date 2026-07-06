@@ -269,8 +269,7 @@ The script:
 1. Ensures Python dependencies are installed (`pip install -r
    requirements.txt` and editable install of this tree).
 2. Creates a Podman network `ebs_local_test`.
-3. Starts a temporary PostgreSQL 18 container (`temp_postgres`) unless a
-   persistent one is already reachable on port 5432.
+3. Starts a temporary PostgreSQL 18 container (`temp_postgres`) on port 5432.
 4. Runs the EBS container with:
    - `tests/etc/` mounted at `/etc/elnbuildsync/` (static and dynamic
      config plus secrets)
@@ -293,15 +292,14 @@ Useful options:
 ./tests/local_test_daemon.sh --lull-time 10
 
 # Keep database data between runs
-./tests/local_test_daemon.sh --persistent-db \
-  --persistent-db-path tests/persistent_db
+./tests/local_test_daemon.sh --persistent-db
 
 # Use production Fedora Messaging broker config (instead of staging)
 ./tests/local_test_daemon.sh --environment prod
 ```
 
 When you stop the script (Ctrl+C), the ephemeral PostgreSQL container is
-removed unless you used `--persistent-db`.
+removed.
 
 ### Verify it is working
 
