@@ -63,12 +63,16 @@ class RebuildBatch:
         )
 
     async def async_init(self):
-        build_ids = []
         for build_trigger in self._unprocessed_build_triggers:
             await self.add_build_trigger(build_trigger)
 
-            if not config.skip_tag(build_trigger.component):
-                build_ids.append(build_trigger.build_id)
+        # Get the list of build_ids from self.build_triggers, since it will
+        # have deduplicated the set of components in self.add_build_trigger().
+        build_ids_to_tag = [
+            build_trigger.build_id
+            for build_trigger in self.build_triggers.values()
+            if not config.skip_tag(build_trigger.component)
+        ]
 
         (
             self._side_tag_base,
@@ -76,7 +80,7 @@ class RebuildBatch:
         ) = await kojihelpers.tags.get_tags_for_target(self.target)
 
         # Create the side-tag for this batch
-        self.side_tag = await self._create_and_populate_side_tag(build_ids)
+        self.side_tag = await self._create_and_populate_side_tag(build_ids_to_tag)
 
         return self
 
@@ -316,4 +320,3 @@ class RebuildBatch:
         except Exception:
             logger.exception("Failed to submit Bodhi update")
             raise
-
