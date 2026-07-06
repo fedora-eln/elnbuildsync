@@ -28,7 +28,7 @@
 # ARG_OPTIONAL_SINGLE([dynamic-config-file],[],[Dynamic configuration file],[tests/etc/dynamic-config/elnbuildsync_dynamic.yaml])
 # ARG_OPTIONAL_SINGLE([environment],[],[Environment],[stg])
 # ARG_OPTIONAL_BOOLEAN([persistent-db],[],[Use persistent database],[off])
-# ARG_OPTIONAL_SINGLE([persistent-db-path],[],[Path to persistent database],[tests/persistent_db])
+# ARG_OPTIONAL_SINGLE([persistent-db-volume],[],[Volume name for persistent database],[ebs_test_pgdata])
 # ARG_OPTIONAL_BOOLEAN([build-container],[],[Build the ELNBuildSync container],[off])
 # ARG_POSITIONAL_DOUBLEDASH([])
 # ARG_POSITIONAL_INF([custom],[Additional arguments to pass to the ELNBuildSync daemon])
@@ -69,13 +69,13 @@ _arg_static_config_file="tests/etc/static-config/elnbuildsync.yaml"
 _arg_dynamic_config_file="tests/etc/dynamic-config/elnbuildsync_dynamic.yaml"
 _arg_environment="stg"
 _arg_persistent_db="off"
-_arg_persistent_db_path="tests/persistent_db"
+_arg_persistent_db_volume="ebs_test_pgdata"
 _arg_build_container="off"
 
 
 print_help()
 {
-	printf 'Usage: %s [--log-level <arg>] [--db-pw-file <arg>] [--smtp-pw-file <arg>] [--openid-client-secret-file <arg>] [--lull-time <arg>] [--static-config-file <arg>] [--dynamic-config-file <arg>] [--environment <arg>] [--(no-)persistent-db] [--persistent-db-path <arg>] [--(no-)build-container] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
+	printf 'Usage: %s [--log-level <arg>] [--db-pw-file <arg>] [--smtp-pw-file <arg>] [--openid-client-secret-file <arg>] [--lull-time <arg>] [--static-config-file <arg>] [--dynamic-config-file <arg>] [--environment <arg>] [--(no-)persistent-db] [--persistent-db-volume <arg>] [--(no-)build-container] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
 	printf '\t%s\n' "<custom>: Additional arguments to pass to the ELNBuildSync daemon"
 	printf '\t%s\n' "--log-level: Log verbosity (default: 'INFO')"
 	printf '\t%s\n' "--db-pw-file: Database password file (default: 'tests/etc/secrets/ebs_db_pw')"
@@ -86,7 +86,7 @@ print_help()
 	printf '\t%s\n' "--dynamic-config-file: Dynamic configuration file (default: 'tests/etc/dynamic-config/elnbuildsync_dynamic.yaml')"
 	printf '\t%s\n' "--environment: Environment (default: 'stg')"
 	printf '\t%s\n' "--persistent-db, --no-persistent-db: Use persistent database (off by default)"
-	printf '\t%s\n' "--persistent-db-path: Path to persistent database (default: 'tests/persistent_db')"
+	printf '\t%s\n' "--persistent-db-volume: Volume name for persistent database (default: 'ebs_test_pgdata')"
 	printf '\t%s\n' "--build-container, --no-build-container: Build the ELNBuildSync container (off by default)"
 	printf '\t%s\n' "-h, --help: Prints help"
 	printf '\n%s\n' "Run the ELNBuildSync daemon for testing"
@@ -179,13 +179,13 @@ parse_commandline()
 				_arg_persistent_db="on"
 				test "${1:0:5}" = "--no-" && _arg_persistent_db="off"
 				;;
-			--persistent-db-path)
+			--persistent-db-volume)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
-				_arg_persistent_db_path="$2"
+				_arg_persistent_db_volume="$2"
 				shift
 				;;
-			--persistent-db-path=*)
-				_arg_persistent_db_path="${_key##--persistent-db-path=}"
+			--persistent-db-volume=*)
+				_arg_persistent_db_volume="${_key##--persistent-db-volume=}"
 				;;
 			--no-build-container|--build-container)
 				_arg_build_container="on"
@@ -271,7 +271,7 @@ function check_db_avail() {
 }
 
 function closedb() {
-    echo "Terminating non-persistent database"
+    echo "Terminating database"
     ${CONTAINER_ENGINE} stop temp_postgres
 }
 
@@ -286,12 +286,11 @@ if [ $db_ready -ne 0 ]; then
     echo -n "Starting up database container "
 
 	if [ "$_arg_persistent_db" == "on" ]; then
-	    echo "using persistent database"
-		mkdir -p ${_arg_persistent_db_path}
-		PERSISTENT_DB_ARG="--volume ${_arg_persistent_db_path}:/var/lib/postgresql/data:Z"
+		echo "using persistent database volume: ${_arg_persistent_db_volume}"
+		PERSISTENT_DB_ARG=(--volume "${_arg_persistent_db_volume}:/var/lib/postgresql")
 	else
 		echo "using non-persistent database"
-		PERSISTENT_DB_ARG=""
+		PERSISTENT_DB_ARG=()
 	fi
     ${CONTAINER_ENGINE} pull docker.io/postgres:$POSTGRES_VERSION
     ${CONTAINER_ENGINE} run --rm --detach \
@@ -301,6 +300,7 @@ if [ $db_ready -ne 0 ]; then
         --name temp_postgres \
         --env POSTGRES_PASSWORD_FILE=/run/secrets/ebs_db_pw \
         --env POSTGRES_USER=elnbuildsync \
+        "${PERSISTENT_DB_ARG[@]}" \
         docker.io/postgres:$POSTGRES_VERSION
     trap closedb EXIT
 
