@@ -57,6 +57,15 @@ logger = logging.getLogger(__name__)
 SESSION_COOKIE_NAME = "ebs_session"
 SESSION_DURATION_HOURS = 24
 
+# Path to CA certificate file for OIDC HTTPS connections (set from --openid-ca-file)
+openid_ca_file = None
+
+
+def _oidc_httpx_client():
+    if openid_ca_file:
+        return httpx.AsyncClient(verify=openid_ca_file)
+    return httpx.AsyncClient()
+
 
 class AuthError(Exception):
     """Base exception for authentication errors."""
@@ -133,7 +142,7 @@ async def exchange_code_for_token(code: str, redirect_uri: str) -> dict:
     headers = {"Authorization": f"Basic {credentials}"}
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with _oidc_httpx_client() as client:
             response = await client.post(
                 oidc_config["token_endpoint"],
                 data={
@@ -175,7 +184,7 @@ async def get_user_info(access_token: str) -> dict:
         raise OIDCError("UserInfo endpoint not configured")
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with _oidc_httpx_client() as client:
             response = await client.get(
                 oidc_config["userinfo_endpoint"],
                 headers={"Authorization": f"Bearer {access_token}"},

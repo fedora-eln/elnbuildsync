@@ -171,7 +171,8 @@ Important sections:
   `0` means no splitting).
 - **`configuration.db`**: PostgreSQL connection settings.
 - **`configuration.open_id_connect`**: OIDC settings for `/trigger`
-  (client secret via `--openid-client-secret-file`, not in YAML)
+  (client secret via `--openid-client-secret-file`, not in YAML; use
+  `--openid-ca-file` when the OIDC provider uses a non-public CA)
 - **`components`**: Autopackagelist resolver and per-package overrides.
 
 ### Deployment artifacts
@@ -231,8 +232,9 @@ You also need:
   | `tests/etc/secrets/ebs_oidc_client_secret` | OIDC client secret (one line) |
 
   These may be overridden with `--static-config-file`,
-  `--dynamic-config-file`, `--db-pw-file`, `--smtp-pw-file`, and
-  `--openid-client-secret-file` when calling `tests/local_test_daemon.sh`.
+  `--dynamic-config-file`, `--db-pw-file`, `--smtp-pw-file`,
+  `--openid-client-secret-file`, and `--openid-ca-file` when calling
+  `tests/local_test_daemon.sh`.
 
 - **Fedora Messaging certificates** are vendored under
   `tests/fedora-messaging/` (see `tests/fedora-messaging/README.md`).
@@ -245,6 +247,22 @@ YAML file. The default config points at tinystage for OIDC; register a
 client at [tiny-stage](https://github.com/fedora-infra/tiny-stage) if you
 need authenticated triggering. OIDC can be disabled by setting
 `open_id_connect: false`.
+
+When testing against [tiny-stage](https://github.com/fedora-infra/tiny-stage),
+note that its web services (including Ipsilon at
+`https://ipsilon.tinystage.test/`) use a private CA. ELNBuildSync's OIDC
+token and userinfo requests must trust that CA. Download the IPA CA
+certificate from `https://ipa.tinystage.test/ipa/config/ca.crt` (requires
+tinystage to be running and reachable) and pass it to the daemon with
+`--openid-ca-file`:
+
+```bash
+curl -o tinystage-ca.crt https://ipa.tinystage.test/ipa/config/ca.crt
+./tests/local_test_daemon.sh --openid-ca-file tinystage-ca.crt
+```
+
+See the [tiny-stage HTTPS documentation](https://github.com/fedora-infra/tiny-stage#https)
+for other ways to trust the CA on your workstation.
 
 ### First run: build the container image
 
@@ -332,7 +350,8 @@ git repository (see `run.sh --dynamic-config-url`) or
 `/etc/elnbuildsync/dynamic-config/elnbuildsync_dynamic.yaml`. Database,
 SMTP, and OIDC client secrets mount at `/etc/elnbuildsync/secrets/`
 (`ebs_db_pw`, `ebs_smtp_pw`, `ebs_oidc_client_secret`). Pass
-`--openid-client-secret-file` when the secret is mounted elsewhere. A
+`--openid-client-secret-file` when the secret is mounted elsewhere, and
+`--openid-ca-file` when the OIDC provider uses a non-public CA. A
 service keytab is used for `eln-buildsync@FEDORAPROJECT.ORG`. OpenShift
 deployment is managed via
 [infra-ansible](https://forge.fedoraproject.org/infra/ansible)
