@@ -402,6 +402,62 @@ class LogLevelPage(ProtectedResource):
         request.write(f"Log level set to {self.loglevel}\n".encode())
 
 
+class ControlResource(Resource):
+    """
+    ControlResource
+
+    Runtime control endpoints for ELNBuildSync. Currently supports pausing and
+    unpausing message processing via /control/pause and /control/unpause.
+    These endpoints require authentication if OpenID Connect is configured,
+    and admin group membership when auth is enabled.
+    """
+
+    def getChild(self, name, request):
+        return ControlPage(name)
+
+
+class ControlPage(ProtectedResource):
+    def __init__(self, name):
+        super().__init__()
+        self.action = name.decode("UTF-8").lower()
+
+    def _persistence_warning(self):
+        if config.scmurl:
+            config_location = config.scmurl
+        else:
+            config_location = "the dynamic configuration source"
+
+        return (
+            "WARNING: This pause state is not persistent and will be reset when "
+            "ELNBuildSync restarts.\n"
+            "To make it permanent, update control.pause in the dynamic "
+            f"configuration at {config_location}.\n"
+        )
+
+    async def _handle_get(self, user):
+        request = self.request
+        request.setHeader("Cache-Control", "no-cache")
+
+        if not started or config.control is None:
+            request.setResponseCode(503)
+            request.write(b"Configuration not loaded\n")
+            return
+
+        if self.action == "pause":
+            config.control["pause"] = True
+            message = "Processing of new requests has been paused"
+        elif self.action == "unpause":
+            config.control["pause"] = False
+            message = "Processing of new requests has been resumed"
+        else:
+            request.setResponseCode(404)
+            request.write(f"Unknown control action: {self.action}\n".encode())
+            return
+
+        logger.critical("%s by user %s", self.action, user["username"])
+        request.write(f"{message}<br/><br/>{self._persistence_warning()}".encode())
+
+
 # =============================================================================
 # OpenID Connect Authentication Resources
 # =============================================================================
@@ -656,6 +712,7 @@ def setup_web_resources():
     root.putChild(b"startup", StartupResource())
     root.putChild(b"alive", LivenessResource())
     root.putChild(b"loglevel", LogLevelResource())
+    root.putChild(b"control", ControlResource())
     root.putChild(b"status.json", StatusJSONResource())
     root.putChild(b"status.html", StatusPageResource())
     root.putChild(b"status", Redirect(b"status.html"))
