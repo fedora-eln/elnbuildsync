@@ -148,6 +148,8 @@ class StatusPageResource(Resource):
     def _failed(self, failure):
         logger.error(f"Status page failed: {failure}")
         if not self.request.finished:
+            self.request.setResponseCode(500)
+            self.request.write(b"Internal server error")
             self.request.finish()
 
     def render_GET(self, request):
@@ -176,7 +178,91 @@ class StatusPageResource(Resource):
             request.write(b"Status page template not available")
 
 
-class TriggerBuildResource(Resource):
+class ProtectedResource(Resource):
+    """
+    Base resource for admin-only endpoints protected by OpenID Connect.
+
+    Subclasses must implement _handle_get(user) and optionally
+    _handle_post(user) for GET and POST requests, respectively.
+    """
+
+    def _done(self, data):
+        if not self.request.finished:
+            self.request.finish()
+
+    def _failed(self, failure):
+        logger.error(failure)
+        if not self.request.finished:
+            self.request.setResponseCode(500)
+            self.request.write(b"Internal server error")
+            self.request.finish()
+
+    def _run_async(self, coro):
+        deferred = Deferred.fromFuture(asyncio.ensure_future(coro))
+        deferred.addCallback(self._done)
+        deferred.addErrback(self._failed)
+        return NOT_DONE_YET
+
+    def render_GET(self, request):
+        self.request = request
+        return self._run_async(self._do_get())
+
+    async def _require_user(self, *, method=None):
+        request = self.request
+        if method is None:
+            method = request.method.decode("utf-8").upper()
+
+        user = await _check_request_auth(request)
+        if user is None:
+            if method == "GET":
+                _redirect_to_login(request)
+            else:
+                request.setResponseCode(401)
+                request.write(b"Authentication required\n")
+            return None
+
+        if auth.check_group_membership(user["groups"]):
+            return user
+
+        admin_groups = config.main["open_id_connect"]["admin_groups"]
+        request.setResponseCode(403)
+        request.setHeader("Content-Type", "text/html; charset=utf-8")
+        request.write(
+            (
+                "Access denied. You must be a member of one of these admin groups: "
+                f"{', '.join(admin_groups)}"
+            ).encode()
+        )
+        return None
+
+    async def _do_get(self):
+        user = await self._require_user()
+        if user is None:
+            return
+        await self._handle_get(user)
+
+    async def _handle_get(self, user):
+        raise NotImplementedError
+
+    def render_POST(self, request):
+        self.request = request
+        return self._run_async(self._do_post())
+
+    async def _do_post(self):
+        request = self.request
+        request.setHeader("Cache-Control", "no-cache")
+
+        user = await self._require_user()
+        if user is None:
+            return
+
+        await self._handle_post(user)
+
+    async def _handle_post(self, user):
+        raise NotImplementedError
+
+
+class TriggerBuildResource(ProtectedResource):
     """
     TriggerBuildResource
 
@@ -192,43 +278,9 @@ class TriggerBuildResource(Resource):
             return self
         return Resource.getChild(self, name, request)
 
-    def _done(self, data):
-        if not self.request.finished:
-            self.request.finish()
-
-    def _failed(self, data):
-        logger.critical(data)
-        if not self.request.finished:
-            self.request.finish()
-
-    def render_GET(self, request):
+    async def _handle_get(self, user):
         """Show a simple form or info page for the trigger endpoint."""
-        self.request = request
-
-        deferred = Deferred.fromFuture(asyncio.ensure_future(self._do_get()))
-        deferred.addCallback(self._done)
-        deferred.addErrback(self._failed)
-        return NOT_DONE_YET
-
-    async def _do_get(self):
         request = self.request
-
-        # Check authentication
-        user = await _check_request_auth(request)
-        if user is None:
-            _redirect_to_login(request)
-            return
-
-        # Require admin group membership for /trigger
-        if not auth.check_group_membership(user["groups"]):
-            admin_groups = config.main["open_id_connect"]["admin_groups"]
-            request.setResponseCode(403)
-            request.setHeader("Content-Type", "text/html; charset=utf-8")
-            request.write(
-                f"Access denied. You must be a member of one of these admin groups: "
-                f"{', '.join(admin_groups)}".encode()
-            )
-            return
 
         request.setHeader("Content-Type", "text/html; charset=utf-8")
         request.setHeader("Cache-Control", "no-cache")
@@ -278,31 +330,8 @@ class TriggerBuildResource(Resource):
 </html>"""
         request.write(html.encode())
 
-    def render_POST(self, request):
-        self.request = request
-
-        deferred = Deferred.fromFuture(asyncio.ensure_future(self._do_post()))
-        deferred.addCallback(self._done)
-        deferred.addErrback(self._failed)
-        return NOT_DONE_YET
-
-    async def _do_post(self):
+    async def _handle_post(self, user):
         request = self.request
-        request.setHeader("Cache-Control", "no-cache")
-
-        # Check authentication first
-        user = await _check_request_auth(request)
-        if user is None:
-            # For API calls, return 401 instead of redirect
-            request.setResponseCode(401)
-            request.write(b"Authentication required\n")
-            return
-
-        # Require admin group membership for trigger POST
-        if not auth.check_group_membership(user["groups"]):
-            request.setResponseCode(403)
-            request.write(b"Access denied. Admin group membership required.\n")
-            return
 
         logger.info(f"Build trigger request from user {user['username']}")
 
@@ -341,26 +370,36 @@ class LogLevelResource(Resource):
     LogLevelResource
 
     Sets the log level of the application or returns 400 if an invalid log
-    level is specified
+    level is specified. This endpoint requires authentication if OpenID Connect
+    is configured, and admin group membership when auth is enabled.
     """
 
     def getChild(self, name, request):
         return LogLevelPage(name)
 
 
-class LogLevelPage(Resource):
+class LogLevelPage(ProtectedResource):
     def __init__(self, name):
         super().__init__()
         self.loglevel = name.decode("UTF-8").upper()
 
-    def render_GET(self, request):
+    async def _handle_get(self, user):
+        request = self.request
+        request.setHeader("Cache-Control", "no-cache")
+
         try:
             logging.getLogger().setLevel(self.loglevel)
         except ValueError:
-            return f"Invalid log level: {self.loglevel}".encode("UTF-8")
+            request.setResponseCode(400)
+            request.write(f"Invalid log level: {self.loglevel}\n".encode())
+            return
 
-        logger.warning(f"Log Level changed to {self.loglevel}")
-        return f"Log level set to {self.loglevel}".encode("UTF-8")
+        logger.critical(
+            "Log level changed to %s by user %s",
+            self.loglevel,
+            user["username"],
+        )
+        request.write(f"Log level set to {self.loglevel}\n".encode())
 
 
 # =============================================================================
@@ -440,7 +479,7 @@ class LoginResource(Resource):
             return b"Authentication not configured"
 
         # Get the return URL (where to redirect after login)
-        return_to = request.args.get(b"return_to", [b"/trigger"])[0].decode("utf-8")
+        return_to = request.args.get(b"return_to", [b"/status.html"])[0].decode("utf-8")
 
         # Build the callback URL
         base_url = _get_base_url(request)
