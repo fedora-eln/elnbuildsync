@@ -23,6 +23,7 @@
 # ARG_OPTIONAL_SINGLE([db-pw-file],[],[Database password file],[tests/etc/secrets/ebs_db_pw])
 # ARG_OPTIONAL_SINGLE([smtp-pw-file],[],[SMTP password file],[tests/etc/secrets/ebs_smtp_pw])
 # ARG_OPTIONAL_SINGLE([openid-client-secret-file],[],[OIDC client secret file],[tests/etc/secrets/ebs_oidc_client_secret])
+# ARG_OPTIONAL_SINGLE([openid-ca-file],[],[OIDC CA certificate file],[])
 # ARG_OPTIONAL_SINGLE([lull-time],[],[Time to wait after the last trigger before starting the batch],[5])
 # ARG_OPTIONAL_SINGLE([static-config-file],[],[Static configuration file],[tests/etc/static-config/elnbuildsync.yaml])
 # ARG_OPTIONAL_SINGLE([dynamic-config-file],[],[Dynamic configuration file],[tests/etc/dynamic-config/elnbuildsync_dynamic.yaml])
@@ -64,6 +65,7 @@ _arg_log_level="INFO"
 _arg_db_pw_file="tests/etc/secrets/ebs_db_pw"
 _arg_smtp_pw_file="tests/etc/secrets/ebs_smtp_pw"
 _arg_openid_client_secret_file="tests/etc/secrets/ebs_oidc_client_secret"
+_arg_openid_ca_file=
 _arg_lull_time="5"
 _arg_static_config_file="tests/etc/static-config/elnbuildsync.yaml"
 _arg_dynamic_config_file="tests/etc/dynamic-config/elnbuildsync_dynamic.yaml"
@@ -75,12 +77,13 @@ _arg_build_container="off"
 
 print_help()
 {
-	printf 'Usage: %s [--log-level <arg>] [--db-pw-file <arg>] [--smtp-pw-file <arg>] [--openid-client-secret-file <arg>] [--lull-time <arg>] [--static-config-file <arg>] [--dynamic-config-file <arg>] [--environment <arg>] [--(no-)persistent-db] [--persistent-db-volume <arg>] [--(no-)build-container] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
+	printf 'Usage: %s [--log-level <arg>] [--db-pw-file <arg>] [--smtp-pw-file <arg>] [--openid-client-secret-file <arg>] [--openid-ca-file <arg>] [--lull-time <arg>] [--static-config-file <arg>] [--dynamic-config-file <arg>] [--environment <arg>] [--(no-)persistent-db] [--persistent-db-volume <arg>] [--(no-)build-container] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
 	printf '\t%s\n' "<custom>: Additional arguments to pass to the ELNBuildSync daemon"
 	printf '\t%s\n' "--log-level: Log verbosity (default: 'INFO')"
 	printf '\t%s\n' "--db-pw-file: Database password file (default: 'tests/etc/secrets/ebs_db_pw')"
 	printf '\t%s\n' "--smtp-pw-file: SMTP password file (default: 'tests/etc/secrets/ebs_smtp_pw')"
 	printf '\t%s\n' "--openid-client-secret-file: OIDC client secret file (default: 'tests/etc/secrets/ebs_oidc_client_secret')"
+	printf '\t%s\n' "--openid-ca-file: OIDC CA certificate file (no default)"
 	printf '\t%s\n' "--lull-time: Time to wait after the last trigger before starting the batch (default: '5')"
 	printf '\t%s\n' "--static-config-file: Static configuration file (default: 'tests/etc/static-config/elnbuildsync.yaml')"
 	printf '\t%s\n' "--dynamic-config-file: Dynamic configuration file (default: 'tests/etc/dynamic-config/elnbuildsync_dynamic.yaml')"
@@ -142,6 +145,14 @@ parse_commandline()
 				;;
 			--openid-client-secret-file=*)
 				_arg_openid_client_secret_file="${_key##--openid-client-secret-file=}"
+				;;
+			--openid-ca-file)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_openid_ca_file="$2"
+				shift
+				;;
+			--openid-ca-file=*)
+				_arg_openid_ca_file="${_key##--openid-ca-file=}"
 				;;
 			--lull-time)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
@@ -333,6 +344,13 @@ if [ "${_arg_openid_client_secret_file}" != "${DEFAULT_OIDC_CLIENT_SECRET_FILE}"
     CUSTOM_MOUNT_ARGS+=(--volume "$(realpath "${_arg_openid_client_secret_file}"):${CONTAINER_OIDC_CLIENT_SECRET}:ro,Z")
 fi
 
+OPENID_CA_CONTAINER_ARG=()
+if [ -n "${_arg_openid_ca_file}" ]; then
+    CONTAINER_OPENID_CA_FILE="/etc/elnbuildsync/custom/openid_ca.pem"
+    CUSTOM_MOUNT_ARGS+=(--volume "$(realpath "${_arg_openid_ca_file}"):${CONTAINER_OPENID_CA_FILE}:ro,Z")
+    OPENID_CA_CONTAINER_ARG=(--openid-ca-file "${CONTAINER_OPENID_CA_FILE}")
+fi
+
 if [ "${_arg_static_config_file}" != "${DEFAULT_STATIC_CONFIG_FILE}" ]; then
     CONTAINER_STATIC_CONFIG="/etc/elnbuildsync/custom/static.yaml"
     CUSTOM_MOUNT_ARGS+=(--volume "$(realpath "${_arg_static_config_file}"):${CONTAINER_STATIC_CONFIG}:ro,Z")
@@ -361,6 +379,7 @@ ${CONTAINER_ENGINE} run --rm --interactive --tty \
 	--dynamic-config-file "${CONTAINER_DYNAMIC_CONFIG}" \
 	--lull-time "$_arg_lull_time" \
 	--openid-client-secret-file "${CONTAINER_OIDC_CLIENT_SECRET}" \
+	"${OPENID_CA_CONTAINER_ARG[@]}" \
 	${_arg_custom[@]} \
 	2>&1 | tee /tmp/elnbuildsync.log
 

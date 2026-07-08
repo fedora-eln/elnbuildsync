@@ -41,6 +41,7 @@ import tempfile  # noqa: E402
 from twisted.internet import task  # noqa: E402
 from twisted.internet.defer import Deferred  # noqa: E402
 
+from . import auth  # noqa: E402
 from . import batching  # noqa: E402
 from . import cleanup  # noqa: E402
 from . import db_models  # noqa: E402
@@ -129,6 +130,12 @@ def _resolve_dynamic_source(dynamic_config_url, dynamic_config_file):
     help="File containing one line: OIDC client secret for configuration.open_id_connect",
 )
 @click.option(
+    "--openid-ca-file",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False),
+    help="CA certificate file for OIDC HTTPS connections",
+)
+@click.option(
     "--untagging/--no-untagging",
     default=False,
     help="Untag all but the most recent builds in the destination target",
@@ -143,6 +150,7 @@ def main(
     db_pw_file,
     smtp_pw_file,
     openid_client_secret_file,
+    openid_ca_file,
     untagging,
 ):
     logging.basicConfig(
@@ -177,6 +185,7 @@ def main(
                 dynamic_url,
                 dynamic_file,
                 openid_client_secret_file,
+                openid_ca_file,
             )
         )
     )
@@ -190,7 +199,9 @@ async def _main(
     dynamic_config_url=None,
     dynamic_config_file=None,
     openid_client_secret_file=None,
+    openid_ca_file=None,
 ) -> None:
+    auth.openid_ca_file = openid_ca_file
     config.terminator = Deferred()
     with tempfile.TemporaryDirectory(prefix="elnbuildsync-") as cdir:
         config.tmpdir = cdir
