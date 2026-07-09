@@ -39,6 +39,7 @@ from elnbuildsync.config import (
     _parse_koji,
     _parse_open_id_connect,
     _parse_static_configuration,
+    clear_pause_override,
     ensure_downstream_name,
     get_config_ref,
     get_order,
@@ -50,6 +51,7 @@ from elnbuildsync.config import (
     load_dynamic_config,
     load_static_config,
     loglevel,
+    pause_processing,
     retries,
     skip_tag,
     split_module,
@@ -1279,6 +1281,12 @@ class TestEnsureDownstreamName:
 
 
 class TestIsPaused:
+    def setup_method(self):
+        clear_pause_override()
+
+    def teardown_method(self):
+        clear_pause_override()
+
     def test_paused_true(self, monkeypatch):
         monkeypatch.setattr(
             config_mod,
@@ -1294,6 +1302,40 @@ class TestIsPaused:
             {"pause": False},
         )
         assert is_paused() is False
+
+    def test_pause_override_forces_paused(self, monkeypatch):
+        monkeypatch.setattr(
+            config_mod,
+            "control",
+            {"pause": False},
+        )
+        pause_processing()
+        assert is_paused() is True
+
+    def test_clear_pause_override_follows_config(self, monkeypatch):
+        monkeypatch.setattr(
+            config_mod,
+            "control",
+            {"pause": True},
+        )
+        pause_processing()
+        assert is_paused() is True
+        clear_pause_override()
+        assert is_paused() is True
+
+    def test_pause_override_survives_config_reload(self, monkeypatch):
+        monkeypatch.setattr(
+            config_mod,
+            "control",
+            {"pause": False},
+        )
+        pause_processing()
+        monkeypatch.setattr(
+            config_mod,
+            "control",
+            {"pause": False, "trigger_tag": "f42"},
+        )
+        assert is_paused() is True
 
 
 class TestConfigError:
