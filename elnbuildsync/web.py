@@ -264,8 +264,10 @@ class TriggerBuildResource(ProtectedResource):
     TriggerBuildResource
 
     Accepts a POST request containing a JSON list of components to rebuild for
-    ELN. This endpoint requires authentication if OpenID Connect is configured.
-    The components are expected to be provided as their downstream names.
+    ELN. GET shows an informational HTML page with curl instructions. POST with
+    a Bearer token triggers builds. Requires authentication if OpenID Connect
+    is configured. The components are expected to be provided as their downstream
+    names.
     """
 
     isLeaf = True
@@ -280,36 +282,12 @@ class TriggerBuildResource(ProtectedResource):
         request.setHeader("Content-Type", "text/html; charset=utf-8")
         request.setHeader("Cache-Control", "no-cache")
 
-        # Optional: show authorization token for use with curl (Bearer header)
-        show_token = request.args.get(b"show_token", [b""])[0] in (
-            b"1",
-            b"true",
-            b"yes",
+        token_block = _bearer_token_html_block(
+            request,
+            page_url="/trigger",
+            post_path="/trigger",
+            curl_extra='-H "Content-Type: application/json" -d \'["bash", "glibc"]\' ',
         )
-        token_block = ""
-        if show_token:
-            session_id = auth.get_bearer_token(request) or auth.get_session_cookie(
-                request
-            )
-            if session_id:
-                trigger_url = _get_base_url(request) + "/trigger"
-                curl_example = (
-                    f'curl -X POST -H "Content-Type: application/json" '
-                    f'-H "Authorization: Bearer {session_id}" '
-                    f'-d \'["bash", "glibc"]\' {trigger_url}'
-                )
-                token_block = f"""
-<h2>Authorization token for curl</h2>
-<p>Use this token in the <code>Authorization: Bearer</code> header:</p>
-<pre style="background:#f5f5f5; padding: 0.5em; overflow-x: auto;">{session_id}</pre>
-<h2>Example curl command</h2>
-<pre style="background:#f5f5f5; padding: 0.5em; overflow-x: auto;">{curl_example}</pre>
-<p><a href="/trigger">Hide token</a></p>
-"""
-            else:
-                token_block = "<p>Could not determine session token.</p>"
-        else:
-            token_block = '<p><a href="/trigger?show_token=1">Display authorization token for curl</a></p>'
 
         html = f"""<!DOCTYPE html>
 <html>
@@ -326,6 +304,9 @@ class TriggerBuildResource(ProtectedResource):
         request.write(html.encode())
 
     async def _handle_post(self, request, user):
+        if not _require_bearer_for_mutation(request):
+            return
+
         logger.info(f"Build trigger request from user {user['username']}")
 
         if not started or config.is_paused():
@@ -362,9 +343,10 @@ class LogLevelResource(Resource):
     """
     LogLevelResource
 
-    Sets the log level of the application or returns 400 if an invalid log
-    level is specified. This endpoint requires authentication if OpenID Connect
-    is configured, and admin group membership when auth is enabled.
+    Runtime log level control via /loglevel/<LEVEL>. GET shows an informational
+    HTML page with curl instructions. POST with a Bearer token sets the level.
+    Requires authentication if OpenID Connect is configured, and admin group
+    membership when auth is enabled.
     """
 
     def getChild(self, name, request):
@@ -376,8 +358,47 @@ class LogLevelPage(ProtectedResource):
         super().__init__()
         self.loglevel = name.decode("UTF-8").upper()
 
+    def _log_level_path(self):
+        return f"/loglevel/{self.loglevel}"
+
     async def _handle_get(self, request, user):
+        request.setHeader("Content-Type", "text/html; charset=utf-8")
         request.setHeader("Cache-Control", "no-cache")
+
+        current_level = logging.getLevelName(logging.getLogger().getEffectiveLevel())
+        invalid_block = ""
+        try:
+            logging._checkLevel(self.loglevel)
+        except (TypeError, ValueError):
+            invalid_block = (
+                f"<p><strong>Invalid log level: {self.loglevel}</strong></p>"
+            )
+
+        token_block = _bearer_token_html_block(
+            request,
+            page_url=self._log_level_path(),
+            post_path=self._log_level_path(),
+        )
+
+        html = f"""<!DOCTYPE html>
+<html>
+<head><title>ELN Build Sync Log Level</title></head>
+<body>
+<h1>ELN Build Sync Log Level — {self.loglevel}</h1>
+<p>Logged in as: <strong>{user["username"]}</strong></p>
+<p>Groups: {", ".join(user["groups"])}</p>
+<p>Current root log level: {current_level}</p>
+<p>To set the log level to {self.loglevel}, POST to this endpoint with a Bearer token.</p>
+{invalid_block}
+{token_block}
+<p><a href="/logout">Logout</a></p>
+</body>
+</html>"""
+        request.write(html.encode())
+
+    async def _handle_post(self, request, user):
+        if not _require_bearer_for_mutation(request):
+            return
 
         try:
             logging.getLogger().setLevel(self.loglevel)
@@ -400,8 +421,9 @@ class ControlResource(Resource):
 
     Runtime control endpoints for ELNBuildSync. Currently supports pausing and
     unpausing message processing via /control/pause and /control/unpause.
-    These endpoints require authentication if OpenID Connect is configured,
-    and admin group membership when auth is enabled.
+    GET shows an informational HTML page with curl instructions. POST with a
+    Bearer token performs the action. Requires authentication if OpenID Connect
+    is configured, and admin group membership when auth is enabled.
     """
 
     def getChild(self, name, request):
@@ -412,6 +434,9 @@ class ControlPage(ProtectedResource):
     def __init__(self, name):
         super().__init__()
         self.action = name.decode("UTF-8").lower()
+
+    def _control_path(self):
+        return f"/control/{self.action}"
 
     def _persistence_warning(self):
         if config.scmurl:
@@ -434,19 +459,60 @@ class ControlPage(ProtectedResource):
             request.write(b"Configuration not loaded\n")
             return
 
-        if self.action == "pause":
-            config.control["pause"] = True
-            message = "Processing of new requests has been paused"
-        elif self.action == "unpause":
-            config.control["pause"] = False
-            message = "Processing of new requests has been resumed"
-        else:
+        if self.action not in ("pause", "unpause"):
             request.setResponseCode(404)
             request.write(f"Unknown control action: {self.action}\n".encode())
             return
 
+        request.setHeader("Content-Type", "text/html; charset=utf-8")
+        current_state = "paused" if config.is_paused() else "active"
+        action_verb = "pause" if self.action == "pause" else "unpause"
+
+        token_block = _bearer_token_html_block(
+            request,
+            page_url=self._control_path(),
+            post_path=self._control_path(),
+        )
+
+        html = f"""<!DOCTYPE html>
+<html>
+<head><title>ELN Build Sync Control</title></head>
+<body>
+<h1>ELN Build Sync Control — {self.action}</h1>
+<p>Logged in as: <strong>{user["username"]}</strong></p>
+<p>Groups: {", ".join(user["groups"])}</p>
+<p>Current state: {current_state}</p>
+<p>To {action_verb} processing, POST to this endpoint with a Bearer token.</p>
+<pre>{self._persistence_warning()}</pre>
+{token_block}
+<p><a href="/logout">Logout</a></p>
+</body>
+</html>"""
+        request.write(html.encode())
+
+    async def _handle_post(self, request, user):
+        if not started or config.control is None:
+            request.setResponseCode(503)
+            request.write(b"Configuration not loaded\n")
+            return
+
+        if self.action not in ("pause", "unpause"):
+            request.setResponseCode(404)
+            request.write(f"Unknown control action: {self.action}\n".encode())
+            return
+
+        if not _require_bearer_for_mutation(request):
+            return
+
+        if self.action == "pause":
+            config.control["pause"] = True
+            message = "Processing of new requests has been paused"
+        else:
+            config.control["pause"] = False
+            message = "Processing of new requests has been resumed"
+
         logger.critical("%s by user %s", self.action, user["username"])
-        request.write(f"{message}<br/><br/>{self._persistence_warning()}".encode())
+        request.write(f"{message}\n\n{self._persistence_warning()}".encode())
 
 
 # =============================================================================
@@ -469,6 +535,48 @@ def _get_base_url(request) -> str:
         proto = "https" if request.isSecure() else "http"
 
     return f"{proto}://{host}"
+
+
+def _require_bearer_for_mutation(request) -> bool:
+    """Return False and write 403 if auth is enabled but no Bearer token present."""
+    if auth.is_auth_enabled() and not auth.get_bearer_token(request):
+        request.setResponseCode(403)
+        request.write(b"Bearer token required\n")
+        return False
+    return True
+
+
+def _bearer_token_html_block(
+    request, *, page_url: str, post_path: str, curl_extra: str = ""
+) -> str:
+    """Return HTML fragment with show_token toggle, token display, and curl POST example."""
+    show_token = request.args.get(b"show_token", [b""])[0] in (
+        b"1",
+        b"true",
+        b"yes",
+    )
+    if not show_token:
+        return (
+            f'<p><a href="{page_url}?show_token=1">'
+            "Display authorization token for curl</a></p>"
+        )
+
+    session_id = auth.get_bearer_token(request) or auth.get_session_cookie(request)
+    if not session_id:
+        return "<p>Could not determine session token.</p>"
+
+    post_url = _get_base_url(request) + post_path
+    curl_example = (
+        f'curl -X POST -H "Authorization: Bearer {session_id}" {curl_extra}{post_url}'
+    )
+    return f"""
+<h2>Authorization token for curl</h2>
+<p>Use this token in the <code>Authorization: Bearer</code> header:</p>
+<pre style="background:#f5f5f5; padding: 0.5em; overflow-x: auto;">{session_id}</pre>
+<h2>Example curl command</h2>
+<pre style="background:#f5f5f5; padding: 0.5em; overflow-x: auto;">{curl_example}</pre>
+<p><a href="{page_url}">Hide token</a></p>
+"""
 
 
 async def _check_request_auth(request):
