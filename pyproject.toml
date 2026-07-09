@@ -44,4 +44,4 @@ build-backend = "setuptools.build_meta"
 include = ["elnbuildsync*"]
 
 [tool.setuptools.package-data]
-elnbuildsync = ["templates/status.html"]
+elnbuildsync = ["templates/status.html", "static/*"]
