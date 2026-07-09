@@ -70,6 +70,7 @@ waitrepo_timeout = 20 * 60
 cleanup_processor = None
 status_processor = None
 tmpdir = None
+_pause_override = None
 
 # SMTP (see email.py); password set from daemon --smtp-pw-file before load_config
 emailer = None
@@ -468,7 +469,21 @@ def get_order(comp):
 
 
 def is_paused():
+    if _pause_override is True:
+        return True
+    if control is None:
+        return False
     return control["pause"]
+
+
+def pause_processing():
+    global _pause_override
+    _pause_override = True
+
+
+def clear_pause_override():
+    global _pause_override
+    _pause_override = None
 
 
 def get_upstream_name(downstream_component):

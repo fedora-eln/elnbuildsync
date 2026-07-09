@@ -505,10 +505,10 @@ class ControlPage(ProtectedResource):
             return
 
         if self.action == "pause":
-            config.control["pause"] = True
+            config.pause_processing()
             message = "Processing of new requests has been paused"
         else:
-            config.control["pause"] = False
+            config.clear_pause_override()
             message = "Processing of new requests has been resumed"
 
         logger.critical("%s by user %s", self.action, user["username"])
