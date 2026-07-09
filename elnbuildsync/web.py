@@ -19,16 +19,19 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 import asyncio
+import importlib.metadata
 import json
 import logging
 import os
 import secrets
+from string import Template
 
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred
 from twisted.web.error import Error as WebError
 from twisted.web.resource import Resource
 from twisted.web.server import Site, NOT_DONE_YET
+from twisted.web.static import File
 from twisted.web.util import Redirect
 
 from . import auth
@@ -46,6 +49,13 @@ _oidc_state_store = {}
 # Globals
 started = False
 alive = True
+
+
+def _elnbuildsync_version() -> str:
+    try:
+        return importlib.metadata.version("ELNBuildSync")
+    except importlib.metadata.PackageNotFoundError:
+        return "unknown"
 
 
 class RootResource(Resource):
@@ -166,8 +176,9 @@ class StatusPageResource(Resource):
             os.path.dirname(__file__), "templates", "status.html"
         )
         try:
-            with open(template_path, "rb") as f:
-                request.write(f.read())
+            with open(template_path, encoding="utf-8") as f:
+                content = Template(f.read()).substitute(version=_elnbuildsync_version())
+            request.write(content.encode("utf-8"))
         except OSError as e:
             logger.exception("Failed to read status template: %s", e)
             request.setResponseCode(500)
@@ -811,6 +822,10 @@ def setup_web_resources():
     root.putChild(b"status.json", StatusJSONResource())
     root.putChild(b"status.html", StatusPageResource())
     root.putChild(b"status", Redirect(b"status.html"))
+    root.putChild(
+        b"static",
+        File(os.path.join(os.path.dirname(__file__), "static")),
+    )
     root.putChild(b"trigger", TriggerBuildResource())
 
     # OpenID Connect authentication endpoints

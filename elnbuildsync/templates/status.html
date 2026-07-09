@@ -21,11 +21,22 @@
         .pf-v6-c-table__sort .pf-v6-c-table__button { cursor: pointer; }
         .pf-v6-c-table__tbody .pf-v6-c-table__tr:hover { background-color: var(--pf-v6-global--BackgroundColor--200, rgba(0, 0, 0, 0.04)); }
         .filter-select { width: 100%; max-width: 100%; box-sizing: border-box; }
+        .page-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+        .page-header img { height: 3rem; width: auto; flex-shrink: 0; }
+        .page-header h1 { margin: 0; }
+        .page-header #updated { margin: 0.25rem 0 0; }
+        .page-footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--pf-v6-global--BorderColor--100, #d2d2d2); color: var(--pf-v6-global--Color--200, #6a6e73); font-size: 0.875rem; }
+        .page-footer p { margin: 0; }
     </style>
 </head>
 <body>
-    <h1>ELN Rebuild Status</h1>
-    <p id="updated">Loading…</p>
+    <header class="page-header">
+        <img src="/static/eln-logo-icon.svg" alt="Fedora ELN logo" width="48" height="48"/>
+        <div>
+            <h1>ELN Rebuild Status</h1>
+            <p id="updated">Loading…</p>
+        </div>
+    </header>
 
     <div class="toolbar">
         <label>
@@ -395,5 +406,8 @@
     fetchData();
 })();
     </script>
+    <footer class="page-footer">
+        <p>ELNBuildSync $version</p>
+    </footer>
 </body>
 </html>
