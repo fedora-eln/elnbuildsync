@@ -251,7 +251,12 @@ class ProtectedResource(Resource):
         await self._handle_post(request, user)
 
     async def _handle_post(self, request, user):
-        raise NotImplementedError
+        # If _handle_post is not implemented, return a 405 Method Not Allowed
+        # response
+        del user
+        request.setResponseCode(405)
+        request.setHeader("Allow", "GET")
+        request.write(b"Method not allowed\n")
 
 
 class TriggerBuildResource(ProtectedResource):
