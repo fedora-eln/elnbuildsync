@@ -141,28 +141,24 @@ class StatusPageResource(Resource):
             return self
         return Resource.getChild(self, name, request)
 
-    def _done(self, data):
-        if not self.request.finished:
-            self.request.finish()
+    def _done(self, request, data):
+        if not request.finished:
+            request.finish()
 
-    def _failed(self, failure):
+    def _failed(self, request, failure):
         logger.error(f"Status page failed: {failure}")
-        if not self.request.finished:
-            self.request.setResponseCode(500)
-            self.request.write(b"Internal server error")
-            self.request.finish()
+        if not request.finished:
+            request.setResponseCode(500)
+            request.write(b"Internal server error")
+            request.finish()
 
     def render_GET(self, request):
-        self.request = request
-
-        deferred = Deferred.fromFuture(asyncio.ensure_future(self._do_get()))
-        deferred.addCallback(self._done)
-        deferred.addErrback(self._failed)
+        deferred = Deferred.fromFuture(asyncio.ensure_future(self._do_get(request)))
+        deferred.addCallback(lambda data: self._done(request, data))
+        deferred.addErrback(lambda failure: self._failed(request, failure))
         return NOT_DONE_YET
 
-    async def _do_get(self):
-        request = self.request
-
+    async def _do_get(self, request):
         request.setHeader("Content-Type", "text/html; charset=utf-8")
         request.setHeader("Cache-Control", "no-cache")
 
@@ -182,33 +178,31 @@ class ProtectedResource(Resource):
     """
     Base resource for admin-only endpoints protected by OpenID Connect.
 
-    Subclasses must implement _handle_get(user) and optionally
-    _handle_post(user) for GET and POST requests, respectively.
+    Subclasses must implement _handle_get(request, user) and optionally
+    _handle_post(request, user) for GET and POST requests, respectively.
     """
 
-    def _done(self, data):
-        if not self.request.finished:
-            self.request.finish()
+    def _done(self, request, data):
+        if not request.finished:
+            request.finish()
 
-    def _failed(self, failure):
+    def _failed(self, request, failure):
         logger.error(failure)
-        if not self.request.finished:
-            self.request.setResponseCode(500)
-            self.request.write(b"Internal server error")
-            self.request.finish()
+        if not request.finished:
+            request.setResponseCode(500)
+            request.write(b"Internal server error")
+            request.finish()
 
-    def _run_async(self, coro):
+    def _run_async(self, request, coro):
         deferred = Deferred.fromFuture(asyncio.ensure_future(coro))
-        deferred.addCallback(self._done)
-        deferred.addErrback(self._failed)
+        deferred.addCallback(lambda data: self._done(request, data))
+        deferred.addErrback(lambda failure: self._failed(request, failure))
         return NOT_DONE_YET
 
     def render_GET(self, request):
-        self.request = request
-        return self._run_async(self._do_get())
+        return self._run_async(request, self._do_get(request))
 
-    async def _require_user(self, *, method=None):
-        request = self.request
+    async def _require_user(self, request, *, method=None):
         if method is None:
             method = request.method.decode("utf-8").upper()
 
@@ -235,30 +229,28 @@ class ProtectedResource(Resource):
         )
         return None
 
-    async def _do_get(self):
-        user = await self._require_user()
+    async def _do_get(self, request):
+        user = await self._require_user(request)
         if user is None:
             return
-        await self._handle_get(user)
+        await self._handle_get(request, user)
 
-    async def _handle_get(self, user):
+    async def _handle_get(self, request, user):
         raise NotImplementedError
 
     def render_POST(self, request):
-        self.request = request
-        return self._run_async(self._do_post())
+        return self._run_async(request, self._do_post(request))
 
-    async def _do_post(self):
-        request = self.request
+    async def _do_post(self, request):
         request.setHeader("Cache-Control", "no-cache")
 
-        user = await self._require_user()
+        user = await self._require_user(request)
         if user is None:
             return
 
-        await self._handle_post(user)
+        await self._handle_post(request, user)
 
-    async def _handle_post(self, user):
+    async def _handle_post(self, request, user):
         raise NotImplementedError
 
 
@@ -278,10 +270,8 @@ class TriggerBuildResource(ProtectedResource):
             return self
         return Resource.getChild(self, name, request)
 
-    async def _handle_get(self, user):
+    async def _handle_get(self, request, user):
         """Show a simple form or info page for the trigger endpoint."""
-        request = self.request
-
         request.setHeader("Content-Type", "text/html; charset=utf-8")
         request.setHeader("Cache-Control", "no-cache")
 
@@ -330,9 +320,7 @@ class TriggerBuildResource(ProtectedResource):
 </html>"""
         request.write(html.encode())
 
-    async def _handle_post(self, user):
-        request = self.request
-
+    async def _handle_post(self, request, user):
         logger.info(f"Build trigger request from user {user['username']}")
 
         if not started or config.is_paused():
@@ -383,8 +371,7 @@ class LogLevelPage(ProtectedResource):
         super().__init__()
         self.loglevel = name.decode("UTF-8").upper()
 
-    async def _handle_get(self, user):
-        request = self.request
+    async def _handle_get(self, request, user):
         request.setHeader("Cache-Control", "no-cache")
 
         try:
@@ -434,8 +421,7 @@ class ControlPage(ProtectedResource):
             f"configuration at {config_location}.\n"
         )
 
-    async def _handle_get(self, user):
-        request = self.request
+    async def _handle_get(self, request, user):
         request.setHeader("Cache-Control", "no-cache")
 
         if not started or config.control is None:
@@ -566,27 +552,25 @@ class OIDCCallbackResource(Resource):
 
     isLeaf = True
 
-    def _done(self, data):
+    def _done(self, request, data):
         pass  # Request already finished in async handler
 
-    def _failed(self, failure):
+    def _failed(self, request, failure):
         logger.error(f"OIDC callback failed: {failure}")
-        if not self.request.finished:
-            self.request.setResponseCode(500)
-            self.request.write(b"Authentication failed")
-            self.request.finish()
+        if not request.finished:
+            request.setResponseCode(500)
+            request.write(b"Authentication failed")
+            request.finish()
 
     def render_GET(self, request):
-        self.request = request
-
-        deferred = Deferred.fromFuture(asyncio.ensure_future(self._handle_callback()))
-        deferred.addCallback(self._done)
-        deferred.addErrback(self._failed)
+        deferred = Deferred.fromFuture(
+            asyncio.ensure_future(self._handle_callback(request))
+        )
+        deferred.addCallback(lambda data: self._done(request, data))
+        deferred.addErrback(lambda failure: self._failed(request, failure))
         return NOT_DONE_YET
 
-    async def _handle_callback(self):
-        request = self.request
-
+    async def _handle_callback(self, request):
         # Check for error response from OIDC provider
         error = request.args.get(b"error", [None])[0]
         if error:
@@ -673,27 +657,25 @@ class LogoutResource(Resource):
 
     isLeaf = True
 
-    def _done(self, data):
+    def _done(self, request, data):
         pass
 
-    def _failed(self, failure):
+    def _failed(self, request, failure):
         logger.error(f"Logout failed: {failure}")
-        if not self.request.finished:
-            self.request.setResponseCode(500)
-            self.request.write(b"Logout failed")
-            self.request.finish()
+        if not request.finished:
+            request.setResponseCode(500)
+            request.write(b"Logout failed")
+            request.finish()
 
     def render_GET(self, request):
-        self.request = request
-
-        deferred = Deferred.fromFuture(asyncio.ensure_future(self._handle_logout()))
-        deferred.addCallback(self._done)
-        deferred.addErrback(self._failed)
+        deferred = Deferred.fromFuture(
+            asyncio.ensure_future(self._handle_logout(request))
+        )
+        deferred.addCallback(lambda data: self._done(request, data))
+        deferred.addErrback(lambda failure: self._failed(request, failure))
         return NOT_DONE_YET
 
-    async def _handle_logout(self):
-        request = self.request
-
+    async def _handle_logout(self, request):
         session_id = auth.get_session_cookie(request)
         if session_id:
             await auth.delete_session(session_id)
