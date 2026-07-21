@@ -326,8 +326,10 @@ if [ $db_ready -ne 0 ]; then
 fi
 
 if [ "$_arg_environment" == "stg" ]; then
+    KOJI_PROFILE_ARG=(--koji-profile=stg)
     export FEDORA_MESSAGING_CONF="$SCRIPT_DIR/fedora-messaging/fedora.stg.toml"
 else
+    KOJI_PROFILE_ARG=(--koji-profile=koji)
     export FEDORA_MESSAGING_CONF="$SCRIPT_DIR/fedora-messaging/fedora.toml"
 fi
 
@@ -375,6 +377,7 @@ ${CONTAINER_ENGINE} run --rm --interactive --tty \
 	--volume ${PROJ_DIR}:/tmp:Z \
 	localhost/elnbuildsync:local_test_daemon \
 	--log-level "$_arg_log_level" \
+	"${KOJI_PROFILE_ARG[@]}" \
 	--static-config-file "${CONTAINER_STATIC_CONFIG}" \
 	--dynamic-config-file "${CONTAINER_DYNAMIC_CONFIG}" \
 	--lull-time "$_arg_lull_time" \
