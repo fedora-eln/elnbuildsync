@@ -364,6 +364,7 @@ if [ "${_arg_dynamic_config_file}" != "${DEFAULT_DYNAMIC_CONFIG_FILE}" ]; then
 fi
 
 ${CONTAINER_ENGINE} run --rm --interactive --tty \
+    --name ebs_test \
 	--publish 8080:8080 \
     --network ebs_local_test \
 	--userns=keep-id \
