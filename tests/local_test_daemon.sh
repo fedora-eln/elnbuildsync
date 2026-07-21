@@ -264,12 +264,11 @@ if [ "$_arg_build_container" == "on" ]; then
     ${CONTAINER_ENGINE} build -t localhost/elnbuildsync:local_test_daemon $PROJ_DIR
 fi
 
-cd $PROJ_DIR
-
-sudo dnf -y install postgresql
-pip install legacy-cgi
-pip install -r requirements.txt
-pip install --editable $PROJ_DIR
+# Check that pg_isready is available
+if ! command -v pg_isready &> /dev/null; then
+    echo "pg_isready could not be found, install the 'postgresql' package"
+    exit 1
+fi
 
 function check_db_avail() {
     PGPASSWORD=$(cat "${_arg_db_pw_file}") \
