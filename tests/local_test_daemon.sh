@@ -369,7 +369,7 @@ ${CONTAINER_ENGINE} run --rm --interactive --tty \
 	--userns=keep-id \
 	--user $(id -u):$(id -g) \
 	--security-opt label=disable \
-	--env KRB5CCNAME=KCM:$(id -u) \
+	--env KRB5CCNAME=KCM: \
 	--volume /var/run/.heim_org.h5l.kcm-socket:/var/run/.heim_org.h5l.kcm-socket \
 	--volume ${SCRIPT_DIR}/etc:/etc/elnbuildsync:Z \
 	--volume ${SCRIPT_DIR}/fedora-messaging:/etc/fedora-messaging:Z \
