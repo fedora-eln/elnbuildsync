@@ -4,11 +4,27 @@ WORKDIR /tmp
 
 COPY . .
 
-RUN INSTALL_PKGS="python3 python3-devel python3-setuptools python3-pip python3-virtualenv nss_wrapper \
-        gettext rpm wget tar which openssl krb5-devel redhat-rpm-config libcurl-devel rpm-devel \
-        httpd httpd-devel atlas-devel gcc-gfortran libffi-devel gcc libffi-devel libtool-ltdl enchant \
-        git wget krb5-workstation krb5-libs openssl-devel nss_wrapper koji git fedora-messaging python3-rpm \
-        bodhi-client" && \
+RUN INSTALL_PKGS=" \
+    bash \
+    bodhi-client \
+    fedora-messaging \
+    koji \
+    krb5-workstation \
+    python3-cachetools \
+    python3-click \
+    python3-GitPython \
+    python3-gssapi \
+    python3-httpx \
+    python3-krb5 \
+    python3-pip \
+    python3-pyyaml \
+    python3-requests \
+    python3-rpm \
+    python3-sqlalchemy+postgresql_asyncpg \
+    python3-tenacity \
+    python3-twisted \
+    python3-virtualenv \
+    " && \
     dnf -y --setopt=tsflags=nodocs install $INSTALL_PKGS && \
     dnf -y clean all --enablerepo='*'
 
