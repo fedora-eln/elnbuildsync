@@ -367,14 +367,14 @@ ${CONTAINER_ENGINE} run --rm --interactive --tty \
 	--publish 8080:8080 \
     --network ebs_local_test \
 	--userns=keep-id \
-	--user $(id -u):$(id -g) \
+	--user "$(id -u):$(id -g)" \
 	--security-opt label=disable \
 	--env KRB5CCNAME=KCM: \
-	--volume /var/run/.heim_org.h5l.kcm-socket:/var/run/.heim_org.h5l.kcm-socket \
-	--volume ${SCRIPT_DIR}/etc:/etc/elnbuildsync:Z \
-	--volume ${SCRIPT_DIR}/fedora-messaging:/etc/fedora-messaging:Z \
+	--volume "/var/run/.heim_org.h5l.kcm-socket:/var/run/.heim_org.h5l.kcm-socket" \
+	--volume "${SCRIPT_DIR}/etc:/etc/elnbuildsync:Z" \
+	--volume "${SCRIPT_DIR}/fedora-messaging:/etc/fedora-messaging:Z" \
 	"${CUSTOM_MOUNT_ARGS[@]}" \
-	--volume ${PROJ_DIR}:/tmp:Z \
+	--volume "${PROJ_DIR}:/tmp:Z" \
 	localhost/elnbuildsync:local_test_daemon \
 	--log-level "$_arg_log_level" \
 	"${KOJI_PROFILE_ARG[@]}" \
@@ -383,7 +383,7 @@ ${CONTAINER_ENGINE} run --rm --interactive --tty \
 	--lull-time "$_arg_lull_time" \
 	--openid-client-secret-file "${CONTAINER_OIDC_CLIENT_SECRET}" \
 	"${OPENID_CA_CONTAINER_ARG[@]}" \
-	${_arg_custom[@]} \
+	"${_arg_custom[@]}" \
 	2>&1 | tee /tmp/elnbuildsync.log
 
 # ] <-- needed because of Argbash
