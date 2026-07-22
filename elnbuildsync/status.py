@@ -41,6 +41,7 @@ class BuildStatus(Enum):
     SUCCEEDED = auto()
     FAILED = auto()
     BUILDING = auto()
+    SIGNING = auto()
 
 
 async def create_status_page():
@@ -72,6 +73,9 @@ async def create_status_page():
         # TODO: Show any currently-running tasks
         # NOTE: This might be better to do live, rather than periodic.
 
+        logger.debug(
+            f"Getting all builds tagged into {config.main['koji']['stable_tag']}"
+        )
         try:
             # Look up packages tagged into the stable tag
             tagged_pkgs = await call_koji(
@@ -89,16 +93,20 @@ async def create_status_page():
         _status_data = defaultdict(lambda: None)
         _status_data["__updated"] = datetime.now(timezone.utc)
 
-        # Get the list of packages that DBS has built.
+        # Get the list of packages that EBS has built. Only get the latest build for each
+        # package name.
+        logger.debug(f"Getting all builds built by {username}")
         built_packages = await call_koji(
-            "listBuilds", userID=username, queryOpts={"order": "start_ts"}
+            "listBuilds", userID=username, queryOpts={"order": "-start_ts"}
         )
+        seen_packages = set()
         for build in built_packages:
-            if build["start_ts"] is not None:
+            if build["start_ts"] is not None and build["name"] not in seen_packages:
                 pname = build["name"]
                 if pname in desired_pkgs:
-                    _set_package_status(_status_data, pname, build, tagged_builds)
-
+                    await _set_package_status(_status_data, pname, build, tagged_builds)
+                seen_packages.add(pname)
+        logger.debug("Checking for missing packages")
         for pname in desired_pkgs:
             if pname not in _status_data:
                 logger.debug(f"Package {pname} not in _status_data, checking Koji")
@@ -111,7 +119,9 @@ async def create_status_page():
                     # The ordering oddly puts "None" at the end, so we need to
                     # exclude it or we get some odd results at times.
                     if build["start_ts"] is not None:
-                        _set_package_status(_status_data, pname, build, tagged_builds)
+                        await _set_package_status(
+                            _status_data, pname, build, tagged_builds
+                        )
 
         # Now double-check that we didn't miss any expected packages
         # This will use the defaultdict to set the value to None for
@@ -159,7 +169,7 @@ def dest_is_newer(latest_src, latest_dest):
     return is_higher(latest_dest, latest_src)
 
 
-def _set_package_status(_status_data, pname, build, tagged_builds):
+async def _set_package_status(_status_data, pname, build, tagged_builds):
     """Update _status_data[pname] with build info and computed status.
 
     If build is None, values that would come from build are set to "UNKNOWN".
@@ -217,8 +227,32 @@ def _set_package_status(_status_data, pname, build, tagged_builds):
             entry["status"] = BuildStatus.SUCCEEDED
             entry["status_detail"] = "Built by another user"
         else:
-            entry["status"] = BuildStatus.FAILED
-            entry["status_detail"] = "Build failed"
+            if entry["state"] == koji.BUILD_STATES["COMPLETE"]:
+                # The build is complete, but since there's an older build in the tag,
+                # we need to check if it's awaiting signing.
+
+                # Get the list of tags for this build
+                tags = await call_koji("listTags", build["build_id"])
+                for tag in tags:
+                    if tag["name"].endswith("-signing-pending"):
+                        entry["status"] = BuildStatus.SIGNING
+                        entry["status_detail"] = "Build awaiting signing"
+                        return
+
+                # In this situation, it's possible that the build was untagged or
+                # otherwise never made it through to the final tag. Treat it as an
+                # unknown status.
+                entry["status"] = BuildStatus.UNKNOWN
+                entry["status_detail"] = "Build completed but not tagged"
+            elif entry["state"] == koji.BUILD_STATES["FAILED"]:
+                entry["status"] = BuildStatus.FAILED
+                entry["status_detail"] = "Build failed"
+            elif entry["state"] == koji.BUILD_STATES["CANCELED"]:
+                entry["status"] = BuildStatus.FAILED
+                entry["status_detail"] = "Build cancelled"
+            else:
+                entry["status"] = BuildStatus.UNKNOWN
+                entry["status_detail"] = "Build state unknown"
     else:
         entry["status"] = BuildStatus.FAILED
         entry["status_detail"] = "Build is not tagged"
@@ -232,6 +266,8 @@ def _status_display_string(build_status):
         return "Building"
     if build_status == BuildStatus.FAILED:
         return "FAILED"
+    if build_status == BuildStatus.SIGNING:
+        return "SIGNING"
     return "UNKNOWN"
 
 
