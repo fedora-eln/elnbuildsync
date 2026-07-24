@@ -84,8 +84,7 @@ class PendingNVRTags:
             Tuples of (nvr, deferred) for each NVR registered under the tag
         """
         if tag in self._data:
-            for nvr, deferred in self._data[tag].items():
-                yield (nvr, deferred)
+            yield from self._data[tag].items()
 
 
 class ELNBuildSyncState:
