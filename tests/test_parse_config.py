@@ -1422,9 +1422,11 @@ class TestGetRawhideTag:
         mock_session.__exit__ = MagicMock(return_value=False)
 
         get_tag = _get_rawhide_tag_impl()
-        with patch("elnbuildsync.config.Session", return_value=mock_session):
-            with pytest.raises(ConfigError, match="no valid Fedora rawhide release"):
-                await get_tag()
+        with (
+            patch("elnbuildsync.config.Session", return_value=mock_session),
+            pytest.raises(ConfigError, match="no valid Fedora rawhide release"),
+        ):
+            await get_tag()
 
     @pytest.mark.asyncio
     async def test_raises_on_invalid_json(self):
@@ -1439,9 +1441,11 @@ class TestGetRawhideTag:
         mock_session.__exit__ = MagicMock(return_value=False)
 
         get_tag = _get_rawhide_tag_impl()
-        with patch("elnbuildsync.config.Session", return_value=mock_session):
-            with pytest.raises(ConfigError, match="Could not parse JSON from Bodhi"):
-                await get_tag()
+        with (
+            patch("elnbuildsync.config.Session", return_value=mock_session),
+            pytest.raises(ConfigError, match="Could not parse JSON from Bodhi"),
+        ):
+            await get_tag()
 
     @pytest.mark.asyncio
     async def test_raises_on_http_error(self):
@@ -1457,6 +1461,8 @@ class TestGetRawhideTag:
         mock_session.__exit__ = MagicMock(return_value=False)
 
         get_tag = _get_rawhide_tag_impl()
-        with patch("elnbuildsync.config.Session", return_value=mock_session):
-            with pytest.raises(ConfigError, match="HTTP Error"):
-                await get_tag()
+        with (
+            patch("elnbuildsync.config.Session", return_value=mock_session),
+            pytest.raises(ConfigError, match="HTTP Error"),
+        ):
+            await get_tag()
