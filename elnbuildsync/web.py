@@ -26,6 +26,7 @@ from string import Template
 
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred
+from twisted.internet.threads import deferToThread
 from twisted.web.error import Error as WebError
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET, Site
@@ -55,14 +56,16 @@ def _elnbuildsync_version() -> str:
         return "unknown"
 
 
-def load_status_page() -> None:
+def _read_status_template(path: str) -> str:
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+async def load_status_page() -> None:
     """Read status.html and cache the version-substituted result for the process lifetime."""
     global status_page_html
-    template_path = os.path.join(
-        os.path.dirname(__file__), "templates", "status.html"
-    )
-    with open(template_path, encoding="utf-8") as f:
-        raw = f.read()
+    template_path = os.path.join(os.path.dirname(__file__), "templates", "status.html")
+    raw = await deferToThread(_read_status_template, template_path)
     content = Template(raw).substitute(version=_elnbuildsync_version())
     status_page_html = content.encode("utf-8")
     logger.debug("Status page template loaded from %s", template_path)
@@ -821,14 +824,3 @@ def setup_web_resources():
     started = True
 
     return Site(root)
-
-
-if __name__ == "__main__":
-    # For debugging
-    logging.basicConfig(
-        format="%(asctime)s : %(name)s : %(levelname)s : %(message)s",
-        level=logging.DEBUG,
-    )
-    load_status_page()
-    reactor.listenTCP(8080, setup_web_resources())
-    reactor.run()
