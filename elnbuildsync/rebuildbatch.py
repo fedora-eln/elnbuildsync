@@ -283,7 +283,7 @@ class RebuildBatch:
                 return
 
             for i in range(0, len(build_nvrs), batch_size):
-                yield build_nvrs[i : i + batch_size]
+                yield build_nvrs[i : i + batch_size]  # noqa: E203
 
         async def _process_batch(batch_nvrs: list[str]) -> None:
             if len(batch_nvrs) == 0:

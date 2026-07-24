@@ -67,7 +67,7 @@ jobs:
         run: flake8 --version
       - name: Run flake8
         run: |
-          flake8 --format gl-codeclimate --extend-ignore=E501 \
+          flake8 --format gl-codeclimate \
                  --output-file gl-code-quality-report.json \
                  .
       - name: Upload code quality report

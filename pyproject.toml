@@ -47,7 +47,7 @@ include = ["elnbuildsync*"]
 elnbuildsync = ["templates/status.html", "static/*"]
 
 [tool.ruff.lint]
-ignore = ["BLE001"]
+ignore = ["BLE001", "RUF100"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["elnbuildsync"]
