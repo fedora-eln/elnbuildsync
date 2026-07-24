@@ -96,7 +96,7 @@ class ELNBuildSyncState:
     """
 
     # A dictionary to keep track of tasks in-progress
-    active_tasks = dict()
+    active_tasks = {}
 
     # A data structure to keep track of NVRs we're waiting to
     # appear in a tag.

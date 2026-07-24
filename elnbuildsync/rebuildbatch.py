@@ -56,12 +56,12 @@ class RebuildBatch:
         This ensures that the database actions will settle before the object
         is used.
         """
-        self.tag_messages = dict()
+        self.tag_messages = {}
         self.target = target
         self.scratch = scratch
         self.fail_fast = fail_fast
         self.side_tag = None
-        self.slices = list()
+        self.slices = []
         self._dest_tag = None
         self._side_tag_base = None
         self._unprocessed_tag_messages = tag_messages
@@ -74,7 +74,7 @@ class RebuildBatch:
         )
 
     async def async_init(self):
-        build_ids = list()
+        build_ids = []
         for tag_message in self._unprocessed_tag_messages:
             await self.add_tag_message(tag_message)
 
@@ -192,8 +192,8 @@ class RebuildBatch:
             order = config.get_order(tag_message.component)
             all_tag_messages[order].append(tag_message)
 
-        all_successes = dict()
-        all_failures = list()
+        all_successes = {}
+        all_failures = []
 
         # Create RebuildBatchSlices for each ordering value
         for order, tag_messages in sorted(all_tag_messages.items()):
@@ -223,7 +223,7 @@ class RebuildBatch:
             )
 
         # Get the list of NVRs that we will need to tag.
-        build_nvrs = list()
+        build_nvrs = []
         for task_id, msg_body in all_successes.items():
             try:
                 nvr = RebuildBatch._get_srpm_nvr_from_task_msg(msg_body)

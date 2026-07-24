@@ -46,7 +46,7 @@ class ComponentNotFoundError(Exception):
 
 async def process_message_batch():
     global running
-    tag_messages = list()
+    tag_messages = []
     try:
         while True:
             try:

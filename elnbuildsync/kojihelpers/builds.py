@@ -74,13 +74,13 @@ async def get_buildinfo(build_id, **kwargs):
 
 def _get_multi_buildinfo_thread(build_ids, **kwargs):
     bsys = get_buildsys()
-    build_vcalls = dict()
+    build_vcalls = {}
 
     with bsys.multicall(batch=config.koji_batch) as mc:
         for build_id in build_ids:
             build_vcalls[build_id] = mc.getBuild(build_id, **kwargs)
 
-    results = dict()
+    results = {}
     for build_id, vcall in build_vcalls.items():
         results[build_id] = vcall.result
 
@@ -96,7 +96,7 @@ async def get_multi_buildinfo(build_ids, **kwargs):
     :returns: A dictionary mapping build_id -> buildinfo dict
     """
     if not build_ids:
-        return dict()
+        return {}
 
     try:
         results = await call_koji(_get_multi_buildinfo_thread, build_ids, **kwargs)
@@ -138,7 +138,7 @@ async def get_taskinfo(task_id, **kwargs):
 
     # Add the ["info"] key here to simulate the layout of a
     # state-change message from Koji.
-    taskinfo["info"] = dict()
+    taskinfo["info"] = {}
     taskinfo["info"]["request"] = taskinfo["request"]
 
     if taskinfo["state"] == koji.TASK_STATES["CLOSED"]:
@@ -178,7 +178,7 @@ async def start_builds(target, scm_urls, scratch=False, fail_fast=False):
 
 def _start_builds_thread(target, scm_urls, scratch=False, fail_fast=False):
     bsys = get_buildsys()
-    build_vcalls = dict()
+    build_vcalls = {}
     try:
         with bsys.multicall(batch=config.koji_batch) as mc:
             logger.debug(f"Starting {len(scm_urls)} tasks")
@@ -198,7 +198,7 @@ def _start_builds_thread(target, scm_urls, scratch=False, fail_fast=False):
         logger.exception("Unexpected error starting koji builds")
         raise
 
-    task_index = dict()
+    task_index = {}
     for scmurl, vcall in build_vcalls.items():
         task_id = vcall.result
         task_index[scmurl] = task_id
@@ -215,7 +215,7 @@ async def wait_for_task(task_id):
 
 
 async def wait_for_tasks(task_ids, timeout=config.task_timeout):
-    deferreds = list()
+    deferreds = []
 
     for task_id in task_ids:
         logger.debug(f"Waiting for {task_id} to complete.")

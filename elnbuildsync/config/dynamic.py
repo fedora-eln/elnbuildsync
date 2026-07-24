@@ -36,7 +36,7 @@ def _parse_control(cnf_control, ConfigError):
     """Parse control configuration. Returns dict with trigger_tag, pause, skip_tag,
     exclude, ordering, status_interval, etc.
     """
-    result = dict()
+    result = {}
     for k in ("pause",):
         if k in cnf_control:
             result[k] = bool(cnf_control[k])
@@ -64,7 +64,7 @@ def _parse_control(cnf_control, ConfigError):
     else:
         logger.info("Not excluding any components.")
 
-    result["ordering"] = dict()
+    result["ordering"] = {}
     if "ordering" in cnf_control:
         result["ordering"].update(cnf_control["ordering"])
 
