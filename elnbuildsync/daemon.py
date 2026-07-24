@@ -227,7 +227,7 @@ async def _main(
             sys.exit(128)
 
         try:
-            web.load_status_page()
+            await web.load_status_page()
         except Exception:
             logger.exception("Could not load status page template")
             logger.critical("Could not load status page template.")
