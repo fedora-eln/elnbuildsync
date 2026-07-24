@@ -21,10 +21,9 @@ import logging
 import os
 
 import sqlalchemy
-import yaml
-from twisted.internet.threads import deferToThread
 
 from ..email import Email
+from ..utils import load_yaml_file
 
 logger = logging.getLogger(__name__)
 
@@ -324,8 +323,7 @@ async def load_static_config(
         raise ConfigError(f"Could not parse {static_config_file}.")
 
     try:
-        with open(static_config_file) as f:
-            y = await deferToThread(yaml.safe_load, f)
+        y = await load_yaml_file(static_config_file)
         logger.debug("%s loaded, processing static configuration.", static_config_file)
     except Exception as e:
         logger.info(e)
