@@ -23,7 +23,6 @@ from . import connection as connection
 from . import errors as errors
 from . import tags as tags
 
-
 # The set of repos we're waiting on to initialize
 awaited_repos = defaultdict(list)
 awaiting_repo_init = defaultdict(list)

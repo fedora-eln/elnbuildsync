@@ -16,10 +16,10 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
-from .daemon import main as main
-from . import listener as listener
 from . import config as config
 from . import kojihelpers as kojihelpers
+from . import listener as listener
 from . import rebuildbatch as rebuildbatch
+from .daemon import main as main
 
-__all__ = ["main", "listener", "config", "kojihelpers", "rebuildbatch"]
+__all__ = ["config", "kojihelpers", "listener", "main", "rebuildbatch"]

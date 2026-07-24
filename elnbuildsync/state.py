@@ -16,7 +16,8 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
-from typing import Generator
+from collections.abc import Generator
+
 from twisted.internet.defer import Deferred
 
 

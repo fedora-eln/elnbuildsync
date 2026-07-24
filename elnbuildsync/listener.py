@@ -17,20 +17,16 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
-import koji
 import logging
 
-from . import batching
-from . import config
-
-from . import kojihelpers
-from .state import ELNBuildSyncState as state
-
-from fedora_messaging.exceptions import Nack, Drop
+import koji
+from fedora_messaging.exceptions import Drop, Nack
 from twisted.internet import reactor
 from twisted.internet.defer import AlreadyCalledError, Deferred
 from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 
+from . import batching, config, kojihelpers
+from .state import ELNBuildSyncState as state
 
 logger = logging.getLogger(__name__)
 
@@ -286,7 +282,6 @@ def fire_task_callback(deferred, data):
     except AlreadyCalledError as e:
         # Most likely due to a timeout, so ignore it
         logger.exception(e)
-        pass
 
 
 def fire_task_errback(deferred, data):
@@ -297,7 +292,6 @@ def fire_task_errback(deferred, data):
     except AlreadyCalledError as e:
         # Most likely due to a timeout, so ignore it
         logger.exception(e)
-        pass
 
 
 def register_task_id(task_id, timeout=config.task_timeout):

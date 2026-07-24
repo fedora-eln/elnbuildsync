@@ -22,10 +22,9 @@ import logging
 from fedora_messaging.message import Message as FedoraMessage
 
 from elnbuildsync import db_models
+
 from .decorators import as_deferred
-
 from .kojihelpers.builds import get_scmurl
-
 
 logger = logging.getLogger(__name__)
 

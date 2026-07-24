@@ -18,16 +18,11 @@
 
 import logging
 
-from cachetools import cached, LRUCache
+from cachetools import LRUCache, cached
 from twisted.internet.defer import DeferredList
-from .connection import call_koji
 
-from .. import kojihelpers
-from .. import listener
-from .connection import get_buildsys
-
-from .. import config
-
+from .. import config, kojihelpers, listener
+from .connection import call_koji, get_buildsys
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +120,6 @@ def _tag_builds_thread(tag, build_ids):
 async def untag_builds(tag, builds):
     await call_koji(_untag_builds_thread, tag, builds)
     logger.debug(f"Untagged {len(builds)} builds from {tag}")
-    return
 
 
 def _untag_builds_thread(tag, build_ids):

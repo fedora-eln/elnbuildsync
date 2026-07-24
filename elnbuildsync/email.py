@@ -20,8 +20,6 @@ import logging
 import smtplib
 import socket
 from email.message import Message
-from typing import List, Optional
-
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -44,8 +42,8 @@ class Email:
         self,
         subject: str,
         body: str,
-        attachments: Optional[List[bytes]] = None,
-        headers: Optional[dict[str, str]] = None,
+        attachments: list[bytes] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         """Send an email message.
 

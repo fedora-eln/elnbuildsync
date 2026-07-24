@@ -17,19 +17,17 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
-import koji
 import logging
 import time
 
-from cachetools import cached, TTLCache
+import koji
+from cachetools import TTLCache, cached
 from requests.exceptions import RequestException
 from tenacity import retry, retry_if_exception, stop_after_delay, wait_exponential
 from twisted.internet.threads import deferToThread
 
 from .. import config
-
 from .errors import KojiHelperBaseError
-
 
 logger = logging.getLogger(__name__)
 

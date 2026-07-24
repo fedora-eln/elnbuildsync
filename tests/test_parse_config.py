@@ -58,7 +58,6 @@ from elnbuildsync.config import (
     split_scmurl,
 )
 
-
 # Minimal valid OIDC config for tests (client_secret supplied via file at load time)
 MINIMAL_OIDC = {
     "auth_url": "https://id.example.com/auth",
@@ -498,37 +497,41 @@ class TestParseComponents:
 
     @pytest.mark.asyncio
     async def test_autopackagelist_entry_missing_upstream_name_raises(self):
-        with patch(
-            "elnbuildsync.config.get_distro_packages",
-            new_callable=AsyncMock,
-            return_value={
-                "pkg1": {"downstream_name": "pkg1"},
-            },
-        ):
-            with pytest.raises(
+        with (
+            patch(
+                "elnbuildsync.config.get_distro_packages",
+                new_callable=AsyncMock,
+                return_value={
+                    "pkg1": {"downstream_name": "pkg1"},
+                },
+            ),
+            pytest.raises(
                 ConfigError,
                 match="components.autopackagelist entry 'pkg1' missing upstream_name",
-            ):
-                await _parse_components(
-                    {"autopackagelist": {"view": "eln", "source": "source"}}
-                )
+            ),
+        ):
+            await _parse_components(
+                {"autopackagelist": {"view": "eln", "source": "source"}}
+            )
 
     @pytest.mark.asyncio
     async def test_autopackagelist_entry_missing_downstream_name_raises(self):
-        with patch(
-            "elnbuildsync.config.get_distro_packages",
-            new_callable=AsyncMock,
-            return_value={
-                "pkg1": {"upstream_name": "pkg1"},
-            },
-        ):
-            with pytest.raises(
+        with (
+            patch(
+                "elnbuildsync.config.get_distro_packages",
+                new_callable=AsyncMock,
+                return_value={
+                    "pkg1": {"upstream_name": "pkg1"},
+                },
+            ),
+            pytest.raises(
                 ConfigError,
                 match="components.autopackagelist entry 'pkg1' missing downstream_name",
-            ):
-                await _parse_components(
-                    {"autopackagelist": {"view": "eln", "source": "source"}}
-                )
+            ),
+        ):
+            await _parse_components(
+                {"autopackagelist": {"view": "eln", "source": "source"}}
+            )
 
     @pytest.mark.asyncio
     async def test_overrides_only(self):
@@ -696,21 +699,21 @@ class TestLoadConfig:
                     "elnbuildsync.config.dynamic.deferToThread",
                     side_effect=_fake_defer_to_thread,
                 ),
-            ):
-                with patch(
+                patch(
                     "elnbuildsync.config.get_rawhide_tag", new_callable=AsyncMock
-                ) as mock_rawhide:
-                    with patch(
-                        "elnbuildsync.config.get_distro_packages",
-                        new_callable=AsyncMock,
-                    ) as mock_distro:
-                        await load_config(
-                            static_config_file=static_path,
-                            dynamic_config_file=dynamic_path,
-                            db_pw="testpw",
-                        )
-                        mock_rawhide.assert_not_called()
-                        mock_distro.assert_not_called()
+                ) as mock_rawhide,
+                patch(
+                    "elnbuildsync.config.get_distro_packages",
+                    new_callable=AsyncMock,
+                ) as mock_distro,
+            ):
+                await load_config(
+                    static_config_file=static_path,
+                    dynamic_config_file=dynamic_path,
+                    db_pw="testpw",
+                )
+                mock_rawhide.assert_not_called()
+                mock_distro.assert_not_called()
             assert config_mod.main is not None
             assert config_mod.main["koji"]["profile"] == "koji"
             assert config_mod.main["koji"]["build_target"] == "eln"
@@ -761,18 +764,18 @@ class TestLoadConfig:
         static_path.write(MINIMAL_STATIC_CONFIG_OIDC_YAML)
         static_path.close()
         try:
-            with patch(
-                "elnbuildsync.config.static.deferToThread",
-                side_effect=_fake_defer_to_thread,
+            with (
+                patch(
+                    "elnbuildsync.config.static.deferToThread",
+                    side_effect=_fake_defer_to_thread,
+                ),
+                pytest.raises(ConfigError, match="Could not read OIDC client secret"),
             ):
-                with pytest.raises(
-                    ConfigError, match="Could not read OIDC client secret"
-                ):
-                    await load_static_config(
-                        static_path.name,
-                        db_pw="testpw",
-                        oidc_client_secret_file="/nonexistent/oidc_secret",
-                    )
+                await load_static_config(
+                    static_path.name,
+                    db_pw="testpw",
+                    oidc_client_secret_file="/nonexistent/oidc_secret",
+                )
         finally:
             os.unlink(static_path.name)
 
@@ -787,16 +790,18 @@ class TestLoadConfig:
         secret_path.write("\n")
         secret_path.close()
         try:
-            with patch(
-                "elnbuildsync.config.static.deferToThread",
-                side_effect=_fake_defer_to_thread,
+            with (
+                patch(
+                    "elnbuildsync.config.static.deferToThread",
+                    side_effect=_fake_defer_to_thread,
+                ),
+                pytest.raises(ConfigError, match="is empty"),
             ):
-                with pytest.raises(ConfigError, match="is empty"):
-                    await load_static_config(
-                        static_path.name,
-                        db_pw="testpw",
-                        oidc_client_secret_file=secret_path.name,
-                    )
+                await load_static_config(
+                    static_path.name,
+                    db_pw="testpw",
+                    oidc_client_secret_file=secret_path.name,
+                )
         finally:
             os.unlink(static_path.name)
             os.unlink(secret_path.name)
@@ -838,27 +843,25 @@ class TestLoadConfig:
                     "elnbuildsync.config.dynamic.deferToThread",
                     side_effect=_fake_defer_to_thread,
                 ),
+                patch("elnbuildsync.config.get_rawhide_tag", new_callable=AsyncMock),
+                patch(
+                    "elnbuildsync.config.get_distro_packages",
+                    new_callable=AsyncMock,
+                ),
+                patch("elnbuildsync.config.static.Email") as MockEmail,
             ):
-                with patch(
-                    "elnbuildsync.config.get_rawhide_tag", new_callable=AsyncMock
-                ):
-                    with patch(
-                        "elnbuildsync.config.get_distro_packages",
-                        new_callable=AsyncMock,
-                    ):
-                        with patch("elnbuildsync.config.static.Email") as MockEmail:
-                            await load_config(
-                                static_config_file=static_path,
-                                dynamic_config_file=dynamic_path,
-                                db_pw="testpw",
-                            )
-                            assert MockEmail.call_count == 1
-                            await load_config(
-                                static_config_file=static_path,
-                                dynamic_config_file=dynamic_path,
-                                db_pw="testpw",
-                            )
-                            assert MockEmail.call_count == 2
+                await load_config(
+                    static_config_file=static_path,
+                    dynamic_config_file=dynamic_path,
+                    db_pw="testpw",
+                )
+                assert MockEmail.call_count == 1
+                await load_config(
+                    static_config_file=static_path,
+                    dynamic_config_file=dynamic_path,
+                    db_pw="testpw",
+                )
+                assert MockEmail.call_count == 2
         finally:
             os.unlink(static_path)
             os.unlink(dynamic_path)
@@ -884,16 +887,18 @@ class TestLoadConfig:
             mock_session.__enter__ = MagicMock(return_value=mock_session)
             mock_session.__exit__ = MagicMock(return_value=False)
 
-            with patch(
-                "elnbuildsync.config.dynamic.deferToThread",
-                side_effect=_fake_defer_to_thread,
+            with (
+                patch(
+                    "elnbuildsync.config.dynamic.deferToThread",
+                    side_effect=_fake_defer_to_thread,
+                ),
+                patch("elnbuildsync.config.Session", return_value=mock_session),
+                patch(
+                    "elnbuildsync.config.get_distro_packages",
+                    new_callable=AsyncMock,
+                ),
             ):
-                with patch("elnbuildsync.config.Session", return_value=mock_session):
-                    with patch(
-                        "elnbuildsync.config.get_distro_packages",
-                        new_callable=AsyncMock,
-                    ):
-                        await load_dynamic_config(dynamic_config_file=dynamic_path.name)
+                await load_dynamic_config(dynamic_config_file=dynamic_path.name)
             assert config_mod.control["trigger_tag"] == "f41"
             mock_get.assert_called_once()
         finally:
@@ -929,14 +934,16 @@ configuration:
             f.write(yaml_no_components)
             path = f.name
         try:
-            with patch(
-                "elnbuildsync.config.dynamic.deferToThread",
-                side_effect=_fake_defer_to_thread,
-            ):
-                with pytest.raises(
+            with (
+                patch(
+                    "elnbuildsync.config.dynamic.deferToThread",
+                    side_effect=_fake_defer_to_thread,
+                ),
+                pytest.raises(
                     ConfigError, match="required components block is missing"
-                ):
-                    await load_dynamic_config(dynamic_config_file=path)
+                ),
+            ):
+                await load_dynamic_config(dynamic_config_file=path)
         finally:
             os.unlink(path)
 
@@ -1060,13 +1067,15 @@ class TestGetConfigRef:
 
     @pytest.mark.asyncio
     async def test_unknown_ref_raises(self):
-        with patch(
-            "elnbuildsync.config.twisted.internet.utils.getProcessOutput",
-            new_callable=AsyncMock,
-            return_value=b"",
+        with (
+            patch(
+                "elnbuildsync.config.twisted.internet.utils.getProcessOutput",
+                new_callable=AsyncMock,
+                return_value=b"",
+            ),
+            pytest.raises(UnknownRefError, match="not found"),
         ):
-            with pytest.raises(UnknownRefError, match="not found"):
-                await get_config_ref("https://git.example.com/repo#nonexistent")
+            await get_config_ref("https://git.example.com/repo#nonexistent")
 
 
 class TestIsEligible:

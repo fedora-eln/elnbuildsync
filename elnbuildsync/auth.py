@@ -42,14 +42,12 @@ import base64
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 from urllib.parse import urlencode
 
 import httpx
-from sqlalchemy import select, delete
+from sqlalchemy import delete, select
 
-from . import config
-from . import db_models
+from . import config, db_models
 
 logger = logging.getLogger(__name__)
 
@@ -70,19 +68,13 @@ def _oidc_httpx_client():
 class AuthError(Exception):
     """Base exception for authentication errors."""
 
-    pass
-
 
 class OIDCError(AuthError):
     """Error during OIDC token exchange or userinfo fetch."""
 
-    pass
-
 
 class AuthorizationError(AuthError):
     """User authenticated but not authorized (not in required groups)."""
-
-    pass
 
 
 def is_auth_enabled() -> bool:
@@ -253,7 +245,7 @@ async def create_session(username: str, groups: list) -> str:
     return session_id
 
 
-async def validate_session(session_id: str) -> Optional[dict]:
+async def validate_session(session_id: str) -> dict | None:
     """
     Validate a session and check authorization.
 
@@ -337,7 +329,7 @@ async def cleanup_expired_sessions() -> int:
     return count
 
 
-def get_session_cookie(request) -> Optional[str]:
+def get_session_cookie(request) -> str | None:
     """
     Extract the session ID from the request cookies.
 
@@ -353,7 +345,7 @@ def get_session_cookie(request) -> Optional[str]:
     return None
 
 
-def get_bearer_token(request) -> Optional[str]:
+def get_bearer_token(request) -> str | None:
     """
     Extract the Bearer token from the Authorization header.
 
@@ -373,7 +365,7 @@ def get_bearer_token(request) -> Optional[str]:
         authz = authz.decode("utf-8")
     prefix = "Bearer "
     if authz.startswith(prefix):
-        return authz[len(prefix) :].strip()  # noqa: E203
+        return authz[len(prefix) :].strip()
     return None
 
 

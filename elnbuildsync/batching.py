@@ -18,20 +18,16 @@
 
 import logging
 import re
-import rpm
-
 from datetime import datetime
-from queue import Queue, Empty
+from queue import Empty, Queue
 
+import rpm
 from fedora_messaging.message import Message as FedoraMessage
 
+from . import config, kojihelpers
 from .kojihelpers.connection import call_koji
-
-from . import config
-from . import kojihelpers
-from .tagmessage import TagMessage
 from .rebuildbatch import RebuildBatch
-
+from .tagmessage import TagMessage
 
 message_queue = Queue()
 message_batch_processor = None

@@ -30,14 +30,11 @@ from twisted.internet import reactor
 from twisted.internet.defer import Deferred
 from twisted.web.error import Error as WebError
 from twisted.web.resource import Resource
-from twisted.web.server import Site, NOT_DONE_YET
+from twisted.web.server import NOT_DONE_YET, Site
 from twisted.web.static import File
 from twisted.web.util import Redirect
 
-from . import auth
-from . import batching
-from . import config
-from . import status
+from . import auth, batching, config, status
 
 logger = logging.getLogger(__name__)
 

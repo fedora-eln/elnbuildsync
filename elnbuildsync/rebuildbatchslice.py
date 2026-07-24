@@ -18,7 +18,6 @@
 
 
 import logging
-
 from enum import IntEnum
 
 from . import db_models
