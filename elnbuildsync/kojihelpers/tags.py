@@ -21,7 +21,7 @@ import logging
 from cachetools import LRUCache, cached
 from twisted.internet.defer import DeferredList
 
-from .. import config, kojihelpers, listener
+from .. import config, kojihelpers
 from .connection import call_koji, get_buildsys
 
 logger = logging.getLogger(__name__)
@@ -170,6 +170,9 @@ async def wait_for_nvrs_in_tag(tag, nvrs):
     :params list nvrs: The list of nvrs to wait for
     :return list: A list of results
     """
+    # Imported lazily to avoid a circular import with listener/batching.
+    from .. import listener
+
     logger.info(f"Waiting for {len(nvrs)} nvrs to appear in tag {tag}")
 
     deferreds = []

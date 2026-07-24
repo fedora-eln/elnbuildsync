@@ -16,6 +16,19 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
+# Install the asyncio reactor before any submodule imports Twisted's
+# default reactor (e.g. listener, web).
+import asyncio
+
+from twisted.internet import asyncioreactor
+
+try:
+    event_loop = asyncio.get_event_loop()
+except RuntimeError:
+    event_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(event_loop)
+asyncioreactor.install(event_loop)
+
 from . import config as config
 from . import kojihelpers as kojihelpers
 from . import listener as listener

@@ -16,18 +16,23 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
-# Install the asyncio reactor as early as possible
-# The fedora_messaging imports may install the Twisted one otherwise
+# Install the asyncio reactor as early as possible.
+# Prefer importing via the package (__init__) so this runs first; if daemon is
+# loaded directly, install here and ignore an already-installed asyncio reactor.
 import asyncio
 
 from twisted.internet import asyncioreactor
+from twisted.internet.error import ReactorAlreadyInstalledError
 
 try:
     event_loop = asyncio.get_event_loop()
 except RuntimeError:
     event_loop = asyncio.new_event_loop()
     asyncio.set_event_loop(event_loop)
-asyncioreactor.install(event_loop)
+try:
+    asyncioreactor.install(event_loop)
+except ReactorAlreadyInstalledError:
+    pass
 
 import importlib.metadata
 import logging

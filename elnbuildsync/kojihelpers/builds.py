@@ -22,7 +22,7 @@ import logging
 import koji
 from twisted.internet.defer import DeferredList
 
-from .. import config, listener
+from .. import config
 from .connection import call_koji, get_buildsys
 from .errors import InfoUnavailableError
 
@@ -208,6 +208,9 @@ def _start_builds_thread(target, scm_urls, scratch=False, fail_fast=False):
 
 
 async def wait_for_task(task_id):
+    # Imported lazily to avoid a circular import with listener/batching.
+    from .. import listener
+
     logger.debug(f"Waiting for {task_id}.")
 
     # Wait until this task is complete
@@ -215,6 +218,9 @@ async def wait_for_task(task_id):
 
 
 async def wait_for_tasks(task_ids, timeout=config.task_timeout):
+    # Imported lazily to avoid a circular import with listener/batching.
+    from .. import listener
+
     deferreds = []
 
     for task_id in task_ids:
