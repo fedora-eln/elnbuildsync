@@ -116,7 +116,7 @@ def _handle_tag(msg):
     if tag == config.control["trigger_tag"]:
         return _handle_trigger_tag(msg)
 
-    elif tag in state.pending_nvr_tags.keys():
+    elif tag in state.pending_nvr_tags:
         return _handle_awaited_tag(msg)
 
     logger.debug(f"Message tag {tag} not configured as a trigger, ignoring.")
@@ -262,7 +262,7 @@ async def check_tags():
 
         # For each build we're watching, atomically pop and fire callback.
         # If pop raises KeyError, a message handler already claimed it.
-        for nvr in builds.keys():
+        for nvr in builds:
             if nvr in watched_nvrs:
                 try:
                     deferred = state.pending_nvr_tags.pop(tag, nvr)
