@@ -194,8 +194,8 @@ def _start_builds_thread(target, scm_urls, scratch=False, fail_fast=False):
                     },
                     priority=KOJI_BACKGROUND_PRIORITY,
                 )
-    except Exception as e:
-        logger.exception(e)
+    except Exception:
+        logger.exception("Unexpected error starting koji builds")
         raise
 
     task_index = dict()
@@ -230,7 +230,6 @@ async def cancel_task(task_id):
     try:
         bsys = get_buildsys()
         await call_koji(bsys.cancelTask, task_id, recurse=True)
-    except Exception as e:
+    except Exception:
         # Cancellation is best-effort
-        logger.critical(f"Could not cancel task {task_id}. Ignoring.")
-        logger.exception(e)
+        logger.exception("Could not cancel task %s. Ignoring.", task_id)

@@ -341,8 +341,8 @@ class RebuildBatch:
         except BodhiClientException as e:
             logger.error(f"Failed to submit Bodhi update: {e}")
             raise
-        except Exception as e:
-            logger.exception(f"Failed to submit Bodhi update: {e}")
+        except Exception:
+            logger.exception("Failed to submit Bodhi update")
             raise
 
     @as_deferred

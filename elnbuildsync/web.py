@@ -176,8 +176,8 @@ class StatusPageResource(Resource):
             with open(template_path, encoding="utf-8") as f:
                 content = Template(f.read()).substitute(version=_elnbuildsync_version())
             request.write(content.encode("utf-8"))
-        except OSError as e:
-            logger.exception("Failed to read status template: %s", e)
+        except OSError:
+            logger.exception("Failed to read status template")
             request.setResponseCode(500)
             request.write(b"Status page template not available")
 
@@ -330,8 +330,8 @@ class TriggerBuildResource(ProtectedResource):
         # Read in the content
         try:
             components = json.load(request.content)
-        except json.decoder.JSONDecodeError as e:
-            logger.exception(e)
+        except json.decoder.JSONDecodeError:
+            logger.exception()
             raise
 
         request.write(f"User {user['username']} requesting builds of:\n".encode())
@@ -762,8 +762,8 @@ class OIDCCallbackResource(Resource):
             request.write(b"Authentication failed. Please try again.")
             request.finish()
 
-        except Exception as e:
-            logger.exception(f"Unexpected error during OIDC callback: {e}")
+        except Exception:
+            logger.exception("Unexpected error during OIDC callback")
             request.setResponseCode(500)
             request.write(b"An unexpected error occurred")
             request.finish()

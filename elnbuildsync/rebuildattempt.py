@@ -113,9 +113,8 @@ class RebuildAttempt:
 
                     # Store the results in the DB
                     await self.tasks[id].finish(koji.TASK_STATES["FAILED"])
-                except Exception as e:
-                    logger.critical("Unexpected error while awaiting a task")
-                    logger.exception(e)
+                except Exception:
+                    logger.exception("Unexpected error while awaiting a task")
                     raise
 
         return (successes, failures)

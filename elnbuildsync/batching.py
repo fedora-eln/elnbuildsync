@@ -77,17 +77,17 @@ async def process_message_batch():
         # as a single batch.
         try:
             await batch.run()
-        except Exception as e:
+        except Exception:
             # If something goes unrecoverably wrong here, always log it and skip
             # to the next batch.
-            logger.exception(e)
+            logger.exception("Unrecoverable error while running rebuild batch")
         finally:
             running = False
-    except Exception as e:
+    except Exception:
         # We need to catch all exceptions here. If we allow them to bubble up,
         # they will cause the entire process to fall into an infinite traceback
         # loop.
-        logger.exception(e)
+        logger.exception("Unexpected error in process_message_batch")
 
 
 async def rebuild_from_components(downstream_components):
@@ -191,14 +191,14 @@ async def rebuild_from_components(downstream_components):
                 message_batch_processor.reset()
                 message_queue.put(msg)
 
-            except ComponentNotFoundError as e:
-                logger.exception(e)
-                logger.critical(
-                    f"Cannot determine commit ID to build {downstream_component}"
+            except ComponentNotFoundError:
+                logger.exception(
+                    "Cannot determine commit ID to build %s",
+                    downstream_component,
                 )
-            except Exception as e:
+            except Exception:
                 # Unexpected exception, log it so we don't crash
-                logger.critical(
-                    f"Unexpected error while handling {downstream_component}"
+                logger.exception(
+                    "Unexpected error while handling %s",
+                    downstream_component,
                 )
-                logger.exception(e)

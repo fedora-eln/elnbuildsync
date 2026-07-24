@@ -226,8 +226,8 @@ async def _main(
                 dynamic_config_git_url=dynamic_config_url,
                 dynamic_config_file=dynamic_config_file,
             )
-        except Exception as e:
-            logger.exception(e)
+        except Exception:
+            logger.exception("Could not load configuration")
             logger.critical("Could not load configuration.")
             sys.exit(128)
 

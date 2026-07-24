@@ -50,8 +50,8 @@ class TagMessage:
         try:
             logger.debug(f"Getting SCM URL for {self._message.body['build_id']}")
             self.scmurl = await get_scmurl(self._message.body["build_id"])
-        except Exception as e:
-            logger.exception(e)
+        except Exception:
+            logger.exception("Unexpected error retrieving SCM URL")
             raise
 
         logger.debug(f"Got {self.scmurl}")
