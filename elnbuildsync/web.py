@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 # This file is part of ELNBuildSync
 # Copyright (C) 2023-2026 Stephen Gallagher <sgallagh@redhat.com>
 
