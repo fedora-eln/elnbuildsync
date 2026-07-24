@@ -27,7 +27,7 @@ from .connection import call_koji, get_buildsys
 logger = logging.getLogger(__name__)
 
 
-async def prepare_side_tag(base_tag, initial_build_ids=[]):
+async def prepare_side_tag(base_tag, initial_build_ids=None):
     """
     Creates a Koji side tag based on @base_tag
 
@@ -40,6 +40,8 @@ async def prepare_side_tag(base_tag, initial_build_ids=[]):
     the repo is ready for use.
     """
 
+    if initial_build_ids is None:
+        initial_build_ids = []
     downstream_koji = get_buildsys()
     # Trigger the creation of the side-tag
     logger.info(f"Creating side tag from {base_tag}")
