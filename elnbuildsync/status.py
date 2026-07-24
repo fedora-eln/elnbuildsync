@@ -17,18 +17,17 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 import json
-import koji
 import logging
 import os
 import re
-import rpm
-
 from collections import defaultdict
 from datetime import datetime, timezone
 from enum import Enum, auto
 
-from . import config
-from . import kojihelpers
+import koji
+import rpm
+
+from . import config, kojihelpers
 from .kojihelpers.connection import call_koji
 
 logger = logging.getLogger(__name__)
@@ -125,7 +124,7 @@ async def create_status_page():
         serializable_data = _build_serializable_status(_status_data)
         encoded_json_data = json.dumps(serializable_data, default=str).encode("UTF-8")
 
-    except Exception:  # noqa: S110
+    except Exception:
         # Normally it's bad to catch all exceptions, but in this case the
         # status page is purely cosmetic and will retry in a few minutes.
         logger.exception("Unexpected error while refreshing status page.")

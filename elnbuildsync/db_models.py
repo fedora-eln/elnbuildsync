@@ -17,24 +17,14 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 from datetime import datetime, timezone
-
-from sqlalchemy import ForeignKey
-from sqlalchemy import JSON
-from sqlalchemy import DateTime
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.ext.asyncio import async_sessionmaker
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.pool import NullPool
-from sqlalchemy.orm import Mapped
-from sqlalchemy.orm import mapped_column
-from sqlalchemy.orm import relationship
-from typing import List
 from typing import Optional
 
+from sqlalchemy import JSON, DateTime, ForeignKey
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.pool import NullPool
 
 from .decorators import as_deferred
-
 
 async_session: async_sessionmaker[AsyncSession]
 
@@ -94,7 +84,7 @@ class DBTagMessage(Base):
     raw: Mapped[str] = mapped_column(nullable=False)
 
     # The RebuildBatch this message is associated with
-    batch_id: Mapped[Optional[int]] = mapped_column(
+    batch_id: Mapped[int | None] = mapped_column(
         ForeignKey("rebuild_batch.id"), nullable=True
     )
     batch: Mapped[Optional["DBRebuildBatch"]] = relationship(
@@ -122,10 +112,10 @@ class DBRebuildBatch(Base):
     dest_tag: Mapped[str] = mapped_column(nullable=False)
 
     # Batches are triggered by one or more tag messages
-    tag_messages: Mapped[List["DBTagMessage"]] = relationship(back_populates="batch")
+    tag_messages: Mapped[list["DBTagMessage"]] = relationship(back_populates="batch")
 
     # Batches may be divided into one or more slices
-    slices: Mapped[List["DBRebuildBatchSlice"]] = relationship(back_populates="batch")
+    slices: Mapped[list["DBRebuildBatchSlice"]] = relationship(back_populates="batch")
 
     # The Koji build options for this batch
     # This is stored as a JSON blob
@@ -146,7 +136,7 @@ class DBRebuildBatchSlice(Base):
     ordering: Mapped[int] = mapped_column(nullable=False)
 
     # The set of tag_messages being processed in this slice
-    tag_messages: Mapped[List["DBTagMessage"]] = relationship()
+    tag_messages: Mapped[list["DBTagMessage"]] = relationship()
 
     # The current state of the slice processing
     state: Mapped[int] = mapped_column(nullable=False)
@@ -156,7 +146,7 @@ class DBRebuildBatchSlice(Base):
     batch: Mapped["DBRebuildBatch"] = relationship(back_populates="slices")
 
     # Slices may make one or more attempts
-    attempts: Mapped[List["DBRebuildAttempt"]] = relationship(back_populates="slice")
+    attempts: Mapped[list["DBRebuildAttempt"]] = relationship(back_populates="slice")
 
 
 class DBRebuildAttempt(Base):
@@ -171,7 +161,7 @@ class DBRebuildAttempt(Base):
     slice: Mapped["DBRebuildBatchSlice"] = relationship(back_populates="attempts")
 
     # Attempts may have one or more tasks associated with them
-    tasks: Mapped[List["DBRebuildTask"]] = relationship(back_populates="attempt")
+    tasks: Mapped[list["DBRebuildTask"]] = relationship(back_populates="attempt")
 
     # Whether this batch has concluded. This is mostly useful for knowing
     # whether to resume watching an attempt at startup (such as after a crash

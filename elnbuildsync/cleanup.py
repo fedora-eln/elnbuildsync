@@ -19,12 +19,8 @@
 
 import logging
 
-
+from . import batching, config, kojihelpers
 from .kojihelpers.connection import call_koji
-
-from . import batching
-from . import config
-from . import kojihelpers
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +62,7 @@ async def periodic_cleanup():
     nvrs_to_untag = all_tagged_dest_nvrs - latest_tagged_dest_nvrs
 
     if len(nvrs_to_untag) > 0:
-        logger.info("{} builds to untag:".format(len(nvrs_to_untag)))
+        logger.info(f"{len(nvrs_to_untag)} builds to untag:")
         for nvr in sorted(nvrs_to_untag):
             logger.info(f"\t{nvr}")
 

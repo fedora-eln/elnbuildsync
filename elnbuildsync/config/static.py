@@ -26,7 +26,6 @@ from twisted.internet.threads import deferToThread
 
 from ..email import Email
 
-
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONTENT_RESOLVER = "https://tiny.distro.builders"

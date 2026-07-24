@@ -21,6 +21,7 @@
 # Install the asyncio reactor as early as possible
 # The fedora_messaging imports may install the Twisted one otherwise
 import asyncio
+
 from twisted.internet import asyncioreactor
 
 try:
@@ -30,26 +31,27 @@ except RuntimeError:
     asyncio.set_event_loop(event_loop)
 asyncioreactor.install(event_loop)
 
-import click  # noqa: E402
-import fedora_messaging.api  # noqa: E402
-import fedora_messaging.config  # noqa: E402
-import importlib.metadata  # noqa: E402
-import logging  # noqa: E402
-import sys  # noqa: E402
-import tempfile  # noqa: E402
+import importlib.metadata
+import logging
+import sys
+import tempfile
 
-from twisted.internet import task  # noqa: E402
-from twisted.internet.defer import Deferred  # noqa: E402
+import click
+import fedora_messaging.api
+import fedora_messaging.config
+from twisted.internet import task
+from twisted.internet.defer import Deferred
 
-from . import auth  # noqa: E402
-from . import batching  # noqa: E402
-from . import cleanup  # noqa: E402
-from . import db_models  # noqa: E402
-from . import config  # noqa: E402
-from . import listener  # noqa: E402
-from . import status  # noqa: E402
-from . import web  # noqa: E402
-
+from . import (
+    auth,
+    batching,
+    cleanup,
+    config,
+    db_models,
+    listener,
+    status,
+    web,
+)
 
 logger = logging.getLogger(__name__)
 

@@ -17,14 +17,13 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
-import git
 import logging
 import os
 import tempfile
 
+import git
 import yaml
 from twisted.internet.threads import deferToThread
-
 
 logger = logging.getLogger(__name__)
 

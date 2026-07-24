@@ -17,14 +17,14 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
-import koji
 import logging
 
-from .errors import InfoUnavailableError
-from .connection import get_buildsys, call_koji
-from .. import config
-from .. import listener
+import koji
 from twisted.internet.defer import DeferredList
+
+from .. import config, listener
+from .connection import call_koji, get_buildsys
+from .errors import InfoUnavailableError
 
 logger = logging.getLogger(__name__)
 

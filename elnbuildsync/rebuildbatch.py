@@ -20,25 +20,20 @@
 import json
 import logging
 import os
-
 from collections import defaultdict
-from typing import Generator
+from collections.abc import Generator
 from urllib.error import URLError
 from urllib.parse import urlparse
+
 from bodhi.client.bindings import BodhiClient, BodhiClientException
 from tenacity import retry, stop_after_delay, wait_exponential
-
 from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 from twisted.internet.threads import deferToThread
 
+from . import config, db_models, kojihelpers
+from .decorators import as_deferred
 from .rebuildbatchslice import RebuildBatchSlice
 from .tagmessage import TagMessage
-
-from . import config
-from . import kojihelpers
-from . import db_models
-from .decorators import as_deferred
-
 
 logger = logging.getLogger(__name__)
 
@@ -288,7 +283,7 @@ class RebuildBatch:
                 return
 
             for i in range(0, len(build_nvrs), batch_size):
-                yield build_nvrs[i : i + batch_size]  # noqa: E203
+                yield build_nvrs[i : i + batch_size]
 
         async def _process_batch(batch_nvrs: list[str]) -> None:
             if len(batch_nvrs) == 0:
@@ -349,8 +344,6 @@ class RebuildBatch:
         except Exception as e:
             logger.exception(f"Failed to submit Bodhi update: {e}")
             raise
-
-        return
 
     @as_deferred
     async def _finalize(self):

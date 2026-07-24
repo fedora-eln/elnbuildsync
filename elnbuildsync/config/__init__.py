@@ -20,15 +20,15 @@
 import json
 import logging
 import re
-import requests.exceptions
-from txrequests import Session
 
-from tenacity import retry as retry_on_exception, stop_after_delay, wait_exponential
+import requests.exceptions
 import twisted.internet.utils
+from tenacity import retry as retry_on_exception
+from tenacity import stop_after_delay, wait_exponential
+from txrequests import Session
 
 from . import dynamic as dynamic_config
 from . import static as static_config
-
 
 # Global logger
 logger = logging.getLogger(__name__)
@@ -293,15 +293,9 @@ async def get_distro_packages(
 
     for view in reversed(distro_view):
         for this_source in reversed(which_source):
-            url = (
-                "{distro_url}/view-{this_source}-package-name-list--view-{view}.txt"
-            ).format(
-                distro_url=distro_url,
-                this_source=this_source,
-                view=view,
-            )
+            url = f"{distro_url}/view-{this_source}-package-name-list--view-{view}.txt"
 
-            logger.debug("downloading {url}".format(url=url))
+            logger.debug(f"downloading {url}")
 
             with Session() as session:
                 r = await session.get(url, allow_redirects=True)
@@ -316,7 +310,7 @@ async def get_distro_packages(
     # There may be an empty line in the file, ignore it.
     packages.pop("", None)
 
-    logger.debug("Found a total of {} packages".format(len(packages)))
+    logger.debug(f"Found a total of {len(packages)} packages")
 
     return packages
 

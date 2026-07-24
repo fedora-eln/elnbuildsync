@@ -17,14 +17,13 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
-import koji
 import logging
 
-from . import kojihelpers
-from . import db_models
+import koji
+
+from . import db_models, kojihelpers
 from .decorators import as_deferred
 from .rebuildtask import RebuildTask
-
 
 logger = logging.getLogger(__name__)
 
