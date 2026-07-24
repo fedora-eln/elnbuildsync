@@ -44,19 +44,17 @@ async def periodic_cleanup():
 
     # Get the list of up-to-date packages in the destination tag
     # Exclude those not in the desired list, so they will be cleaned up below
-    latest_tagged_dest_nvrs = set(
-        [
-            pkg["nvr"]
-            for pkg in latest_tagged_dest_pkgs
-            if pkg["name"] in desired_pkg_names
-        ]
-    )
+    latest_tagged_dest_nvrs = {
+        pkg["nvr"]
+        for pkg in latest_tagged_dest_pkgs
+        if pkg["name"] in desired_pkg_names
+    }
 
     # Get the complete list of builds tagged into the stable tag
     all_tagged_dest_pkgs = await call_koji(
         bsys.listTagged, config.main["koji"]["stable_tag"], latest=False
     )
-    all_tagged_dest_nvrs = set([pkg["nvr"] for pkg in all_tagged_dest_pkgs])
+    all_tagged_dest_nvrs = {pkg["nvr"] for pkg in all_tagged_dest_pkgs}
 
     # Queue up the set of old builds to untag
     nvrs_to_untag = all_tagged_dest_nvrs - latest_tagged_dest_nvrs
