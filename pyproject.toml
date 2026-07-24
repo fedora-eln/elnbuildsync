@@ -45,3 +45,9 @@ include = ["elnbuildsync*"]
 
 [tool.setuptools.package-data]
 elnbuildsync = ["templates/status.html", "static/*"]
+
+[tool.ruff.lint]
+ignore = ["BLE001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["elnbuildsync"]
