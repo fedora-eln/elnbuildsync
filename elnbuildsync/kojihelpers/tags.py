@@ -27,7 +27,7 @@ from .connection import call_koji, get_buildsys
 logger = logging.getLogger(__name__)
 
 
-async def prepare_side_tag(base_tag, initial_build_ids=list()):
+async def prepare_side_tag(base_tag, initial_build_ids=[]):
     """
     Creates a Koji side tag based on @base_tag
 
@@ -97,7 +97,7 @@ def _tag_builds_thread(tag, build_ids):
     :return dict: A dictionary of task_id -> Koji vcall
     """
     downstream_koji = get_buildsys()
-    build_vcalls = dict()
+    build_vcalls = {}
 
     try:
         with downstream_koji.multicall(batch=config.koji_batch) as mc:
@@ -108,7 +108,7 @@ def _tag_builds_thread(tag, build_ids):
         logger.exception("Unexpected error tagging builds into %s", tag)
         raise
 
-    task_index = dict()
+    task_index = {}
     for build_id, vcall in build_vcalls.items():
         task_id = vcall.result
         task_index[build_id] = task_id
@@ -170,7 +170,7 @@ async def wait_for_nvrs_in_tag(tag, nvrs):
     """
     logger.info(f"Waiting for {len(nvrs)} nvrs to appear in tag {tag}")
 
-    deferreds = list()
+    deferreds = []
     for nvr in nvrs:
         deferred = listener.register_nvr_tag(tag, nvr, timeout=config.tag_timeout)
         deferreds.append(deferred)

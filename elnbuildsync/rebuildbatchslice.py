@@ -105,7 +105,7 @@ class RebuildBatchSlice:
         await self._update_status(RebuildBatchSliceStatus.RUNNING)
 
         # Set up the RebuildAttempt
-        all_successes = dict()
+        all_successes = {}
         scm_urls = [msg.scmurl for msg in self.tag_messages]
         attempt = attempt = await RebuildAttempt(
             scm_urls=scm_urls, slice=self

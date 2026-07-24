@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 class RebuildAttempt:
     def __init__(self, scm_urls, slice):
-        self.tasks = dict()
+        self.tasks = {}
         self.scm_urls = scm_urls
         self.slice = slice
 
@@ -81,8 +81,8 @@ class RebuildAttempt:
         self.tasks[task] = rtask
 
     async def async_await(self):
-        successes = dict()
-        failures = dict()
+        successes = {}
+        failures = {}
 
         task_ids = [task.koji_task_id for task in self.tasks.values()]
         results = await kojihelpers.builds.wait_for_tasks(task_ids)
