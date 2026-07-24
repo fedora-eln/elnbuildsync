@@ -89,7 +89,7 @@ class DBTagMessage(Base):
     batch_id: Mapped[int | None] = mapped_column(
         ForeignKey("rebuild_batch.id"), nullable=True
     )
-    batch: Mapped[Optional["DBRebuildBatch"]] = relationship(
+    batch: Mapped[Optional[DBRebuildBatch]] = relationship(
         back_populates="tag_messages"
     )
 
@@ -97,7 +97,7 @@ class DBTagMessage(Base):
     slice_id: Mapped[int] = mapped_column(
         ForeignKey("rebuild_batch_slice.id"), nullable=True
     )
-    slice: Mapped["DBRebuildBatchSlice"] = relationship(back_populates="tag_messages")
+    slice: Mapped[DBRebuildBatchSlice] = relationship(back_populates="tag_messages")
 
 
 class DBRebuildBatch(Base):
@@ -114,10 +114,10 @@ class DBRebuildBatch(Base):
     dest_tag: Mapped[str] = mapped_column(nullable=False)
 
     # Batches are triggered by one or more tag messages
-    tag_messages: Mapped[list["DBTagMessage"]] = relationship(back_populates="batch")
+    tag_messages: Mapped[list[DBTagMessage]] = relationship(back_populates="batch")
 
     # Batches may be divided into one or more slices
-    slices: Mapped[list["DBRebuildBatchSlice"]] = relationship(back_populates="batch")
+    slices: Mapped[list[DBRebuildBatchSlice]] = relationship(back_populates="batch")
 
     # The Koji build options for this batch
     # This is stored as a JSON blob
@@ -138,17 +138,17 @@ class DBRebuildBatchSlice(Base):
     ordering: Mapped[int] = mapped_column(nullable=False)
 
     # The set of tag_messages being processed in this slice
-    tag_messages: Mapped[list["DBTagMessage"]] = relationship()
+    tag_messages: Mapped[list[DBTagMessage]] = relationship()
 
     # The current state of the slice processing
     state: Mapped[int] = mapped_column(nullable=False)
 
     # Link back to the batch that started this attempt
     batch_id: Mapped[int] = mapped_column(ForeignKey("rebuild_batch.id"), nullable=True)
-    batch: Mapped["DBRebuildBatch"] = relationship(back_populates="slices")
+    batch: Mapped[DBRebuildBatch] = relationship(back_populates="slices")
 
     # Slices may make one or more attempts
-    attempts: Mapped[list["DBRebuildAttempt"]] = relationship(back_populates="slice")
+    attempts: Mapped[list[DBRebuildAttempt]] = relationship(back_populates="slice")
 
 
 class DBRebuildAttempt(Base):
@@ -160,10 +160,10 @@ class DBRebuildAttempt(Base):
     slice_id: Mapped[int] = mapped_column(
         ForeignKey("rebuild_batch_slice.id"), nullable=False
     )
-    slice: Mapped["DBRebuildBatchSlice"] = relationship(back_populates="attempts")
+    slice: Mapped[DBRebuildBatchSlice] = relationship(back_populates="attempts")
 
     # Attempts may have one or more tasks associated with them
-    tasks: Mapped[list["DBRebuildTask"]] = relationship(back_populates="attempt")
+    tasks: Mapped[list[DBRebuildTask]] = relationship(back_populates="attempt")
 
     # Whether this batch has concluded. This is mostly useful for knowing
     # whether to resume watching an attempt at startup (such as after a crash
@@ -187,7 +187,7 @@ class DBRebuildTask(Base):
     attempt_id: Mapped[int] = mapped_column(
         ForeignKey("rebuild_attempt.id"), nullable=False
     )
-    attempt: Mapped["DBRebuildAttempt"] = relationship(back_populates="tasks")
+    attempt: Mapped[DBRebuildAttempt] = relationship(back_populates="tasks")
 
 
 @as_deferred
