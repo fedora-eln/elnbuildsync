@@ -33,6 +33,9 @@ jobs:
         run: ruff --version
       - name: Ruff check
         run: |
+          ruff check
+      - name: Ruff check (CodeQuality)
+        run: |
           ruff check --output-format=github --output-file=code-quality-report.json
       - name: Upload code quality report
         if: always()
