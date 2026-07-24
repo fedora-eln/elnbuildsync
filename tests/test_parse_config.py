@@ -695,7 +695,7 @@ class TestLoadConfig:
         try:
             with (
                 patch(
-                    "elnbuildsync.config.static.deferToThread",
+                    "elnbuildsync.utils.deferToThread",
                     side_effect=_fake_defer_to_thread,
                 ),
                 patch(
@@ -738,7 +738,7 @@ class TestLoadConfig:
         secret_path = _write_temp_file("oidc-secret-value\n")
         try:
             with patch(
-                "elnbuildsync.config.static.deferToThread",
+                "elnbuildsync.utils.deferToThread",
                 side_effect=_fake_defer_to_thread,
             ):
                 await load_static_config(
@@ -759,7 +759,7 @@ class TestLoadConfig:
         try:
             with (
                 patch(
-                    "elnbuildsync.config.static.deferToThread",
+                    "elnbuildsync.utils.deferToThread",
                     side_effect=_fake_defer_to_thread,
                 ),
                 pytest.raises(ConfigError, match="Could not read OIDC client secret"),
@@ -779,7 +779,7 @@ class TestLoadConfig:
         try:
             with (
                 patch(
-                    "elnbuildsync.config.static.deferToThread",
+                    "elnbuildsync.utils.deferToThread",
                     side_effect=_fake_defer_to_thread,
                 ),
                 pytest.raises(ConfigError, match="is empty"),
@@ -798,7 +798,7 @@ class TestLoadConfig:
         static_path = _write_temp_file(MINIMAL_STATIC_CONFIG_YAML, suffix=".yaml")
         try:
             with patch(
-                "elnbuildsync.config.static.deferToThread",
+                "elnbuildsync.utils.deferToThread",
                 side_effect=_fake_defer_to_thread,
             ):
                 await load_static_config(
@@ -819,7 +819,7 @@ class TestLoadConfig:
             config_mod.emailer = None
             with (
                 patch(
-                    "elnbuildsync.config.static.deferToThread",
+                    "elnbuildsync.utils.deferToThread",
                     side_effect=_fake_defer_to_thread,
                 ),
                 patch(
@@ -868,6 +868,10 @@ class TestLoadConfig:
 
             with (
                 patch(
+                    "elnbuildsync.utils.deferToThread",
+                    side_effect=_fake_defer_to_thread,
+                ),
+                patch(
                     "elnbuildsync.config.dynamic.deferToThread",
                     side_effect=_fake_defer_to_thread,
                 ),
@@ -896,7 +900,13 @@ class TestLoadConfig:
             f.write("not: valid: yaml: [")
             path = f.name
         try:
-            with pytest.raises(ConfigError, match="Could not parse"):
+            with (
+                patch(
+                    "elnbuildsync.utils.deferToThread",
+                    side_effect=_fake_defer_to_thread,
+                ),
+                pytest.raises(ConfigError, match="Could not parse"),
+            ):
                 await load_dynamic_config(dynamic_config_file=path)
         finally:
             os.unlink(path)
@@ -914,6 +924,10 @@ configuration:
             path = f.name
         try:
             with (
+                patch(
+                    "elnbuildsync.utils.deferToThread",
+                    side_effect=_fake_defer_to_thread,
+                ),
                 patch(
                     "elnbuildsync.config.dynamic.deferToThread",
                     side_effect=_fake_defer_to_thread,

@@ -22,8 +22,9 @@ import os
 import tempfile
 
 import git
-import yaml
 from twisted.internet.threads import deferToThread
+
+from ..utils import load_yaml_file
 
 logger = logging.getLogger(__name__)
 
@@ -268,8 +269,7 @@ async def _fetch_dynamic_config_file(
                 )
 
             try:
-                with open(config_path) as f:
-                    y = await deferToThread(yaml.safe_load, f)
+                y = await load_yaml_file(config_path)
                 logger.debug(
                     "%s loaded, processing dynamic configuration.", config_path
                 )
@@ -280,8 +280,7 @@ async def _fetch_dynamic_config_file(
             return scmurl, y
 
     try:
-        with open(dynamic_config_file) as f:
-            y = await deferToThread(yaml.safe_load, f)
+        y = await load_yaml_file(dynamic_config_file)
         logger.debug(
             "%s loaded, processing dynamic configuration.", dynamic_config_file
         )
