@@ -229,6 +229,13 @@ async def _main(
             logger.critical("Could not load configuration.")
             sys.exit(128)
 
+        try:
+            web.load_status_page()
+        except Exception:
+            logger.exception("Could not load status page template")
+            logger.critical("Could not load status page template.")
+            sys.exit(128)
+
         # Set up the Database
         logger.info("Initializing database")
         await db_models.init_db(config.db_url, echo=config.is_debug())

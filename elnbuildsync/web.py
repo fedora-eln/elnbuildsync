@@ -44,6 +44,8 @@ _oidc_state_store = {}
 # Globals
 started = False
 alive = True
+# Fully substituted status.html bytes; loaded once at startup.
+status_page_html = None
 
 
 def _elnbuildsync_version() -> str:
@@ -51,6 +53,19 @@ def _elnbuildsync_version() -> str:
         return importlib.metadata.version("ELNBuildSync")
     except importlib.metadata.PackageNotFoundError:
         return "unknown"
+
+
+def load_status_page() -> None:
+    """Read status.html and cache the version-substituted result for the process lifetime."""
+    global status_page_html
+    template_path = os.path.join(
+        os.path.dirname(__file__), "templates", "status.html"
+    )
+    with open(template_path, encoding="utf-8") as f:
+        raw = f.read()
+    content = Template(raw).substitute(version=_elnbuildsync_version())
+    status_page_html = content.encode("utf-8")
+    logger.debug("Status page template loaded from %s", template_path)
 
 
 class RootResource(Resource):
@@ -146,38 +161,13 @@ class StatusPageResource(Resource):
             return self
         return Resource.getChild(self, name, request)
 
-    def _done(self, request, data):
-        if not request.finished:
-            request.finish()
-
-    def _failed(self, request, failure):
-        logger.error(f"Status page failed: {failure}")
-        if not request.finished:
-            request.setResponseCode(500)
-            request.write(b"Internal server error")
-            request.finish()
-
     def render_GET(self, request):
-        deferred = Deferred.fromFuture(asyncio.ensure_future(self._do_get(request)))
-        deferred.addCallback(lambda data: self._done(request, data))
-        deferred.addErrback(lambda failure: self._failed(request, failure))
-        return NOT_DONE_YET
-
-    async def _do_get(self, request):
         request.setHeader("Content-Type", "text/html; charset=utf-8")
         request.setHeader("Cache-Control", "no-cache")
-
-        template_path = os.path.join(
-            os.path.dirname(__file__), "templates", "status.html"
-        )
-        try:
-            with open(template_path, encoding="utf-8") as f:
-                content = Template(f.read()).substitute(version=_elnbuildsync_version())
-            request.write(content.encode("utf-8"))
-        except OSError:
-            logger.exception("Failed to read status template")
+        if not status_page_html:
             request.setResponseCode(500)
-            request.write(b"Status page template not available")
+            return b"Status page template not available"
+        return status_page_html
 
 
 class ProtectedResource(Resource):
@@ -839,5 +829,6 @@ if __name__ == "__main__":
         format="%(asctime)s : %(name)s : %(levelname)s : %(message)s",
         level=logging.DEBUG,
     )
+    load_status_page()
     reactor.listenTCP(8080, setup_web_resources())
     reactor.run()
