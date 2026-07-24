@@ -184,11 +184,7 @@ def _set_package_status(_status_data, pname, build, tagged_builds):
         _status_data[pname] = dict(build)
 
     entry = _status_data[pname]
-    entry["view"] = (
-        config.comps["downstream_components"][pname]["view"]
-        if "view" in config.comps["downstream_components"][pname]
-        else "UNKNOWN"
-    )
+    entry["view"] = config.comps["downstream_components"][pname].get("view", "UNKNOWN")
     entry["status_detail"] = ""
     if build_unknown:
         entry["build_url"] = None
