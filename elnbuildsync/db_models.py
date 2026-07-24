@@ -19,7 +19,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
 
 from sqlalchemy import JSON, DateTime, ForeignKey
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -89,9 +88,7 @@ class DBTagMessage(Base):
     batch_id: Mapped[int | None] = mapped_column(
         ForeignKey("rebuild_batch.id"), nullable=True
     )
-    batch: Mapped[Optional[DBRebuildBatch]] = relationship(
-        back_populates="tag_messages"
-    )
+    batch: Mapped[DBRebuildBatch | None] = relationship(back_populates="tag_messages")
 
     # The slice this message is associated with
     slice_id: Mapped[int] = mapped_column(
