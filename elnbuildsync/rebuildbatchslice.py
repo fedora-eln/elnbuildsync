@@ -107,9 +107,7 @@ class RebuildBatchSlice:
         # Set up the RebuildAttempt
         all_successes = {}
         scm_urls = [msg.scmurl for msg in self.tag_messages]
-        attempt = attempt = await RebuildAttempt(
-            scm_urls=scm_urls, slice=self
-        ).async_init()
+        attempt = await RebuildAttempt(scm_urls=scm_urls, slice=self).async_init()
 
         successes, failures = await attempt.async_await()
 
