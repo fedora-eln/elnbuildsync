@@ -673,14 +673,17 @@ async def _fake_defer_to_thread(fn, *args, **kwargs):
     return fn(*args, **kwargs)
 
 
+def _write_temp_file(content, suffix=""):
+    with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False) as f:
+        f.write(content)
+        return f.name
+
+
 def _write_split_config_files(static_yaml, dynamic_yaml):
-    static_f = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
-    dynamic_f = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
-    static_f.write(static_yaml)
-    static_f.close()
-    dynamic_f.write(dynamic_yaml)
-    dynamic_f.close()
-    return static_f.name, dynamic_f.name
+    return (
+        _write_temp_file(static_yaml, suffix=".yaml"),
+        _write_temp_file(dynamic_yaml, suffix=".yaml"),
+    )
 
 
 class TestLoadConfig:
@@ -731,38 +734,28 @@ class TestLoadConfig:
 
     @pytest.mark.asyncio
     async def test_load_static_config_injects_oidc_secret_from_file(self):
-        static_path = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        )
-        static_path.write(MINIMAL_STATIC_CONFIG_OIDC_YAML)
-        static_path.close()
-        secret_path = tempfile.NamedTemporaryFile(mode="w", delete=False)
-        secret_path.write("oidc-secret-value\n")
-        secret_path.close()
+        static_path = _write_temp_file(MINIMAL_STATIC_CONFIG_OIDC_YAML, suffix=".yaml")
+        secret_path = _write_temp_file("oidc-secret-value\n")
         try:
             with patch(
                 "elnbuildsync.config.static.deferToThread",
                 side_effect=_fake_defer_to_thread,
             ):
                 await load_static_config(
-                    static_path.name,
+                    static_path,
                     db_pw="testpw",
-                    oidc_client_secret_file=secret_path.name,
+                    oidc_client_secret_file=secret_path,
                 )
             assert config_mod.main["open_id_connect"]["client_secret"] == (
                 "oidc-secret-value"
             )
         finally:
-            os.unlink(static_path.name)
-            os.unlink(secret_path.name)
+            os.unlink(static_path)
+            os.unlink(secret_path)
 
     @pytest.mark.asyncio
     async def test_load_static_config_oidc_enabled_missing_secret_file_raises(self):
-        static_path = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        )
-        static_path.write(MINIMAL_STATIC_CONFIG_OIDC_YAML)
-        static_path.close()
+        static_path = _write_temp_file(MINIMAL_STATIC_CONFIG_OIDC_YAML, suffix=".yaml")
         try:
             with (
                 patch(
@@ -772,23 +765,17 @@ class TestLoadConfig:
                 pytest.raises(ConfigError, match="Could not read OIDC client secret"),
             ):
                 await load_static_config(
-                    static_path.name,
+                    static_path,
                     db_pw="testpw",
                     oidc_client_secret_file="/nonexistent/oidc_secret",
                 )
         finally:
-            os.unlink(static_path.name)
+            os.unlink(static_path)
 
     @pytest.mark.asyncio
     async def test_load_static_config_oidc_enabled_empty_secret_file_raises(self):
-        static_path = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        )
-        static_path.write(MINIMAL_STATIC_CONFIG_OIDC_YAML)
-        static_path.close()
-        secret_path = tempfile.NamedTemporaryFile(mode="w", delete=False)
-        secret_path.write("\n")
-        secret_path.close()
+        static_path = _write_temp_file(MINIMAL_STATIC_CONFIG_OIDC_YAML, suffix=".yaml")
+        secret_path = _write_temp_file("\n")
         try:
             with (
                 patch(
@@ -798,34 +785,30 @@ class TestLoadConfig:
                 pytest.raises(ConfigError, match="is empty"),
             ):
                 await load_static_config(
-                    static_path.name,
+                    static_path,
                     db_pw="testpw",
-                    oidc_client_secret_file=secret_path.name,
+                    oidc_client_secret_file=secret_path,
                 )
         finally:
-            os.unlink(static_path.name)
-            os.unlink(secret_path.name)
+            os.unlink(static_path)
+            os.unlink(secret_path)
 
     @pytest.mark.asyncio
     async def test_load_static_config_oidc_disabled_ignores_secret_file(self):
-        static_path = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        )
-        static_path.write(MINIMAL_STATIC_CONFIG_YAML)
-        static_path.close()
+        static_path = _write_temp_file(MINIMAL_STATIC_CONFIG_YAML, suffix=".yaml")
         try:
             with patch(
                 "elnbuildsync.config.static.deferToThread",
                 side_effect=_fake_defer_to_thread,
             ):
                 await load_static_config(
-                    static_path.name,
+                    static_path,
                     db_pw="testpw",
                     oidc_client_secret_file="/nonexistent/oidc_secret",
                 )
             assert config_mod.main["open_id_connect"] is None
         finally:
-            os.unlink(static_path.name)
+            os.unlink(static_path)
 
     @pytest.mark.asyncio
     async def test_load_config_reinstantiates_email_each_load(self):
@@ -872,11 +855,7 @@ class TestLoadConfig:
         dynamic_yaml = MINIMAL_DYNAMIC_CONFIG_YAML.replace(
             "trigger_tag: f40", "trigger_tag: rawhide"
         )
-        dynamic_path = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        )
-        dynamic_path.write(dynamic_yaml)
-        dynamic_path.close()
+        dynamic_path = _write_temp_file(dynamic_yaml, suffix=".yaml")
         try:
             bodhi_response = MagicMock()
             bodhi_response.text = _bodhi_releases_json("f41")
@@ -898,11 +877,11 @@ class TestLoadConfig:
                     new_callable=AsyncMock,
                 ),
             ):
-                await load_dynamic_config(dynamic_config_file=dynamic_path.name)
+                await load_dynamic_config(dynamic_config_file=dynamic_path)
             assert config_mod.control["trigger_tag"] == "f41"
             mock_get.assert_called_once()
         finally:
-            os.unlink(dynamic_path.name)
+            os.unlink(dynamic_path)
 
     @pytest.mark.asyncio
     async def test_load_config_missing_file_raises(self):
