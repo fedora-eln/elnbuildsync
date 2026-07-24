@@ -104,8 +104,8 @@ def _tag_builds_thread(tag, build_ids):
             logger.info(f"Tagging {len(build_ids)} builds into {tag}")
             for build_id in build_ids:
                 build_vcalls[build_id] = mc.tagBuild(tag, build_id)
-    except Exception as e:
-        logger.exception(e)
+    except Exception:
+        logger.exception("Unexpected error tagging builds into %s", tag)
         raise
 
     task_index = dict()

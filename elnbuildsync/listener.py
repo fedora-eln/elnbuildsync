@@ -192,7 +192,7 @@ def message_handler(msg):
         raise
 
     except Exception as e:
-        logger.exception(e)
+        logger.exception("Unexpected error on message %s", msg.id)
         # If anything goes wrong during the message handler, Nack() the
         # message so it will get retried.
         raise Nack(f"Unexpected error on message {msg.id}, will retry") from e
@@ -235,10 +235,9 @@ async def check_tasks():
                 logger.info(f"Task {task} failed.")
                 reactor.callLater(0, fire_task_errback, deferred, taskinfo)
 
-        except Exception as e:
+        except Exception:
             # Log any failures so we don't block future checks.
-            logger.critical(f"Unexpected failure in task {task}")
-            logger.exception(e)
+            logger.exception("Unexpected failure in task %s", task)
 
             # Try to claim the Deferred and cancel it
             deferred = state.active_tasks.pop(task, None)
@@ -279,9 +278,9 @@ async def check_tags():
 def fire_task_callback(deferred, data):
     try:
         deferred.callback(data)
-    except AlreadyCalledError as e:
+    except AlreadyCalledError:
         # Most likely due to a timeout, so ignore it
-        logger.exception(e)
+        logger.exception("Deferred already called when firing task callback")
 
 
 def fire_task_errback(deferred, data):
@@ -289,9 +288,9 @@ def fire_task_errback(deferred, data):
     err.data = data
     try:
         deferred.errback(err)
-    except AlreadyCalledError as e:
+    except AlreadyCalledError:
         # Most likely due to a timeout, so ignore it
-        logger.exception(e)
+        logger.exception("Deferred already called when firing task errback")
 
 
 def register_task_id(task_id, timeout=config.task_timeout):

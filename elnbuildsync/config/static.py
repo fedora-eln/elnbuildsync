@@ -360,8 +360,8 @@ async def load_static_config(
                 password=db_pw,
             )
             logger.debug("Database URL configured from static config")
-        except KeyError as e:
-            logger.exception(e)
+        except KeyError:
+            logger.exception("Missing database configuration (db block)")
             raise ConfigError("Missing database configuration (db block)")
     else:
         logger.debug("Database URL unchanged (already set)")
