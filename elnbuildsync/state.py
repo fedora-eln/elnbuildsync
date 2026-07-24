@@ -17,6 +17,7 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 from collections.abc import Generator
+from typing import ClassVar
 
 from twisted.internet.defer import Deferred
 
@@ -95,8 +96,8 @@ class ELNBuildSyncState:
     """
 
     # A dictionary to keep track of tasks in-progress
-    active_tasks = {}
+    active_tasks: ClassVar[dict] = {}
 
     # A data structure to keep track of NVRs we're waiting to
     # appear in a tag.
-    pending_nvr_tags = PendingNVRTags()
+    pending_nvr_tags: ClassVar[PendingNVRTags] = PendingNVRTags()
