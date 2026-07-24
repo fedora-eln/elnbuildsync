@@ -62,10 +62,7 @@ def log_filter(record):
     if record.name.startswith("elnbuildsync"):
         return True
 
-    if record.name.startswith("sqlalchemy") and config.is_debug():
-        return True
-
-    return False
+    return bool(record.name.startswith("sqlalchemy") and config.is_debug())
 
 
 def _resolve_dynamic_source(dynamic_config_url, dynamic_config_file):
