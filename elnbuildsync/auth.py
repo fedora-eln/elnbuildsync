@@ -367,7 +367,7 @@ def get_bearer_token(request) -> str | None:
         authz = authz.decode("utf-8")
     prefix = "Bearer "
     if authz.startswith(prefix):
-        return authz[len(prefix) :].strip()
+        return authz[len(prefix) :].strip()  # noqa: E203
     return None
 
 

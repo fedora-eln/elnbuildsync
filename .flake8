@@ -1,0 +1,4 @@
+[flake8]
+extend-ignore = E501
+per-file-ignores =
+    elnbuildsync/__init__.py: E402
