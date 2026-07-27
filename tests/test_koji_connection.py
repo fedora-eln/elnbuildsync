@@ -120,6 +120,37 @@ class TestRenewUnit:
         assert stop.max_attempt_number == 5
 
 
+
+class TestStoreCreds:
+    def test_persists_to_default_ccache_when_krb5ccname_unset(self):
+        creds = MagicMock(name="creds")
+        env = {k: v for k, v in __import__("os").environ.items() if k != "KRB5CCNAME"}
+        with (
+            patch.dict("os.environ", env, clear=True),
+            patch(
+                "elnbuildsync.kojihelpers.connection.store_cred_into"
+            ) as store_into,
+        ):
+            conn._store_creds(creds)
+        store_into.assert_called_once_with(
+            {}, creds, usage="initiate", overwrite=True
+        )
+        assert conn._krb_creds is creds
+
+    def test_store_failure_raises_and_skips_assignment(self):
+        creds = MagicMock(name="creds")
+        with (
+            patch.dict("os.environ", {"KRB5CCNAME": "FILE:/tmp/cc"}, clear=False),
+            patch(
+                "elnbuildsync.kojihelpers.connection.store_cred_into",
+                side_effect=OSError("disk full"),
+            ),
+            pytest.raises(KerberosAuthError, match="persist"),
+        ):
+            conn._store_creds(creds)
+        assert conn._krb_creds is None
+
+
 @pytest.mark.asyncio
 class TestEnsureTgt:
     async def test_skips_renew_when_lifetime_at_threshold(self):

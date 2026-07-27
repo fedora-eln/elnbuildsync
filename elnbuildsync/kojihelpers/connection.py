@@ -144,16 +144,20 @@ def _tgt_lifetime_seconds():
 
 
 def _store_creds(creds):
+    """Persist ``creds`` to the active ccache, then retain them in-process.
+
+    Always calls ``store_cred_into``: an empty store selects the default
+    ccache when ``KRB5CCNAME`` is unset. Failures raise ``KerberosAuthError``;
+    ``_krb_creds`` is updated only after successful persistence.
+    """
     global _krb_creds
     store = _ccache_store()
-    if store:
-        try:
-            store_cred_into(store, creds, usage="initiate", overwrite=True)
-        except Exception:
-            logger.debug(
-                "store_cred_into failed; continuing with acquired creds",
-                exc_info=True,
-            )
+    try:
+        store_cred_into(store, creds, usage="initiate", overwrite=True)
+    except Exception as e:
+        raise KerberosAuthError(
+            "Failed to persist Kerberos credentials to ccache"
+        ) from e
     _krb_creds = creds
 
 
