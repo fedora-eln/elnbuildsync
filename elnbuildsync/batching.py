@@ -94,11 +94,9 @@ async def rebuild_from_components(downstream_components):
     """Takes an iterable of downstream component names and rebuilds them."""
 
     # Fake up a TagMessage for each of these to enqueue into the next batch
-    bsys = kojihelpers.connection.get_buildsys()
-
     src_tag = config.control["trigger_tag"]
     latest_tagged_rawhide_pkgs = await call_koji(
-        bsys.listTagged, src_tag, latest=True, inherit=True
+        "listTagged", src_tag, latest=True, inherit=True
     )
     latest_tagged_rawhide_table = {
         pkg["name"]: pkg for pkg in latest_tagged_rawhide_pkgs
@@ -109,7 +107,7 @@ async def rebuild_from_components(downstream_components):
         dest_tag,
     ) = await kojihelpers.tags.get_tags_for_target(config.main["koji"]["build_target"])
     latest_tagged_eln_pkgs = await call_koji(
-        bsys.listTagged, dest_tag, latest=True, inherit=True
+        "listTagged", dest_tag, latest=True, inherit=True
     )
     latest_tagged_eln_table = {pkg["name"]: pkg for pkg in latest_tagged_eln_pkgs}
 

@@ -23,7 +23,7 @@ import koji
 from twisted.internet.defer import DeferredList
 
 from .. import config
-from .connection import call_koji, get_buildsys
+from .connection import call_koji
 from .errors import InfoUnavailableError
 
 logger = logging.getLogger(__name__)
@@ -59,10 +59,8 @@ async def get_buildinfo(build_id, **kwargs):
     :param build_id: The ID of the build (likely retrieved from a tagging message)
     :returns: A dictionary of information about the build
     """
-    bsys = get_buildsys()
-
     try:
-        buildinfo = await call_koji(bsys.getBuild, build_id, **kwargs)
+        buildinfo = await call_koji("getBuild", build_id, **kwargs)
     except koji.GenericError as e:
         logger.exception(f"Could not retrieve information for build {build_id}")
         raise InfoUnavailableError(
@@ -72,8 +70,7 @@ async def get_buildinfo(build_id, **kwargs):
     return buildinfo
 
 
-def _get_multi_buildinfo_thread(build_ids, **kwargs):
-    bsys = get_buildsys()
+def _get_multi_buildinfo_thread(bsys, build_ids, **kwargs):
     build_vcalls = {}
 
     with bsys.multicall(batch=config.koji_batch) as mc:
@@ -108,10 +105,8 @@ async def get_multi_buildinfo(build_ids, **kwargs):
 
 
 async def get_taskinfo(task_id, **kwargs):
-    bsys = get_buildsys()
-
     try:
-        taskinfo = await call_koji(bsys.getTaskInfo, task_id, **kwargs)
+        taskinfo = await call_koji("getTaskInfo", task_id, **kwargs)
     except koji.GenericError as e:
         logger.exception(f"Could not retrieve information for task {task_id}")
         raise InfoUnavailableError(
@@ -128,7 +123,7 @@ async def get_taskinfo(task_id, **kwargs):
 
     try:
         children = await call_koji(
-            bsys.getTaskChildren, task_id, request=True, strict=True
+            "getTaskChildren", task_id, request=True, strict=True
         )
     except koji.GenericError as e:
         logger.exception(f"Could not retrieve child information for task {task_id}")
@@ -148,7 +143,7 @@ async def get_taskinfo(task_id, **kwargs):
         for child in children:
             if child["method"] == "buildSRPMFromSCM":
                 try:
-                    child["result"] = await call_koji(bsys.getTaskResult, child["id"])
+                    child["result"] = await call_koji("getTaskResult", child["id"])
                 except koji.GenericError as e:
                     raise InfoUnavailableError(
                         f"SRPM build failed for {task_id}"
@@ -176,8 +171,7 @@ async def start_builds(target, scm_urls, scratch=False, fail_fast=False):
     return task_index
 
 
-def _start_builds_thread(target, scm_urls, scratch=False, fail_fast=False):
-    bsys = get_buildsys()
+def _start_builds_thread(bsys, target, scm_urls, scratch=False, fail_fast=False):
     build_vcalls = {}
     try:
         with bsys.multicall(batch=config.koji_batch) as mc:
@@ -234,8 +228,7 @@ async def wait_for_tasks(task_ids, timeout=config.task_timeout):
 async def cancel_task(task_id):
     logger.debug(f"Canceling task {task_id}")
     try:
-        bsys = get_buildsys()
-        await call_koji(bsys.cancelTask, task_id, recurse=True)
+        await call_koji("cancelTask", task_id, recurse=True)
     except Exception:
         # Cancellation is best-effort
         logger.exception("Could not cancel task %s. Ignoring.", task_id)

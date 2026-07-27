@@ -24,9 +24,8 @@
 # ARG_OPTIONAL_SINGLE([dynamic-config-file],[],[Dynamic configuration file])
 # ARG_OPTIONAL_SINGLE([dynamic-config-url],[],[Dynamic configuration Git URL],[https://github.com/fedora-eln/elnbuildsync-config.git])
 # ARG_OPTIONAL_SINGLE([dynamic-config-branch],[],[Dynamic configuration Git branch],[main])
-# ARG_OPTIONAL_SINGLE([keytab-principal],[],[Keytab principal],[eln-buildsync@FEDORAPROJECT.ORG])
-# ARG_OPTIONAL_SINGLE([keytab-file],[],[Keytab file],[])
-# ARG_OPTIONAL_SINGLE([koji-profile],[],[Koji profile],[koji])
+# ARG_OPTIONAL_SINGLE([krb5-keytab-file],[],[Kerberos keytab for in-process TGT acquisition (optional)])
+# ARG_OPTIONAL_SINGLE([krb5-keytab-principal],[],[Kerberos principal for keytab kinit only (default: guessed from static configuration)])
 # ARG_OPTIONAL_SINGLE([openid-ca-file],[],[OIDC CA certificate file],[])
 # ARG_POSITIONAL_DOUBLEDASH([])
 # ARG_POSITIONAL_INF([custom],[Additional arguments to pass to the ELNBuildSync daemon])
@@ -63,24 +62,22 @@ _arg_static_config_file="/etc/elnbuildsync/static-config/elnbuildsync.yaml"
 _arg_dynamic_config_file=
 _arg_dynamic_config_url="https://github.com/fedora-eln/elnbuildsync-config.git"
 _arg_dynamic_config_branch="main"
-_arg_keytab_principal="eln-buildsync@FEDORAPROJECT.ORG"
-_arg_keytab_file=
-_arg_koji_profile="koji"
+_arg_krb5_keytab_file=
+_arg_krb5_keytab_principal=
 _arg_openid_ca_file=
 
 
 print_help()
 {
-	printf 'Usage: %s [--log-level <arg>] [--static-config-file <arg>] [--dynamic-config-file <arg>] [--dynamic-config-url <arg>] [--dynamic-config-branch <arg>] [--keytab-principal <arg>] [--keytab-file <arg>] [--koji-profile <arg>] [--openid-ca-file <arg>] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
+	printf 'Usage: %s [--log-level <arg>] [--static-config-file <arg>] [--dynamic-config-file <arg>] [--dynamic-config-url <arg>] [--dynamic-config-branch <arg>] [--krb5-keytab-file <arg>] [--krb5-keytab-principal <arg>] [--openid-ca-file <arg>] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
 	printf '\t%s\n' "<custom>: Additional arguments to pass to the ELNBuildSync daemon"
 	printf '\t%s\n' "--log-level: Log verbosity (default: 'INFO')"
 	printf '\t%s\n' "--static-config-file: Static configuration file (default: '/etc/elnbuildsync/static-config/elnbuildsync.yaml')"
 	printf '\t%s\n' "--dynamic-config-file: Dynamic configuration file (no default)"
 	printf '\t%s\n' "--dynamic-config-url: Dynamic configuration Git URL (default: 'https://github.com/fedora-eln/elnbuildsync-config.git')"
 	printf '\t%s\n' "--dynamic-config-branch: Dynamic configuration Git branch (default: 'main')"
-	printf '\t%s\n' "--keytab-principal: Keytab principal (default: 'eln-buildsync@FEDORAPROJECT.ORG')"
-	printf '\t%s\n' "--keytab-file: Keytab file (no default)"
-	printf '\t%s\n' "--koji-profile: Koji profile (default: 'koji')"
+	printf '\t%s\n' "--krb5-keytab-file: Kerberos keytab for in-process TGT acquisition (optional; otherwise use existing ccache)"
+	printf '\t%s\n' "--krb5-keytab-principal: Principal for keytab kinit only (default: guessed from static configuration when a keytab is set)"
 	printf '\t%s\n' "--openid-ca-file: OIDC CA certificate file (no default)"
 	printf '\t%s\n' "-h, --help: Prints help"
 	printf '\n%s\n' "Run the ELNBuildSync daemon"
@@ -145,29 +142,21 @@ parse_commandline()
 			--dynamic-config-branch=*)
 				_arg_dynamic_config_branch="${_key##--dynamic-config-branch=}"
 				;;
-			--keytab-principal)
+			--krb5-keytab-file)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
-				_arg_keytab_principal="$2"
+				_arg_krb5_keytab_file="$2"
 				shift
 				;;
-			--keytab-principal=*)
-				_arg_keytab_principal="${_key##--keytab-principal=}"
+			--krb5-keytab-file=*)
+				_arg_krb5_keytab_file="${_key##--krb5-keytab-file=}"
 				;;
-			--keytab-file)
+			--krb5-keytab-principal)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
-				_arg_keytab_file="$2"
+				_arg_krb5_keytab_principal="$2"
 				shift
 				;;
-			--keytab-file=*)
-				_arg_keytab_file="${_key##--keytab-file=}"
-				;;
-			--koji-profile)
-				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
-				_arg_koji_profile="$2"
-				shift
-				;;
-			--koji-profile=*)
-				_arg_koji_profile="${_key##--koji-profile=}"
+			--krb5-keytab-principal=*)
+				_arg_krb5_keytab_principal="${_key##--krb5-keytab-principal=}"
 				;;
 			--openid-ca-file)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
@@ -228,20 +217,14 @@ set -eo pipefail
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 export TMPDIR=/var/tmp
 
-if [ -n "${_arg_keytab_file}" ]; then
-  # If we have a keytab, use it to get a Kerberos TGT
-  # Otherwise, this is probably being run locally for testing and the
-  # host KCM configuration will be used (see local_test_daemon.sh).
-  export KRB5CCNAME=FILE:${TMPDIR}/tgt
-
-  echo "Getting Kerberos TGT every hour from ${_arg_keytab_file} for ${_arg_keytab_principal}"
-  (while true; do kinit -k -t "${_arg_keytab_file}" ${_arg_keytab_principal}; sleep 55m; done) &
+# When acquiring via keytab, use a shared file ccache unless one is already set.
+# Without a keytab, leave $KRB5CCNAME alone (existing TGT / KCM / system default).
+if [ -n "${_arg_krb5_keytab_principal}" ] && [ -z "${_arg_krb5_keytab_file}" ]; then
+  die "--krb5-keytab-principal requires --krb5-keytab-file" 1
 fi
-
-# Make sure Kerberos is working by trying to connect to koji
-while true; do
-  koji -p ${_arg_koji_profile} hello && break || sleep 3
-done
+if [ -n "${_arg_krb5_keytab_file}" ] && [ -z "${KRB5CCNAME:-}" ]; then
+  export KRB5CCNAME=FILE:${TMPDIR}/tgt
+fi
 
 STATIC_ARG="--static-config-file /etc/elnbuildsync/static-config/elnbuildsync.yaml"
 if [ -n "${_arg_static_config_file}" ]; then
@@ -286,8 +269,16 @@ if [ -n "${_arg_openid_ca_file}" ]; then
   OPENID_CA_ARG=(--openid-ca-file "${_arg_openid_ca_file}")
 fi
 
+KRB5_ARGS=()
+if [ -n "${_arg_krb5_keytab_file}" ]; then
+  KRB5_ARGS+=(--krb5-keytab-file "${_arg_krb5_keytab_file}")
+fi
+if [ -n "${_arg_krb5_keytab_principal}" ]; then
+  KRB5_ARGS+=(--krb5-keytab-principal "${_arg_krb5_keytab_principal}")
+fi
+
 echo "EXECUTING klist"
-KRB5_TRACE=/dev/stderr klist -A
+KRB5_TRACE=/dev/stderr klist -A || true
 
 python3 --version
 
@@ -308,6 +299,7 @@ elnbuildsync \
   $SMTP_ARG \
   $OIDC_ARG \
   "${OPENID_CA_ARG[@]}" \
+  "${KRB5_ARGS[@]}" \
   ${_arg_custom[@]}
 
 # ] <-- needed because of Argbash

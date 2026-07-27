@@ -16,90 +16,296 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
-
 import logging
-import time
+import os
+import threading
 
+import gssapi
 import koji
-from cachetools import TTLCache, cached
+from gssapi.raw import store_cred_into
 from requests.exceptions import RequestException
-from tenacity import retry, retry_if_exception, stop_after_delay, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    stop_after_delay,
+    wait_exponential,
+)
 from twisted.internet.threads import deferToThread
 
 from .. import config
-from .errors import KojiHelperBaseError
+from .errors import BuildSysUnavailable, KerberosAuthError, KojiLoginError
 
 logger = logging.getLogger(__name__)
 
+# Re-export for historical imports from this module.
+__all__ = [
+    "TGT_RENEW_THRESHOLD_SECONDS",
+    "BuildSysUnavailable",
+    "KerberosAuthError",
+    "KojiLoginError",
+    "call_koji",
+    "configure_kerberos",
+    "get_koji_url",
+    "resolve_krb5_keytab_principal",
+]
 
-class BuildSysUnavailable(KojiHelperBaseError):
-    pass
+TGT_RENEW_THRESHOLD_SECONDS = 55 * 60
+
+# koji.profile → Kerberos realm for automatic principal guessing
+PROFILE_REALMS = {
+    "koji": "FEDORAPROJECT.ORG",
+    "stg": "STG.FEDORAPROJECT.ORG",
+}
+
+_bsys = None
+_krb_creds = None
+_krb5_principal = None
+_krb5_keytab_file = None
+_auth_lock = threading.Lock()
 
 
-# Single cached session; TTL slightly less than an hour to be safe.
-@cached(cache=TTLCache(maxsize=1, ttl=3550))
-def get_buildsys():
-    """Get an authenticated koji build system session. Caches the session
-    so future calls are cheap.
+def resolve_krb5_keytab_principal(principal, koji_profile, koji_username):
+    """Return keytab principal for TGT acquisition, or guess from koji config.
 
-    :returns: Koji session object, or None on error
+    Only used when ``--krb5-keytab-file`` is set. Raises ValueError when
+    guessing is not possible.
     """
-    if not config.main:
-        logger.critical("DistroBuildSync is not configured, aborting.")
-        raise BuildSysUnavailable
+    if principal:
+        return principal
+    realm = PROFILE_REALMS.get(koji_profile)
+    if realm is None:
+        raise ValueError(
+            f"Cannot guess Kerberos keytab principal for "
+            f"koji.profile={koji_profile!r}; "
+            "pass --krb5-keytab-principal explicitly"
+        )
+    if not koji_username:
+        raise ValueError(
+            "koji.username is required to guess Kerberos keytab principal, "
+            "or pass --krb5-keytab-principal explicitly"
+        )
+    return f"{koji_username}@{realm}"
 
-    profile = config.main["koji"]["profile"]
+
+def configure_kerberos(keytab_file=None, keytab_principal=None):
+    """Configure optional keytab-based TGT acquisition.
+
+    When ``keytab_file`` is None, TGT acquisition is skipped and the existing
+    credential cache (``$KRB5CCNAME`` or the system default) is used as-is.
+    ``keytab_principal`` is only meaningful together with ``keytab_file``.
+    """
+    global _krb5_principal, _krb5_keytab_file
+    _krb5_keytab_file = keytab_file
+    _krb5_principal = keytab_principal if keytab_file else None
     logger.debug(
-        'Initializing the koji instance with the "%s" profile.',
-        profile,
+        "Kerberos configured: keytab=%s keytab_principal=%s",
+        keytab_file,
+        _krb5_principal,
     )
 
-    bsys = None
-    while not bsys:
+
+def _principal_name():
+    if not _krb5_principal:
+        raise KerberosAuthError("Kerberos keytab principal is not configured")
+    return gssapi.Name(_krb5_principal, gssapi.NameType.kerberos_principal)
+
+
+def _ccache_store():
+    ccache = os.environ.get("KRB5CCNAME")
+    if ccache:
+        return {"ccache": ccache}
+    return {}
+
+
+def _tgt_lifetime_seconds():
+    """Return remaining TGT lifetime in seconds (0 if missing/expired).
+
+    Safe to call on the main thread (local credential cache read).
+    Uses ``$KRB5CCNAME`` when set, otherwise the system default ccache.
+
+    Does not filter by ``_krb5_principal``: the active cache often holds a
+    different initiate principal (e.g. a personal ``kinit`` during local
+    testing) than the service principal used with a keytab.
+    """
+    try:
+        store = _ccache_store() or None
+        if store:
+            creds = gssapi.Credentials(usage="initiate", store=store)
+        else:
+            creds = gssapi.Credentials(usage="initiate")
+        lifetime = creds.lifetime
+        if lifetime is None:
+            return TGT_RENEW_THRESHOLD_SECONDS
+        return max(0, int(lifetime))
+    except Exception:
+        logger.debug("Could not read TGT lifetime", exc_info=True)
+        return 0
+
+
+def _store_creds(creds):
+    global _krb_creds
+    store = _ccache_store()
+    if store:
         try:
-            cfg = koji.read_config(profile_name=profile)
-            bsys = koji.ClientSession(cfg["server"], opts=cfg)
+            store_cred_into(store, creds, usage="initiate", overwrite=True)
         except Exception:
-            logger.exception(
-                'Failed initializing the koji instance with the "%s" profile, skipping.',
-                profile,
+            logger.debug(
+                "store_cred_into failed; continuing with acquired creds",
+                exc_info=True,
             )
-            bsys = None
-            time.sleep(1)
-    logger.debug("The koji instance initialized.")
+    _krb_creds = creds
 
-    logger.debug("Authenticating with the koji instance.")
-    while not bsys.logged_in:
-        try:
-            bsys.logout()
-            bsys.gssapi_login()
-        except koji.GSSAPIAuthError:
-            logger.exception(
-                "Failed authenticating against the koji instance, retrying."
+
+def _acquire_tgt_sync():
+    """Acquire/renew a TGT from the configured keytab into the active ccache."""
+    if not _krb5_keytab_file:
+        raise KerberosAuthError("No Kerberos keytab configured")
+    name = _principal_name()
+    store = {"client_keytab": _krb5_keytab_file}
+    store.update(_ccache_store())
+    try:
+        creds = gssapi.Credentials(name=name, usage="initiate", store=store)
+        # Force acquisition / refresh by inspecting lifetime
+        _ = creds.lifetime
+        _store_creds(creds)
+        logger.info("Acquired Kerberos TGT for %s via keytab", _krb5_principal)
+    except Exception as e:
+        raise KerberosAuthError(
+            f"Failed to acquire TGT for {_krb5_principal} from keytab"
+        ) from e
+
+
+def _recreate_bsys_sync():
+    """Create a fresh Koji ClientSession (does not log in)."""
+    global _bsys
+    if not config.main:
+        raise BuildSysUnavailable("Configuration unavailable")
+    profile = config.main["koji"]["profile"]
+    try:
+        cfg = koji.read_config(profile_name=profile)
+        _bsys = koji.ClientSession(cfg["server"], opts=cfg)
+        logger.debug("Created new Koji ClientSession for profile %s", profile)
+    except Exception as e:
+        _bsys = None
+        raise BuildSysUnavailable(
+            f'Failed initializing koji with profile "{profile}"'
+        ) from e
+
+
+def _renew_tgt_and_bsys_once():
+    """One renew attempt: acquire TGT then recreate _bsys.
+
+    Raises KerberosAuthError on failure. Does not leave a half-updated _bsys.
+    """
+    global _bsys
+    old_bsys = _bsys
+    try:
+        _acquire_tgt_sync()
+        _recreate_bsys_sync()
+    except KerberosAuthError:
+        _bsys = old_bsys
+        raise
+    except Exception as e:
+        _bsys = old_bsys
+        raise KerberosAuthError("TGT acquire or Koji session recreate failed") from e
+
+
+@retry(
+    wait=wait_exponential(),
+    stop=stop_after_attempt(5),
+    reraise=True,
+)
+def _renew_tgt_and_bsys_with_retries():
+    _renew_tgt_and_bsys_once()
+
+
+async def _ensure_tgt():
+    """Ensure TGT is usable; renew from keytab (+ recreate _bsys) when needed.
+
+    Without a configured keytab, never attempts acquisition: the existing
+    credential cache (``$KRB5CCNAME`` or system default) must already hold a TGT.
+    """
+    lifetime = _tgt_lifetime_seconds()
+    if lifetime >= TGT_RENEW_THRESHOLD_SECONDS:
+        return
+
+    if not _krb5_keytab_file:
+        if lifetime == 0:
+            raise KerberosAuthError(
+                "No Kerberos TGT available in the credential cache "
+                "($KRB5CCNAME or system default) and no --krb5-keytab-file "
+                "configured for acquisition"
             )
-            time.sleep(1)
-            continue
-
-        username = bsys.getLoggedInUser()["name"]
         logger.debug(
-            "Successfully authenticated with the koji instance as user %s",
-            username,
+            "TGT lifetime %ss is below renew threshold but no keytab "
+            "configured; using existing credential cache",
+            lifetime,
         )
+        return
 
-    return bsys
+    if lifetime > 0:
+        try:
+            await deferToThread(_renew_tgt_and_bsys_once)
+        except KerberosAuthError:
+            logger.exception(
+                "TGT renew failed; continuing with existing ticket (lifetime=%ss)",
+                lifetime,
+            )
+        return
+
+    await deferToThread(_renew_tgt_and_bsys_with_retries)
 
 
-def get_koji_url():
-    cfg = koji.read_config(profile_name=config.main["koji"]["profile"])
-    return cfg["weburl"]
+def _ensure_bsys_sync():
+    if _bsys is None:
+        _recreate_bsys_sync()
+
+
+def _ensure_logged_in_sync():
+    if _bsys is None:
+        raise BuildSysUnavailable("Koji session is not initialized")
+    if getattr(_bsys, "logged_in", False):
+        return
+    try:
+        _bsys.gssapi_login()
+    except koji.GSSAPIAuthError as e:
+        # Session is already authenticated; gssapi_login is idempotent for us.
+        if "Already logged in" in str(e):
+            return
+        raise KojiLoginError("Koji GSSAPI login failed") from e
+    except Exception as e:
+        raise KojiLoginError("Koji GSSAPI login failed") from e
+
+
+def _invoke_koji_sync(method, args, kwargs):
+    with _auth_lock:
+        _ensure_bsys_sync()
+        _ensure_logged_in_sync()
+        if isinstance(method, str):
+            return getattr(_bsys, method)(*args, **kwargs)
+        return method(_bsys, *args, **kwargs)
 
 
 # HTTP 4xx codes that are still worth retrying (transient client/server behavior).
 _RETRYABLE_4XX = frozenset((408, 429))
 
+# Auth / session setup failures are not transient; do not burn retry budget on them.
+_NON_RETRYABLE_KOJI = (KerberosAuthError, KojiLoginError, BuildSysUnavailable)
+
+
+async def _reactor_sleep(seconds: float) -> None:
+    """Sleep via the Twisted reactor (safe under asyncioreactor + tenacity)."""
+    from twisted.internet import reactor
+    from twisted.internet.task import deferLater
+
+    await deferLater(reactor, seconds)
+
 
 def _retry_koji_request_exception(exc: BaseException) -> bool:
     """Do not retry most HTTP 4xx responses; still retry 408 and 429."""
+    if isinstance(exc, _NON_RETRYABLE_KOJI):
+        return False
     if not isinstance(exc, RequestException):
         return False
     resp = getattr(exc, "response", None)
@@ -111,17 +317,35 @@ def _retry_koji_request_exception(exc: BaseException) -> bool:
     return not (400 <= code < 500)
 
 
-# Wrap the call to koji in retries for transient errors; give up on 4xx except 408/429.
+def _retry_transient_koji_exception(exc: BaseException) -> bool:
+    """Retry unexpected transient failures; never retry auth/session errors."""
+    return not isinstance(exc, _NON_RETRYABLE_KOJI)
+
+
+def get_koji_url():
+    cfg = koji.read_config(profile_name=config.main["koji"]["profile"])
+    return cfg["weburl"]
+
+
 @retry(
     wait=wait_exponential(),
     stop=stop_after_delay(60),
     retry=retry_if_exception(_retry_koji_request_exception),
+    sleep=_reactor_sleep,
     reraise=True,
 )
 @retry(
     wait=wait_exponential(),
     stop=stop_after_delay(60),
+    retry=retry_if_exception(_retry_transient_koji_exception),
+    sleep=_reactor_sleep,
     reraise=True,
 )
 async def call_koji(method, *args, **kwargs):
-    return await deferToThread(method, *args, **kwargs)
+    """Authenticate as needed and invoke a Koji method or helper in a worker thread.
+
+    ``method`` may be a string attribute name on the private session, or a
+    callable that receives the session as its first argument.
+    """
+    await _ensure_tgt()
+    return await deferToThread(_invoke_koji_sync, method, args, kwargs)

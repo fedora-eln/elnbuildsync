@@ -39,6 +39,8 @@ from . import (
     status,
     web,
 )
+from .config import ConfigError
+from .kojihelpers import connection as koji_connection
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +128,24 @@ def _resolve_dynamic_source(dynamic_config_url, dynamic_config_file):
     default=False,
     help="Untag all but the most recent builds in the destination target",
 )
+@click.option(
+    "--krb5-keytab-file",
+    default=None,
+    type=click.Path(dir_okay=False),
+    help=(
+        "Kerberos keytab for in-process TGT acquisition (kinit). "
+        "If omitted, use an existing TGT from $KRB5CCNAME or the system default ccache"
+    ),
+)
+@click.option(
+    "--krb5-keytab-principal",
+    default=None,
+    show_default="automatic, guessed from static configuration when using a keytab",
+    help=(
+        "Kerberos principal to use when acquiring a TGT from --krb5-keytab-file. "
+        "Ignored unless a keytab is specified"
+    ),
+)
 def main(
     log_level,
     dry_run,
@@ -138,6 +158,8 @@ def main(
     openid_client_secret_file,
     openid_ca_file,
     untagging,
+    krb5_keytab_file,
+    krb5_keytab_principal,
 ):
     logging.basicConfig(
         format="%(asctime)s : %(name)s : %(levelname)s : %(message)s",
@@ -156,6 +178,9 @@ def main(
     config.do_untagging = untagging
     config.message_batch_timer = lull_time
 
+    if krb5_keytab_principal and not krb5_keytab_file:
+        raise click.UsageError("--krb5-keytab-principal requires --krb5-keytab-file")
+
     dynamic_url, dynamic_file = _resolve_dynamic_source(
         dynamic_config_url, dynamic_config_file
     )
@@ -172,6 +197,8 @@ def main(
                 dynamic_file,
                 openid_client_secret_file,
                 openid_ca_file,
+                krb5_keytab_file,
+                krb5_keytab_principal,
             )
         )
     )
@@ -186,6 +213,8 @@ async def _main(
     dynamic_config_file=None,
     openid_client_secret_file=None,
     openid_ca_file=None,
+    krb5_keytab_file=None,
+    krb5_keytab_principal=None,
 ) -> None:
     auth.openid_ca_file = openid_ca_file
     config.terminator = Deferred()
@@ -205,6 +234,20 @@ async def _main(
                 static_config_file,
                 db_pw,
                 oidc_client_secret_file=openid_client_secret_file,
+            )
+            keytab_principal = None
+            if krb5_keytab_file:
+                try:
+                    keytab_principal = koji_connection.resolve_krb5_keytab_principal(
+                        krb5_keytab_principal,
+                        config.main["koji"]["profile"],
+                        config.main["koji"].get("username"),
+                    )
+                except ValueError as e:
+                    raise ConfigError(str(e)) from e
+            koji_connection.configure_kerberos(
+                keytab_file=krb5_keytab_file,
+                keytab_principal=keytab_principal,
             )
             await config.load_dynamic_config(
                 dynamic_config_git_url=dynamic_config_url,

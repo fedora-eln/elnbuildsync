@@ -19,10 +19,11 @@
 import logging
 
 from cachetools import LRUCache, cached
+from cachetools.keys import hashkey
 from twisted.internet.defer import DeferredList
 
 from .. import config, kojihelpers
-from .connection import call_koji, get_buildsys
+from .connection import call_koji
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +43,9 @@ async def prepare_side_tag(base_tag, initial_build_ids=None):
 
     if initial_build_ids is None:
         initial_build_ids = []
-    downstream_koji = get_buildsys()
     # Trigger the creation of the side-tag
     logger.info(f"Creating side tag from {base_tag}")
-    side_tag_info = await call_koji(downstream_koji.createSideTag, base_tag)
+    side_tag_info = await call_koji("createSideTag", base_tag)
     side_tag_name = side_tag_info["name"]
 
     logger.debug(f"Side {side_tag_name} created.")
@@ -90,7 +90,7 @@ async def tag_builds(tag, build_ids):
     return task_index
 
 
-def _tag_builds_thread(tag, build_ids):
+def _tag_builds_thread(bsys, tag, build_ids):
     """
     Tag a list of nvrs into a tag.
 
@@ -98,11 +98,10 @@ def _tag_builds_thread(tag, build_ids):
     :params list build_ids: The list of nvrs or build IDs to tag
     :return dict: A dictionary of task_id -> Koji vcall
     """
-    downstream_koji = get_buildsys()
     build_vcalls = {}
 
     try:
-        with downstream_koji.multicall(batch=config.koji_batch) as mc:
+        with bsys.multicall(batch=config.koji_batch) as mc:
             logger.info(f"Tagging {len(build_ids)} builds into {tag}")
             for build_id in build_ids:
                 build_vcalls[build_id] = mc.tagBuild(tag, build_id)
@@ -124,10 +123,8 @@ async def untag_builds(tag, builds):
     logger.debug(f"Untagged {len(builds)} builds from {tag}")
 
 
-def _untag_builds_thread(tag, build_ids):
-    downstream_koji = get_buildsys()
-
-    with downstream_koji.multicall(batch=config.koji_batch) as mc:
+def _untag_builds_thread(bsys, tag, build_ids):
+    with bsys.multicall(batch=config.koji_batch) as mc:
         logger.info(f"Untagging {len(build_ids)} builds from {tag}")
         for build_id in build_ids:
             mc.untagBuild(tag, build_id, strict=False)
@@ -145,9 +142,8 @@ async def get_tags_for_target(target):
     return buildroot_tag, destination_tag
 
 
-@cached(cache=LRUCache(maxsize=4))
-def _get_tags_for_target_thread(target):
-    bsys = kojihelpers.connection.get_buildsys()
+@cached(cache=LRUCache(maxsize=4), key=lambda bsys, target: hashkey(target))
+def _get_tags_for_target_thread(bsys, target):
     targetinfo = bsys.getBuildTarget(target)
     logger.debug(f"Target info: {targetinfo}")
     return targetinfo["build_tag_name"], targetinfo["dest_tag_name"]
@@ -157,8 +153,7 @@ async def remove_side_tag(side_tag):
     await call_koji(_remove_side_tag_thread, side_tag)
 
 
-def _remove_side_tag_thread(side_tag):
-    bsys = kojihelpers.connection.get_buildsys()
+def _remove_side_tag_thread(bsys, side_tag):
     bsys.removeSideTag(side_tag)
 
 
@@ -191,6 +186,5 @@ async def get_nvrs_from_tag(tag):
     :params str tag: The tag name to get builds from
     :return dict: A dictionary of nvr -> buildinfo
     """
-    bsys = kojihelpers.connection.get_buildsys()
-    builds = await call_koji(bsys.listTagged, tag, latest=False, inherit=True)
+    builds = await call_koji("listTagged", tag, latest=False, inherit=True)
     return {build["nvr"]: build for build in builds}
