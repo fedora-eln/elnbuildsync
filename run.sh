@@ -25,7 +25,7 @@
 # ARG_OPTIONAL_SINGLE([dynamic-config-url],[],[Dynamic configuration Git URL],[https://github.com/fedora-eln/elnbuildsync-config.git])
 # ARG_OPTIONAL_SINGLE([dynamic-config-branch],[],[Dynamic configuration Git branch],[main])
 # ARG_OPTIONAL_SINGLE([krb5-keytab-file],[],[Kerberos keytab for in-process TGT acquisition (optional)])
-# ARG_OPTIONAL_SINGLE([krb5-keytab-principal],[],[Kerberos principal for keytab kinit only (default: guessed from static configuration)])
+# ARG_OPTIONAL_SINGLE([krb5-keytab-principal],[],[Kerberos principal for keytab-based TGT acquisition only (default: guessed from static configuration)])
 # ARG_OPTIONAL_SINGLE([openid-ca-file],[],[OIDC CA certificate file],[])
 # ARG_POSITIONAL_DOUBLEDASH([])
 # ARG_POSITIONAL_INF([custom],[Additional arguments to pass to the ELNBuildSync daemon])
@@ -77,7 +77,7 @@ print_help()
 	printf '\t%s\n' "--dynamic-config-url: Dynamic configuration Git URL (default: 'https://github.com/fedora-eln/elnbuildsync-config.git')"
 	printf '\t%s\n' "--dynamic-config-branch: Dynamic configuration Git branch (default: 'main')"
 	printf '\t%s\n' "--krb5-keytab-file: Kerberos keytab for in-process TGT acquisition (optional; otherwise use existing ccache)"
-	printf '\t%s\n' "--krb5-keytab-principal: Principal for keytab kinit only (default: guessed from static configuration when a keytab is set)"
+	printf '\t%s\n' "--krb5-keytab-principal: Principal for keytab-based TGT acquisition only (default: guessed from static configuration when a keytab is set)"
 	printf '\t%s\n' "--openid-ca-file: OIDC CA certificate file (no default)"
 	printf '\t%s\n' "-h, --help: Prints help"
 	printf '\n%s\n' "Run the ELNBuildSync daemon"
