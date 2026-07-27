@@ -365,3 +365,40 @@ async def test_call_koji_callable_receives_bsys():
         result = await conn._call_koji_once(helper, "mytag", [1, 2])
 
     assert result == ("mytag", [1, 2])
+
+@pytest.mark.asyncio
+async def test_call_koji_does_not_retry_auth_or_403():
+    conn.configure_kerberos(keytab_file="/kt", keytab_principal="user@REALM")
+
+    with (
+        patch.object(conn, "_ensure_tgt"),
+        patch.object(
+            conn,
+            "_invoke_koji_sync",
+            side_effect=KerberosAuthError("auth boom"),
+        ) as invoke,
+        patch(
+            "elnbuildsync.kojihelpers.connection.deferToThread",
+            side_effect=_defer_immediately,
+        ),
+        patch.object(conn, "_reactor_sleep", return_value=succeed(None)),
+        pytest.raises(KerberosAuthError, match="auth boom"),
+    ):
+        await conn.call_koji("listTagged", "tag")
+    assert invoke.call_count == 1
+
+    err_403 = HTTPError("forbidden")
+    err_403.response = MagicMock(status_code=403)
+    with (
+        patch.object(conn, "_ensure_tgt"),
+        patch.object(conn, "_invoke_koji_sync", side_effect=err_403) as invoke403,
+        patch(
+            "elnbuildsync.kojihelpers.connection.deferToThread",
+            side_effect=_defer_immediately,
+        ),
+        patch.object(conn, "_reactor_sleep", return_value=succeed(None)),
+        pytest.raises(HTTPError),
+    ):
+        await conn.call_koji("listTagged", "tag")
+    assert invoke403.call_count == 1
+
