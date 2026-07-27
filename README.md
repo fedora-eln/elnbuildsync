@@ -368,8 +368,8 @@ SMTP, and OIDC client secrets mount at `/etc/elnbuildsync/secrets/`
 is handled in-process with python-gssapi: optionally pass
 `--krb5-keytab-file` for TGT acquisition and `--krb5-keytab-principal`
 (or rely on guessing `koji.username` plus realm from `koji.profile`) for
-that keytab kinit only. Without a keytab, the daemon uses an existing TGT
-from `$KRB5CCNAME` or the system default ccache. OpenShift
+that keytab-based TGT acquisition only. Without a keytab, the daemon uses
+an existing TGT from `$KRB5CCNAME` or the system default ccache. OpenShift
 deployment is managed via
 [infra-ansible](https://forge.fedoraproject.org/infra/ansible)
 (`playbooks/openshift-apps/elnbuildsync.yml`).

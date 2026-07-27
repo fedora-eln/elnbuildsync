@@ -29,7 +29,7 @@
 # ARG_OPTIONAL_SINGLE([dynamic-config-file],[],[Dynamic configuration file],[tests/etc/dynamic-config/elnbuildsync_dynamic.yaml])
 # ARG_OPTIONAL_SINGLE([environment],[],[Environment],[stg])
 # ARG_OPTIONAL_SINGLE([krb5-keytab-file],[],[Kerberos keytab for in-process TGT acquisition (optional)])
-# ARG_OPTIONAL_SINGLE([krb5-keytab-principal],[],[Kerberos principal for keytab kinit only (default: guessed from static configuration)])
+# ARG_OPTIONAL_SINGLE([krb5-keytab-principal],[],[Kerberos principal for keytab-based TGT acquisition only (default: guessed from static configuration)])
 # ARG_OPTIONAL_BOOLEAN([persistent-db],[],[Use persistent database],[off])
 # ARG_OPTIONAL_SINGLE([persistent-db-volume],[],[Volume name for persistent database],[ebs_test_pgdata])
 # ARG_OPTIONAL_BOOLEAN([build-container],[],[Build the ELNBuildSync container],[off])
@@ -93,7 +93,7 @@ print_help()
 	printf '\t%s\n' "--dynamic-config-file: Dynamic configuration file (default: 'tests/etc/dynamic-config/elnbuildsync_dynamic.yaml')"
 	printf '\t%s\n' "--environment: Environment (default: 'stg')"
 	printf '\t%s\n' "--krb5-keytab-file: Kerberos keytab for in-process TGT acquisition (optional; otherwise use host KCM / existing ccache)"
-	printf '\t%s\n' "--krb5-keytab-principal: Principal for keytab kinit only (default: guessed from static configuration when a keytab is set)"
+	printf '\t%s\n' "--krb5-keytab-principal: Principal for keytab-based TGT acquisition only (default: guessed from static configuration when a keytab is set)"
 	printf '\t%s\n' "--persistent-db, --no-persistent-db: Use persistent database (off by default)"
 	printf '\t%s\n' "--persistent-db-volume: Volume name for persistent database (default: 'ebs_test_pgdata')"
 	printf '\t%s\n' "--build-container, --no-build-container: Build the ELNBuildSync container (off by default)"
