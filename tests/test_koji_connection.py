@@ -82,6 +82,46 @@ class TestTgtLifetime:
         assert kwargs["usage"] == "initiate"
         assert kwargs["store"] == {"ccache": "KCM:"}
 
+    def test_none_lifetime_returns_renew_threshold(self):
+        mock_creds = MagicMock()
+        mock_creds.lifetime = None
+        with (
+            patch.dict("os.environ", {"KRB5CCNAME": "FILE:/tmp/cc"}, clear=False),
+            patch(
+                "elnbuildsync.kojihelpers.connection.gssapi.Credentials",
+                return_value=mock_creds,
+            ) as creds_cls,
+        ):
+            assert conn._tgt_lifetime_seconds() == conn.TGT_RENEW_THRESHOLD_SECONDS
+        assert creds_cls.call_args.kwargs["store"] == {"ccache": "FILE:/tmp/cc"}
+
+    def test_credentials_error_returns_zero(self):
+        with (
+            patch.dict("os.environ", {"KRB5CCNAME": "KCM:"}, clear=False),
+            patch(
+                "elnbuildsync.kojihelpers.connection.gssapi.Credentials",
+                side_effect=RuntimeError("no ccache"),
+            ) as creds_cls,
+        ):
+            assert conn._tgt_lifetime_seconds() == 0
+        assert creds_cls.call_args.kwargs["store"] == {"ccache": "KCM:"}
+
+    def test_omits_store_when_krb5ccname_unset(self):
+        mock_creds = MagicMock()
+        mock_creds.lifetime = 120
+        env = {k: v for k, v in __import__("os").environ.items() if k != "KRB5CCNAME"}
+        with (
+            patch.dict("os.environ", env, clear=True),
+            patch(
+                "elnbuildsync.kojihelpers.connection.gssapi.Credentials",
+                return_value=mock_creds,
+            ) as creds_cls,
+        ):
+            assert conn._tgt_lifetime_seconds() == 120
+        kwargs = creds_cls.call_args.kwargs
+        assert "store" not in kwargs
+        assert kwargs["usage"] == "initiate"
+
 
 class TestRenewUnit:
     def test_renew_acquires_tgt_then_recreates_bsys(self):
@@ -164,14 +204,10 @@ class TestStoreCreds:
         env = {k: v for k, v in __import__("os").environ.items() if k != "KRB5CCNAME"}
         with (
             patch.dict("os.environ", env, clear=True),
-            patch(
-                "elnbuildsync.kojihelpers.connection.store_cred_into"
-            ) as store_into,
+            patch("elnbuildsync.kojihelpers.connection.store_cred_into") as store_into,
         ):
             conn._store_creds(creds)
-        store_into.assert_called_once_with(
-            {}, creds, usage="initiate", overwrite=True
-        )
+        store_into.assert_called_once_with({}, creds, usage="initiate", overwrite=True)
         assert conn._krb_creds is creds
 
     def test_store_failure_raises_and_skips_assignment(self):
@@ -387,6 +423,7 @@ async def test_call_koji_callable_receives_bsys():
 
     assert result == ("mytag", [1, 2])
 
+
 @pytest.mark.asyncio
 async def test_call_koji_does_not_retry_auth_or_403():
     conn.configure_kerberos(keytab_file="/kt", keytab_principal="user@REALM")
@@ -423,4 +460,3 @@ async def test_call_koji_does_not_retry_auth_or_403():
     ):
         await conn.call_koji("listTagged", "tag")
     assert invoke403.call_count == 1
-
