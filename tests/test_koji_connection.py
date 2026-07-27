@@ -1,7 +1,7 @@
 # This file is part of ELNBuildSync
 # Copyright (C) 2026 Stephen Gallagher <sgallagh@redhat.com>
 
-# SPDX-License-Identifier: 	GPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 from unittest.mock import MagicMock, patch
 
