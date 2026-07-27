@@ -16,18 +16,28 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
-# Install the asyncio reactor before any submodule imports Twisted's
-# default reactor (e.g. listener, web).
+# Install the asyncio reactor before any submodule imports Twisted's default
+# reactor (e.g. listener, web). Entry point is elnbuildsync:main, so this always
+# runs first. Install when none exists; ignore an already-installed
+# AsyncioSelectorReactor; fail for any other reactor type.
 import asyncio
 
 from twisted.internet import asyncioreactor
+from twisted.internet.asyncioreactor import AsyncioSelectorReactor
+from twisted.internet.error import ReactorAlreadyInstalledError
 
 try:
     event_loop = asyncio.get_event_loop()
 except RuntimeError:
     event_loop = asyncio.new_event_loop()
     asyncio.set_event_loop(event_loop)
-asyncioreactor.install(event_loop)
+try:
+    asyncioreactor.install(event_loop)
+except ReactorAlreadyInstalledError:
+    from twisted.internet import reactor as _reactor
+
+    if not isinstance(_reactor, AsyncioSelectorReactor):
+        raise
 
 from . import config as config
 from . import kojihelpers as kojihelpers
