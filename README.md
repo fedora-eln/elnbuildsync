@@ -214,14 +214,17 @@ You also need:
 - A **Fedora account** with permission to run builds against the Koji
   targets referenced in your test configuration (the sample config uses
   staging-oriented settings and `scratch_build: true`).
-- **Kerberos credentials** for Koji. EBS inside the container uses the
-  host's KCM socket:
+- **Kerberos credentials** for Koji. Local testing uses the host KCM
+  socket after you obtain a ticket:
 
   ```bash
   kinit your_fedora_username@FEDORAPROJECT.ORG
-  koji hello
   ```
 
+  Production/`run.sh` authenticates in-process via python-gssapi when
+  `--krb5-keytab-file` is set; otherwise an existing TGT in `$KRB5CCNAME`
+  (or the system default ccache) is used. There is no background `kinit`
+  or `koji hello` readiness loop.
 - **Test configuration** under `tests/etc/`, mirroring the container layout
   at `/etc/elnbuildsync/`:
 
@@ -316,6 +319,13 @@ Useful options:
 
 # Use production Fedora Messaging broker config (instead of staging)
 ./tests/local_test_daemon.sh --environment prod
+
+# Optional Kerberos overrides for keytab-based TGT acquisition. Without a
+# keytab, the host KCM / existing ccache is used after kinit.
+./tests/local_test_daemon.sh --krb5-keytab-file /path/to/krb5.keytab
+./tests/local_test_daemon.sh \
+  --krb5-keytab-file /path/to/krb5.keytab \
+  --krb5-keytab-principal 'eln-buildsync@FEDORAPROJECT.ORG'
 ```
 
 When you stop the script (Ctrl+C), the ephemeral PostgreSQL container is
@@ -323,7 +333,8 @@ removed.
 
 ### Verify it is working
 
-1. Confirm `koji hello` works on the host before starting the daemon.
+1. Confirm you have a valid Kerberos TGT on the host (`klist`) before
+   starting the local test daemon.
 2. After startup, open
    [http://localhost:8080/status.html](http://localhost:8080/status.html).
 3. Watch `/tmp/elnbuildsync.log` for batch activity when Rawhide tag
@@ -353,8 +364,12 @@ git repository (see `run.sh --dynamic-config-url`) or
 SMTP, and OIDC client secrets mount at `/etc/elnbuildsync/secrets/`
 (`ebs_db_pw`, `ebs_smtp_pw`, `ebs_oidc_client_secret`). Pass
 `--openid-client-secret-file` when the secret is mounted elsewhere, and
-`--openid-ca-file` when the OIDC provider uses a non-public CA. A
-service keytab is used for `eln-buildsync@FEDORAPROJECT.ORG`. OpenShift
+`--openid-ca-file` when the OIDC provider uses a non-public CA. Kerberos
+is handled in-process with python-gssapi: optionally pass
+`--krb5-keytab-file` for TGT acquisition and `--krb5-keytab-principal`
+(or rely on guessing `koji.username` plus realm from `koji.profile`) for
+that keytab kinit only. Without a keytab, the daemon uses an existing TGT
+from `$KRB5CCNAME` or the system default ccache. OpenShift
 deployment is managed via
 [infra-ansible](https://forge.fedoraproject.org/infra/ansible)
 (`playbooks/openshift-apps/elnbuildsync.yml`).

@@ -32,14 +32,13 @@ async def periodic_cleanup():
         return
 
     logger.debug("Starting periodic cleanup.")
-    bsys = kojihelpers.connection.get_buildsys()
 
     # We have the set of desired packages from Content Resolver
     desired_pkg_names = set(config.comps["downstream_components"].keys())
 
     # Get the list of packages currently tagged into the stable tag
     latest_tagged_dest_pkgs = await call_koji(
-        bsys.listTagged, config.main["koji"]["stable_tag"], latest=True
+        "listTagged", config.main["koji"]["stable_tag"], latest=True
     )
 
     # Get the list of up-to-date packages in the destination tag
@@ -52,7 +51,7 @@ async def periodic_cleanup():
 
     # Get the complete list of builds tagged into the stable tag
     all_tagged_dest_pkgs = await call_koji(
-        bsys.listTagged, config.main["koji"]["stable_tag"], latest=False
+        "listTagged", config.main["koji"]["stable_tag"], latest=False
     )
     all_tagged_dest_nvrs = {pkg["nvr"] for pkg in all_tagged_dest_pkgs}
 

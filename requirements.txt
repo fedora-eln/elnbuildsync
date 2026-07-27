@@ -4,6 +4,7 @@ cachetools
 click >= 8
 fedora_messaging >= 3.7.1, < 4
 GitPython
+gssapi
 koji
 pyyaml
 requests

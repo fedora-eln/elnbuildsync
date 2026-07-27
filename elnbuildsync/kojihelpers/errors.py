@@ -21,6 +21,18 @@ class KojiHelperBaseError(Exception):
     pass
 
 
+class KerberosAuthError(KojiHelperBaseError):
+    """Kerberos TGT acquire/renew failed."""
+
+
+class KojiLoginError(KojiHelperBaseError):
+    """Koji GSSAPI login failed."""
+
+
+class BuildSysUnavailable(KojiHelperBaseError):
+    """Koji ClientSession could not be created or is unavailable."""
+
+
 class InfoUnavailableError(KojiHelperBaseError):
     pass
 

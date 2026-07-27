@@ -28,6 +28,8 @@
 # ARG_OPTIONAL_SINGLE([static-config-file],[],[Static configuration file],[tests/etc/static-config/elnbuildsync.yaml])
 # ARG_OPTIONAL_SINGLE([dynamic-config-file],[],[Dynamic configuration file],[tests/etc/dynamic-config/elnbuildsync_dynamic.yaml])
 # ARG_OPTIONAL_SINGLE([environment],[],[Environment],[stg])
+# ARG_OPTIONAL_SINGLE([krb5-keytab-file],[],[Kerberos keytab for in-process TGT acquisition (optional)])
+# ARG_OPTIONAL_SINGLE([krb5-keytab-principal],[],[Kerberos principal for keytab kinit only (default: guessed from static configuration)])
 # ARG_OPTIONAL_BOOLEAN([persistent-db],[],[Use persistent database],[off])
 # ARG_OPTIONAL_SINGLE([persistent-db-volume],[],[Volume name for persistent database],[ebs_test_pgdata])
 # ARG_OPTIONAL_BOOLEAN([build-container],[],[Build the ELNBuildSync container],[off])
@@ -70,6 +72,8 @@ _arg_lull_time="5"
 _arg_static_config_file="tests/etc/static-config/elnbuildsync.yaml"
 _arg_dynamic_config_file="tests/etc/dynamic-config/elnbuildsync_dynamic.yaml"
 _arg_environment="stg"
+_arg_krb5_keytab_file=
+_arg_krb5_keytab_principal=
 _arg_persistent_db="off"
 _arg_persistent_db_volume="ebs_test_pgdata"
 _arg_build_container="off"
@@ -77,7 +81,7 @@ _arg_build_container="off"
 
 print_help()
 {
-	printf 'Usage: %s [--log-level <arg>] [--db-pw-file <arg>] [--smtp-pw-file <arg>] [--openid-client-secret-file <arg>] [--openid-ca-file <arg>] [--lull-time <arg>] [--static-config-file <arg>] [--dynamic-config-file <arg>] [--environment <arg>] [--(no-)persistent-db] [--persistent-db-volume <arg>] [--(no-)build-container] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
+	printf 'Usage: %s [--log-level <arg>] [--db-pw-file <arg>] [--smtp-pw-file <arg>] [--openid-client-secret-file <arg>] [--openid-ca-file <arg>] [--lull-time <arg>] [--static-config-file <arg>] [--dynamic-config-file <arg>] [--environment <arg>] [--krb5-keytab-file <arg>] [--krb5-keytab-principal <arg>] [--(no-)persistent-db] [--persistent-db-volume <arg>] [--(no-)build-container] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
 	printf '\t%s\n' "<custom>: Additional arguments to pass to the ELNBuildSync daemon"
 	printf '\t%s\n' "--log-level: Log verbosity (default: 'INFO')"
 	printf '\t%s\n' "--db-pw-file: Database password file (default: 'tests/etc/secrets/ebs_db_pw')"
@@ -88,6 +92,8 @@ print_help()
 	printf '\t%s\n' "--static-config-file: Static configuration file (default: 'tests/etc/static-config/elnbuildsync.yaml')"
 	printf '\t%s\n' "--dynamic-config-file: Dynamic configuration file (default: 'tests/etc/dynamic-config/elnbuildsync_dynamic.yaml')"
 	printf '\t%s\n' "--environment: Environment (default: 'stg')"
+	printf '\t%s\n' "--krb5-keytab-file: Kerberos keytab for in-process TGT acquisition (optional; otherwise use host KCM / existing ccache)"
+	printf '\t%s\n' "--krb5-keytab-principal: Principal for keytab kinit only (default: guessed from static configuration when a keytab is set)"
 	printf '\t%s\n' "--persistent-db, --no-persistent-db: Use persistent database (off by default)"
 	printf '\t%s\n' "--persistent-db-volume: Volume name for persistent database (default: 'ebs_test_pgdata')"
 	printf '\t%s\n' "--build-container, --no-build-container: Build the ELNBuildSync container (off by default)"
@@ -185,6 +191,22 @@ parse_commandline()
 				;;
 			--environment=*)
 				_arg_environment="${_key##--environment=}"
+				;;
+			--krb5-keytab-file)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_krb5_keytab_file="$2"
+				shift
+				;;
+			--krb5-keytab-file=*)
+				_arg_krb5_keytab_file="${_key##--krb5-keytab-file=}"
+				;;
+			--krb5-keytab-principal)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_krb5_keytab_principal="$2"
+				shift
+				;;
+			--krb5-keytab-principal=*)
+				_arg_krb5_keytab_principal="${_key##--krb5-keytab-principal=}"
 				;;
 			--no-persistent-db|--persistent-db)
 				_arg_persistent_db="on"
@@ -325,10 +347,8 @@ if [ $db_ready -ne 0 ]; then
 fi
 
 if [ "$_arg_environment" == "stg" ]; then
-    KOJI_PROFILE_ARG=(--koji-profile=stg)
     export FEDORA_MESSAGING_CONF="$SCRIPT_DIR/fedora-messaging/fedora.stg.toml"
 else
-    KOJI_PROFILE_ARG=(--koji-profile=koji)
     export FEDORA_MESSAGING_CONF="$SCRIPT_DIR/fedora-messaging/fedora.toml"
 fi
 
@@ -362,6 +382,19 @@ if [ "${_arg_dynamic_config_file}" != "${DEFAULT_DYNAMIC_CONFIG_FILE}" ]; then
     CUSTOM_MOUNT_ARGS+=(--volume "$(realpath "${_arg_dynamic_config_file}"):${CONTAINER_DYNAMIC_CONFIG}:ro,Z")
 fi
 
+KRB5_CONTAINER_ARG=()
+if [ -n "${_arg_krb5_keytab_principal}" ] && [ -z "${_arg_krb5_keytab_file}" ]; then
+    die "--krb5-keytab-principal requires --krb5-keytab-file" 1
+fi
+if [ -n "${_arg_krb5_keytab_file}" ]; then
+    CONTAINER_KRB5_KEYTAB_FILE="/etc/elnbuildsync/custom/krb5.keytab"
+    CUSTOM_MOUNT_ARGS+=(--volume "$(realpath "${_arg_krb5_keytab_file}"):${CONTAINER_KRB5_KEYTAB_FILE}:ro,Z")
+    KRB5_CONTAINER_ARG+=(--krb5-keytab-file "${CONTAINER_KRB5_KEYTAB_FILE}")
+fi
+if [ -n "${_arg_krb5_keytab_principal}" ]; then
+    KRB5_CONTAINER_ARG+=(--krb5-keytab-principal "${_arg_krb5_keytab_principal}")
+fi
+
 ${CONTAINER_ENGINE} run --rm --interactive --tty \
     --name ebs_test \
 	--publish 8080:8080 \
@@ -377,12 +410,12 @@ ${CONTAINER_ENGINE} run --rm --interactive --tty \
 	--volume "${PROJ_DIR}:/tmp:Z" \
 	localhost/elnbuildsync:local_test_daemon \
 	--log-level "$_arg_log_level" \
-	"${KOJI_PROFILE_ARG[@]}" \
 	--static-config-file "${CONTAINER_STATIC_CONFIG}" \
 	--dynamic-config-file "${CONTAINER_DYNAMIC_CONFIG}" \
 	--lull-time "$_arg_lull_time" \
 	--openid-client-secret-file "${CONTAINER_OIDC_CLIENT_SECRET}" \
 	"${OPENID_CA_CONTAINER_ARG[@]}" \
+	"${KRB5_CONTAINER_ARG[@]}" \
 	"${_arg_custom[@]}" \
 	2>&1 | tee /tmp/elnbuildsync.log
 

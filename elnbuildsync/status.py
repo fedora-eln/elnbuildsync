@@ -57,14 +57,12 @@ async def create_status_page():
             )
         ]
 
-        bsys = kojihelpers.connection.get_buildsys()
-
         # Use the configured username, or self-identify if not configured
         username = config.main["koji"].get("username", None)
         if username is None:
             try:
                 # Self-identify
-                username = bsys.getLoggedInUser()["name"]
+                username = (await call_koji("getLoggedInUser"))["name"]
             except koji.GenericError:
                 logger.exception(
                     "Could not self-identify with Koji. Will retry in a few minutes."
@@ -77,7 +75,7 @@ async def create_status_page():
         try:
             # Look up packages tagged into the stable tag
             tagged_pkgs = await call_koji(
-                bsys.listTagged, config.main["koji"]["stable_tag"], latest=True
+                "listTagged", config.main["koji"]["stable_tag"], latest=True
             )
         except koji.GenericError:
             logger.exception(
@@ -93,7 +91,7 @@ async def create_status_page():
 
         # Get the list of packages that DBS has built.
         built_packages = await call_koji(
-            bsys.listBuilds, userID=username, queryOpts={"order": "start_ts"}
+            "listBuilds", userID=username, queryOpts={"order": "start_ts"}
         )
         for build in built_packages:
             if build["start_ts"] is not None:
@@ -107,7 +105,7 @@ async def create_status_page():
 
                 # Check whether the package was built by another user
                 builds = await call_koji(
-                    bsys.listBuilds, packageID=pname, queryOpts={"order": "start_ts"}
+                    "listBuilds", packageID=pname, queryOpts={"order": "start_ts"}
                 )
                 for build in builds:
                     # The ordering oddly puts "None" at the end, so we need to
