@@ -200,19 +200,25 @@ def _recreate_bsys_sync():
 def _renew_tgt_and_bsys_once():
     """One renew attempt: acquire TGT then recreate _bsys.
 
+    Holds ``_auth_lock`` for the full acquire/recreate/rollback sequence so
+    renewal cannot interleave with ``_invoke_koji_sync`` or concurrent renewals.
+
     Raises KerberosAuthError on failure. Does not leave a half-updated _bsys.
     """
     global _bsys
-    old_bsys = _bsys
-    try:
-        _acquire_tgt_sync()
-        _recreate_bsys_sync()
-    except KerberosAuthError:
-        _bsys = old_bsys
-        raise
-    except Exception as e:
-        _bsys = old_bsys
-        raise KerberosAuthError("TGT acquire or Koji session recreate failed") from e
+    with _auth_lock:
+        old_bsys = _bsys
+        try:
+            _acquire_tgt_sync()
+            _recreate_bsys_sync()
+        except KerberosAuthError:
+            _bsys = old_bsys
+            raise
+        except Exception as e:
+            _bsys = old_bsys
+            raise KerberosAuthError(
+                "TGT acquire or Koji session recreate failed"
+            ) from e
 
 
 @retry(
