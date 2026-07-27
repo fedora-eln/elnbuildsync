@@ -119,6 +119,39 @@ class TestRenewUnit:
         stop = conn._renew_tgt_and_bsys_with_retries.retry.stop
         assert stop.max_attempt_number == 5
 
+    def test_recreate_closes_old_rsession_after_success(self):
+        old = MagicMock(name="old_bsys")
+        old.rsession = MagicMock(name="old_rsession")
+        conn._bsys = old
+        new_session = MagicMock(name="new_bsys")
+        with (
+            patch.object(conn.config, "main", {"koji": {"profile": "koji"}}),
+            patch(
+                "elnbuildsync.kojihelpers.connection.koji.read_config",
+                return_value={"server": "https://koji.example/"},
+            ),
+            patch(
+                "elnbuildsync.kojihelpers.connection.koji.ClientSession",
+                return_value=new_session,
+            ),
+        ):
+            conn._recreate_bsys_sync()
+        assert conn._bsys is new_session
+        old.rsession.close.assert_called_once()
+
+    def test_recreate_failure_leaves_previous_bsys(self):
+        old = MagicMock(name="old_bsys")
+        conn._bsys = old
+        with (
+            patch.object(conn.config, "main", {"koji": {"profile": "koji"}}),
+            patch(
+                "elnbuildsync.kojihelpers.connection.koji.read_config",
+                side_effect=RuntimeError("boom"),
+            ),
+            pytest.raises(conn.BuildSysUnavailable),
+        ):
+            conn._recreate_bsys_sync()
+        assert conn._bsys is old
 
 
 class TestStoreCreds:
