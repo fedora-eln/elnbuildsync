@@ -320,9 +320,6 @@ def _invoke_koji_sync(method, args, kwargs):
 # HTTP 4xx codes that are still worth retrying (transient client/server behavior).
 _RETRYABLE_4XX = frozenset((408, 429))
 
-# Auth / session setup failures are not transient; do not burn retry budget on them.
-_NON_RETRYABLE_KOJI = (KerberosAuthError, KojiLoginError, BuildSysUnavailable)
-
 
 async def _reactor_sleep(seconds: float) -> None:
     """Sleep via the Twisted reactor (safe under asyncioreactor + tenacity)."""
@@ -332,24 +329,35 @@ async def _reactor_sleep(seconds: float) -> None:
     await deferLater(reactor, seconds)
 
 
-def _retry_koji_request_exception(exc: BaseException) -> bool:
-    """Do not retry most HTTP 4xx responses; still retry 408 and 429."""
-    if isinstance(exc, _NON_RETRYABLE_KOJI):
-        return False
-    if not isinstance(exc, RequestException):
-        return False
-    resp = getattr(exc, "response", None)
-    if resp is None:
-        return True
-    code = resp.status_code
-    if code in _RETRYABLE_4XX:
-        return True
-    return not (400 <= code < 500)
+def _should_retry_koji_exception(exc: BaseException) -> bool:
+    """Retry only genuinely transient failures within a single 60s budget.
 
-
-def _retry_transient_koji_exception(exc: BaseException) -> bool:
-    """Retry unexpected transient failures; never retry auth/session errors."""
-    return not isinstance(exc, _NON_RETRYABLE_KOJI)
+    ``RequestException`` uses HTTP status-code rules (retry 5xx, 408, 429;
+    fail-fast on other 4xx). Auth/session errors, ``koji.GenericError``,
+    ``AttributeError``, and ``TypeError`` are never retried. Other exception
+    types are not on the allow-list and fail fast.
+    """
+    if isinstance(
+        exc,
+        (
+            KerberosAuthError,
+            KojiLoginError,
+            BuildSysUnavailable,
+            koji.GenericError,
+            AttributeError,
+            TypeError,
+        ),
+    ):
+        return False
+    if isinstance(exc, RequestException):
+        resp = getattr(exc, "response", None)
+        if resp is None:
+            return True
+        code = resp.status_code
+        if code in _RETRYABLE_4XX:
+            return True
+        return not (400 <= code < 500)
+    return False
 
 
 def get_koji_url():
@@ -366,14 +374,7 @@ async def _call_koji_once(method, *args, **kwargs):
 @retry(
     wait=wait_exponential(),
     stop=stop_after_delay(60),
-    retry=retry_if_exception(_retry_koji_request_exception),
-    sleep=_reactor_sleep,
-    reraise=True,
-)
-@retry(
-    wait=wait_exponential(),
-    stop=stop_after_delay(60),
-    retry=retry_if_exception(_retry_transient_koji_exception),
+    retry=retry_if_exception(_should_retry_koji_exception),
     sleep=_reactor_sleep,
     reraise=True,
 )

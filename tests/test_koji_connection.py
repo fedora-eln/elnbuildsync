@@ -6,6 +6,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from requests.exceptions import HTTPError
 from twisted.internet.defer import succeed
 
 from elnbuildsync.kojihelpers import connection as conn
@@ -289,9 +290,16 @@ class TestEnsureTgt:
             await conn._ensure_tgt()
 
 
-def test_auth_errors_are_not_retried():
-    assert not conn._retry_transient_koji_exception(KerberosAuthError("x"))
-    assert not conn._retry_koji_request_exception(KerberosAuthError("x"))
+def test_auth_and_client_errors_are_not_retried():
+    assert not conn._should_retry_koji_exception(KerberosAuthError("x"))
+    assert not conn._should_retry_koji_exception(AttributeError("x"))
+    assert not conn._should_retry_koji_exception(TypeError("x"))
+    err_403 = HTTPError("forbidden")
+    err_403.response = MagicMock(status_code=403)
+    assert not conn._should_retry_koji_exception(err_403)
+    err_429 = HTTPError("slow down")
+    err_429.response = MagicMock(status_code=429)
+    assert conn._should_retry_koji_exception(err_429)
 
 
 def test_ensure_logged_in_skips_when_already_logged_in_flag():
