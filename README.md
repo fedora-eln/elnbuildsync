@@ -93,10 +93,12 @@ and queued Fedora Messages can be processed again.
 
 ## Software architecture
 
-EBS is a long-running **Twisted** application using the **asyncio
-reactor** (`elnbuildsync/daemon.py`). Blocking or threaded work (Koji
-calls, Bodhi submission, Git operations) is delegated via `deferToThread`
-and related helpers; Fedora Messaging integrates through
+EBS is a long-running **Twisted** application started via the
+`elnbuildsync` console script (`elnbuildsync:main` in `pyproject.toml`).
+Package import installs the **asyncio reactor** in
+`elnbuildsync/__init__.py` before loading submodules. Blocking or threaded
+work (Koji calls, Bodhi submission, Git operations) is delegated via
+`deferToThread` and related helpers; Fedora Messaging integrates through
 `fedora_messaging.api.twisted_consume`.
 
 ```
@@ -121,7 +123,7 @@ and related helpers; Fedora Messaging integrates through
 
 | Module | Responsibility |
 |--------|----------------|
-| `daemon.py` | CLI entry; DB, schedulers, messaging, HTTP. |
+| `daemon.py` | Daemon mainloop: DB, schedulers, messaging, HTTP (invoked by the `elnbuildsync` entrypoint). |
 | `listener.py` | Fedora Messages; task/tag waiters; polling. |
 | `batching.py` | Message queue, lull timer, manual rebuild helper. |
 | `rebuildbatch.py` | Side-tag lifecycle, slices, Bodhi updates. |
