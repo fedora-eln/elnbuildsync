@@ -357,6 +357,12 @@ def get_koji_url():
     return cfg["weburl"]
 
 
+async def _call_koji_once(method, *args, **kwargs):
+    """Single attempt: ensure TGT, then invoke in a worker thread."""
+    await _ensure_tgt()
+    return await deferToThread(_invoke_koji_sync, method, args, kwargs)
+
+
 @retry(
     wait=wait_exponential(),
     stop=stop_after_delay(60),
@@ -377,5 +383,4 @@ async def call_koji(method, *args, **kwargs):
     ``method`` may be a string attribute name on the private session, or a
     callable that receives the session as its first argument.
     """
-    await _ensure_tgt()
-    return await deferToThread(_invoke_koji_sync, method, args, kwargs)
+    return await _call_koji_once(method, *args, **kwargs)

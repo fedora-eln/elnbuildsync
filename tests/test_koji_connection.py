@@ -330,10 +330,7 @@ async def test_call_koji_string_method():
             side_effect=_defer_immediately,
         ),
     ):
-        # Bypass outer tenacity by calling the undecorated body via wrap
-        result = await conn.call_koji.__wrapped__.__wrapped__(
-            "listTagged", "tag", latest=True
-        )
+        result = await conn._call_koji_once("listTagged", "tag", latest=True)
 
     assert result == [{"nvr": "pkg-1"}]
     mock_bsys.listTagged.assert_called_once_with("tag", latest=True)
@@ -357,6 +354,6 @@ async def test_call_koji_callable_receives_bsys():
             side_effect=_defer_immediately,
         ),
     ):
-        result = await conn.call_koji.__wrapped__.__wrapped__(helper, "mytag", [1, 2])
+        result = await conn._call_koji_once(helper, "mytag", [1, 2])
 
     assert result == ("mytag", [1, 2])
