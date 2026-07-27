@@ -180,21 +180,41 @@ def _acquire_tgt_sync():
         ) from e
 
 
+def _close_bsys_rsession(bsys) -> None:
+    """Close a superseded ClientSession's underlying requests session."""
+    if bsys is None:
+        return
+    rsession = getattr(bsys, "rsession", None)
+    if rsession is None:
+        return
+    try:
+        rsession.close()
+    except Exception:
+        logger.debug("Failed closing superseded Koji requests session", exc_info=True)
+
+
 def _recreate_bsys_sync():
-    """Create a fresh Koji ClientSession (does not log in)."""
+    """Create a fresh Koji ClientSession (does not log in).
+
+    On success, replaces ``_bsys`` and closes the previous session's requests
+    session. On failure, leaves the previous ``_bsys`` intact.
+    """
     global _bsys
     if not config.main:
         raise BuildSysUnavailable("Configuration unavailable")
     profile = config.main["koji"]["profile"]
+    old_bsys = _bsys
     try:
         cfg = koji.read_config(profile_name=profile)
-        _bsys = koji.ClientSession(cfg["server"], opts=cfg)
-        logger.debug("Created new Koji ClientSession for profile %s", profile)
+        new_bsys = koji.ClientSession(cfg["server"], opts=cfg)
     except Exception as e:
-        _bsys = None
         raise BuildSysUnavailable(
             f'Failed initializing koji with profile "{profile}"'
         ) from e
+    _bsys = new_bsys
+    logger.debug("Created new Koji ClientSession for profile %s", profile)
+    if old_bsys is not None and old_bsys is not new_bsys:
+        _close_bsys_rsession(old_bsys)
 
 
 def _renew_tgt_and_bsys_once():
