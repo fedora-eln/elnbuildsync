@@ -48,6 +48,8 @@ elnbuildsync = ["templates/status.html", "static/*"]
 
 [tool.ruff.lint]
 ignore = ["BLE001", "RUF100"]
+# Ruff <0.16 flags intentional post-bootstrap imports in __init__.py (E402).
+per-file-ignores = { "elnbuildsync/__init__.py" = ["E402"] }
 
 [tool.ruff.lint.isort]
 known-first-party = ["elnbuildsync"]
