@@ -33,6 +33,9 @@ class PendingNVRTags:
     def __init__(self) -> None:
         self._data: dict[str, dict[str, Deferred]] = {}
 
+    def __contains__(self, tag: object) -> bool:
+        return tag in self._data
+
     def keys(self) -> list[str]:
         """
         Return a list of all tag names.
