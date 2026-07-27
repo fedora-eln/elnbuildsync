@@ -23,11 +23,13 @@ def _reset_connection_state():
     conn._krb_creds = None
     conn._krb5_principal = None
     conn._krb5_keytab_file = None
+    conn._tgt_expiry_mono = None
     yield
     conn._bsys = None
     conn._krb_creds = None
     conn._krb5_principal = None
     conn._krb5_keytab_file = None
+    conn._tgt_expiry_mono = None
 
 
 class TestResolveKrb5KeytabPrincipal:
@@ -86,6 +88,7 @@ class TestRenewUnit:
         with (
             patch.object(conn, "_acquire_tgt_sync") as acquire,
             patch.object(conn, "_recreate_bsys_sync") as recreate,
+            patch.object(conn, "_tgt_lifetime_seconds", return_value=3600),
         ):
             conn._renew_tgt_and_bsys_once()
         acquire.assert_called_once()
@@ -204,6 +207,20 @@ class TestEnsureTgt:
             await conn._ensure_tgt()
         renew.assert_not_called()
 
+    async def test_cache_hit_skips_credential_read(self):
+        conn._update_tgt_expiry_cache(conn.TGT_RENEW_THRESHOLD_SECONDS + 60)
+        with (
+            patch.object(conn, "_tgt_lifetime_seconds") as lifetime,
+            patch.object(conn, "_renew_tgt_and_bsys_once") as renew,
+            patch(
+                "elnbuildsync.kojihelpers.connection.deferToThread",
+                side_effect=_defer_immediately,
+            ),
+        ):
+            await conn._ensure_tgt()
+        lifetime.assert_not_called()
+        renew.assert_not_called()
+
     async def test_renews_when_under_threshold_with_keytab(self):
         conn.configure_kerberos(keytab_file="/kt", keytab_principal="user@REALM")
         with (
@@ -234,6 +251,10 @@ class TestEnsureTgt:
         conn.configure_kerberos(keytab_file=None)
         with (
             patch.object(conn, "_tgt_lifetime_seconds", return_value=0),
+            patch(
+                "elnbuildsync.kojihelpers.connection.deferToThread",
+                side_effect=_defer_immediately,
+            ),
             pytest.raises(KerberosAuthError, match="No Kerberos TGT available"),
         ):
             await conn._ensure_tgt()
@@ -369,6 +390,7 @@ async def test_call_koji_callable_receives_bsys():
 @pytest.mark.asyncio
 async def test_call_koji_does_not_retry_auth_or_403():
     conn.configure_kerberos(keytab_file="/kt", keytab_principal="user@REALM")
+    conn._update_tgt_expiry_cache(conn.TGT_RENEW_THRESHOLD_SECONDS + 10)
 
     with (
         patch.object(conn, "_ensure_tgt"),

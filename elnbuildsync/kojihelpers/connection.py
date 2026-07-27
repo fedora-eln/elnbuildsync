@@ -19,6 +19,7 @@
 import logging
 import os
 import threading
+import time
 
 import gssapi
 import koji
@@ -63,6 +64,8 @@ _krb_creds = None
 _krb5_principal = None
 _krb5_keytab_file = None
 _auth_lock = threading.Lock()
+# Monotonic clock time at which the cached TGT lifetime reaches zero.
+_tgt_expiry_mono = None
 
 
 def resolve_krb5_keytab_principal(principal, koji_profile, koji_username):
@@ -141,6 +144,19 @@ def _tgt_lifetime_seconds():
     except Exception:
         logger.debug("Could not read TGT lifetime", exc_info=True)
         return 0
+
+
+def _update_tgt_expiry_cache(lifetime_seconds: int) -> None:
+    """Record monotonic expiry from a just-observed remaining lifetime."""
+    global _tgt_expiry_mono
+    _tgt_expiry_mono = time.monotonic() + max(0, int(lifetime_seconds))
+
+
+def _cached_tgt_remaining():
+    """Seconds remaining from the TGT expiry cache, or None if unset."""
+    if _tgt_expiry_mono is None:
+        return None
+    return _tgt_expiry_mono - time.monotonic()
 
 
 def _store_creds(creds):
@@ -231,6 +247,7 @@ def _renew_tgt_and_bsys_once():
         try:
             _acquire_tgt_sync()
             _recreate_bsys_sync()
+            _update_tgt_expiry_cache(_tgt_lifetime_seconds())
         except KerberosAuthError:
             _bsys = old_bsys
             raise
@@ -250,33 +267,36 @@ def _renew_tgt_and_bsys_with_retries():
     _renew_tgt_and_bsys_once()
 
 
-async def _ensure_tgt():
-    """Ensure TGT is usable; renew from keytab (+ recreate _bsys) when needed.
-
-    Without a configured keytab, never attempts acquisition: the existing
-    credential cache (``$KRB5CCNAME`` or system default) must already hold a TGT.
-    """
-    lifetime = _tgt_lifetime_seconds()
-    if lifetime >= TGT_RENEW_THRESHOLD_SECONDS:
-        return
-
-    if not _krb5_keytab_file:
-        if lifetime == 0:
-            raise KerberosAuthError(
-                "No Kerberos TGT available in the credential cache "
-                "($KRB5CCNAME or system default) and no --krb5-keytab-file "
-                "configured for acquisition"
+def _ensure_tgt_sync():
+    """Re-read and renew TGT under ``_auth_lock`` (worker-thread entrypoint)."""
+    with _auth_lock:
+        remaining = _cached_tgt_remaining()
+        if remaining is not None and remaining >= TGT_RENEW_THRESHOLD_SECONDS:
+            return
+        lifetime = _tgt_lifetime_seconds()
+        _update_tgt_expiry_cache(lifetime)
+        if lifetime >= TGT_RENEW_THRESHOLD_SECONDS:
+            return
+        keytab_configured = bool(_krb5_keytab_file)
+        if not keytab_configured:
+            if lifetime == 0:
+                raise KerberosAuthError(
+                    "No Kerberos TGT available in the credential cache "
+                    "($KRB5CCNAME or system default) and no --krb5-keytab-file "
+                    "configured for acquisition"
+                )
+            logger.debug(
+                "TGT lifetime %ss is below renew threshold but no keytab "
+                "configured; using existing credential cache",
+                lifetime,
             )
-        logger.debug(
-            "TGT lifetime %ss is below renew threshold but no keytab "
-            "configured; using existing credential cache",
-            lifetime,
-        )
-        return
+            return
+        soft_renew = lifetime > 0
 
-    if lifetime > 0:
+    # Renew outside the read section; each renew attempt takes _auth_lock.
+    if soft_renew:
         try:
-            await deferToThread(_renew_tgt_and_bsys_once)
+            _renew_tgt_and_bsys_once()
         except KerberosAuthError:
             logger.exception(
                 "TGT renew failed; continuing with existing ticket (lifetime=%ss)",
@@ -284,7 +304,22 @@ async def _ensure_tgt():
             )
         return
 
-    await deferToThread(_renew_tgt_and_bsys_with_retries)
+    _renew_tgt_and_bsys_with_retries()
+
+
+async def _ensure_tgt():
+    """Ensure TGT is usable; renew from keytab (+ recreate _bsys) when needed.
+
+    Without a configured keytab, never attempts acquisition: the existing
+    credential cache (``$KRB5CCNAME`` or system default) must already hold a TGT.
+
+    Uses a monotonic expiry cache so concurrent ``call_koji`` callers skip
+    duplicate credential reads while the ticket is safely above threshold.
+    """
+    remaining = _cached_tgt_remaining()
+    if remaining is not None and remaining >= TGT_RENEW_THRESHOLD_SECONDS:
+        return
+    await deferToThread(_ensure_tgt_sync)
 
 
 def _ensure_bsys_sync():
