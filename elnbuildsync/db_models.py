@@ -91,10 +91,12 @@ class DBTagMessage(Base):
     batch: Mapped[DBRebuildBatch | None] = relationship(back_populates="tag_messages")
 
     # The slice this message is associated with
-    slice_id: Mapped[int] = mapped_column(
+    slice_id: Mapped[int | None] = mapped_column(
         ForeignKey("rebuild_batch_slice.id"), nullable=True
     )
-    slice: Mapped[DBRebuildBatchSlice] = relationship(back_populates="tag_messages")
+    slice: Mapped[DBRebuildBatchSlice | None] = relationship(
+        back_populates="tag_messages"
+    )
 
 
 class DBRebuildBatch(Base):
