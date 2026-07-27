@@ -16,23 +16,7 @@
 
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
-# Install the asyncio reactor as early as possible.
-# Prefer importing via the package (__init__) so this runs first; if daemon is
-# loaded directly, install here and ignore an already-installed asyncio reactor.
-import asyncio
-
-from twisted.internet import asyncioreactor
-from twisted.internet.error import ReactorAlreadyInstalledError
-
-try:
-    event_loop = asyncio.get_event_loop()
-except RuntimeError:
-    event_loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(event_loop)
-try:
-    asyncioreactor.install(event_loop)
-except ReactorAlreadyInstalledError:
-    pass
+# Reactor bootstrap lives in elnbuildsync/__init__.py (package entrypoint).
 
 import importlib.metadata
 import logging
@@ -278,7 +262,3 @@ async def _main(
         logger.info("HTTP server ready")
 
         await config.terminator
-
-
-if __name__ == "__main__":
-    main()
