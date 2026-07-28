@@ -26,6 +26,8 @@
 # ARG_OPTIONAL_SINGLE([dynamic-config-branch],[],[Dynamic configuration Git branch],[main])
 # ARG_OPTIONAL_SINGLE([krb5-keytab-file],[],[Kerberos keytab for in-process TGT acquisition (optional)])
 # ARG_OPTIONAL_SINGLE([krb5-keytab-principal],[],[Kerberos principal for keytab-based TGT acquisition only (default: guessed from static configuration)])
+# ARG_OPTIONAL_SINGLE([keytab-file],[],[Deprecated in favor of --krb5-keytab-file])
+# ARG_OPTIONAL_SINGLE([keytab-principal],[],[Deprecated in favor of --krb5-keytab-principal])
 # ARG_OPTIONAL_SINGLE([openid-ca-file],[],[OIDC CA certificate file],[])
 # ARG_POSITIONAL_DOUBLEDASH([])
 # ARG_POSITIONAL_INF([custom],[Additional arguments to pass to the ELNBuildSync daemon])
@@ -64,20 +66,24 @@ _arg_dynamic_config_url="https://github.com/fedora-eln/elnbuildsync-config.git"
 _arg_dynamic_config_branch="main"
 _arg_krb5_keytab_file=
 _arg_krb5_keytab_principal=
+_arg_keytab_file=
+_arg_keytab_principal=
 _arg_openid_ca_file=
 
 
 print_help()
 {
-	printf 'Usage: %s [--log-level <arg>] [--static-config-file <arg>] [--dynamic-config-file <arg>] [--dynamic-config-url <arg>] [--dynamic-config-branch <arg>] [--krb5-keytab-file <arg>] [--krb5-keytab-principal <arg>] [--openid-ca-file <arg>] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
+	printf 'Usage: %s [--log-level <arg>] [--static-config-file <arg>] [--dynamic-config-file <arg>] [--dynamic-config-url <arg>] [--dynamic-config-branch <arg>] [--krb5-keytab-file <arg>] [--krb5-keytab-principal <arg>] [--keytab-file <arg>] [--keytab-principal <arg>] [--openid-ca-file <arg>] [-h|--help] [--] [<custom-1>] ... [<custom-n>] ...\n' "$0"
 	printf '\t%s\n' "<custom>: Additional arguments to pass to the ELNBuildSync daemon"
 	printf '\t%s\n' "--log-level: Log verbosity (default: 'INFO')"
 	printf '\t%s\n' "--static-config-file: Static configuration file (default: '/etc/elnbuildsync/static-config/elnbuildsync.yaml')"
 	printf '\t%s\n' "--dynamic-config-file: Dynamic configuration file (no default)"
 	printf '\t%s\n' "--dynamic-config-url: Dynamic configuration Git URL (default: 'https://github.com/fedora-eln/elnbuildsync-config.git')"
 	printf '\t%s\n' "--dynamic-config-branch: Dynamic configuration Git branch (default: 'main')"
-	printf '\t%s\n' "--krb5-keytab-file: Kerberos keytab for in-process TGT acquisition (optional; otherwise use existing ccache)"
-	printf '\t%s\n' "--krb5-keytab-principal: Principal for keytab-based TGT acquisition only (default: guessed from static configuration when a keytab is set)"
+	printf '\t%s\n' "--krb5-keytab-file: Kerberos keytab for in-process TGT acquisition (optional) (no default)"
+	printf '\t%s\n' "--krb5-keytab-principal: Kerberos principal for keytab-based TGT acquisition only (default: guessed from static configuration) (no default)"
+	printf '\t%s\n' "--keytab-file: Deprecated in favor of --krb5-keytab-file (no default)"
+	printf '\t%s\n' "--keytab-principal: Deprecated in favor of --krb5-keytab-principal (no default)"
 	printf '\t%s\n' "--openid-ca-file: OIDC CA certificate file (no default)"
 	printf '\t%s\n' "-h, --help: Prints help"
 	printf '\n%s\n' "Run the ELNBuildSync daemon"
@@ -158,6 +164,22 @@ parse_commandline()
 			--krb5-keytab-principal=*)
 				_arg_krb5_keytab_principal="${_key##--krb5-keytab-principal=}"
 				;;
+			--keytab-file)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_keytab_file="$2"
+				shift
+				;;
+			--keytab-file=*)
+				_arg_keytab_file="${_key##--keytab-file=}"
+				;;
+			--keytab-principal)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_keytab_principal="$2"
+				shift
+				;;
+			--keytab-principal=*)
+				_arg_keytab_principal="${_key##--keytab-principal=}"
+				;;
 			--openid-ca-file)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
 				_arg_openid_ca_file="$2"
@@ -216,6 +238,14 @@ set -eo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 export TMPDIR=/var/tmp
+
+# Prefer --krb5-* over deprecated --keytab-* aliases
+if [ -z "${_arg_krb5_keytab_file}" ] && [ -n "${_arg_keytab_file}" ]; then
+  _arg_krb5_keytab_file="${_arg_keytab_file}"
+fi
+if [ -z "${_arg_krb5_keytab_principal}" ] && [ -n "${_arg_keytab_principal}" ]; then
+  _arg_krb5_keytab_principal="${_arg_keytab_principal}"
+fi
 
 # When acquiring via keytab, use a shared file ccache unless one is already set.
 # Without a keytab, leave $KRB5CCNAME alone (existing TGT / KCM / system default).
