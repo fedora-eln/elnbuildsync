@@ -358,6 +358,9 @@ def cancel_timed_out_task(failure, task_id):
     # nothing we can do to recover from that anyway.
     reactor.callFromThread(_do_cancelation, task_id)
 
+    # Remove the Deferred from the active tasks dictionary
+    state.active_tasks.pop(task_id, None)
+
     # Raise a TaskTimeoutError with the task_id
     err = kojihelpers.errors.TaskTimeoutError()
     err.data = {
