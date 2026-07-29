@@ -189,3 +189,31 @@ def _promote_builds_thread(bsys, draft_build_ids):
             continue
 
     return promoted_nvrs
+
+
+async def get_build_info_from_task(task_id: int) -> dict:
+    """
+    Get the build information for a given task ID.
+
+    :param task_id: The ID of the task that produced the build.
+    :returns: A dictionary of build information.
+    :raises InfoUnavailableError: If no build is found for the task.
+    """
+    try:
+        builds = await call_koji("listBuilds", taskID=task_id)
+    except koji.GenericError as e:
+        logger.exception(f"Could not retrieve build ID for task {task_id}")
+        raise InfoUnavailableError(
+            f"Could not retrieve build ID for task {task_id}"
+        ) from e
+
+    if not builds or not builds[0]:
+        raise InfoUnavailableError(f"No build found for task {task_id}")
+
+    # It should be impossible to have multiple builds for a single task, but just in case.
+    if len(builds) > 1:
+        logger.warning(
+            f"Multiple builds found for task {task_id}. Using the first one."
+        )
+
+    return builds[0]
