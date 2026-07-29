@@ -85,60 +85,6 @@ async def get_multi_buildinfo(build_ids, **kwargs):
     return results
 
 
-async def get_taskinfo(task_id, **kwargs):
-    try:
-        taskinfo = await call_koji("getTaskInfo", task_id, **kwargs)
-    except koji.GenericError as e:
-        logger.exception(f"Could not retrieve information for task {task_id}")
-        raise InfoUnavailableError(
-            f"Could not retrieve information for build {task_id}"
-        ) from e
-
-    if taskinfo["state"] in (
-        koji.TASK_STATES["FREE"],
-        koji.TASK_STATES["OPEN"],
-        koji.TASK_STATES["ASSIGNED"],
-    ):
-        # Still processing; don't bother collecting other data
-        return taskinfo
-
-    try:
-        children = await call_koji(
-            "getTaskChildren", task_id, request=True, strict=True
-        )
-    except koji.GenericError as e:
-        logger.exception(f"Could not retrieve child information for task {task_id}")
-        raise InfoUnavailableError(
-            f"Could not retrieve child information for build {task_id}"
-        ) from e
-
-    # Add the ["info"] key here to simulate the layout of a
-    # state-change message from Koji.
-    taskinfo["info"] = {}
-    taskinfo["info"]["request"] = taskinfo["request"]
-
-    if taskinfo["state"] == koji.TASK_STATES["CLOSED"]:
-        # Ensure we have the result for a buildSRPMFromSCM step so we can use that
-        # in RebuildBatch._get_srpm_nvr_from_task_msg() to make sure we know the
-        # proper NVR to tag.
-        for child in children:
-            if child["method"] == "buildSRPMFromSCM":
-                try:
-                    child["result"] = await call_koji("getTaskResult", child["id"])
-                except koji.GenericError as e:
-                    raise InfoUnavailableError(
-                        f"SRPM build failed for {task_id}"
-                    ) from e
-
-        # Add the ["info"]["children"] keys here to simulate the layout of a
-        # state-change message from Koji. This is needed later by
-        # RebuildBatch._get_srpm_nvr_from_task_msg() so that we don't need to
-        # differentiate the two ways we can determine task completion.
-        taskinfo["info"]["children"] = children
-
-    return taskinfo
-
-
 async def perform_builds(target, scm_urls, fail_fast=False):
     task_index = await start_builds(target, scm_urls, fail_fast)
     results = await wait_for_tasks(task_index.values())
