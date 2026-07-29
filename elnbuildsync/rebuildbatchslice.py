@@ -40,7 +40,16 @@ class RebuildBatchSlice:
 
         # Set up the RebuildAttempt
         all_successes = {}
-        scm_urls = [await msg.get_scmurl() for msg in self.build_triggers]
+        scm_urls = []
+        for msg in self.build_triggers:
+            try:
+                scm_urls.append(await msg.get_scmurl())
+            except Exception:
+                logger.exception(
+                    "Could not retrieve SCM URL for %s (build_id=%s); skipping",
+                    msg.component,
+                    msg.build_id,
+                )
         attempt = await RebuildAttempt(scm_urls=scm_urls, slice=self).async_init()
 
         successes, failures = await attempt.async_await()
