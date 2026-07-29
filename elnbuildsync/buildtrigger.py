@@ -20,9 +20,12 @@
 import logging
 from datetime import datetime, timezone
 
+import koji
 from sqlalchemy.sql.expression import select
 
-from . import config, db_models
+from elnbuildsync.kojihelpers.connection import call_koji
+
+from . import config, db_models, kojihelpers
 from .decorators import as_deferred
 
 logger = logging.getLogger(__name__)
@@ -76,22 +79,24 @@ class BuildTrigger:
         """Get the SCMURL that the build was created from
 
         :returns: A string containing the full, dereferenced SCMURL for the build
+        :raises kojihelpers.errors.InfoUnavailableError: If the SCM URL is not available
         """
-        # Imported here to avoid circular import: builds → listener → buildtrigger.
-        from .kojihelpers.builds import get_buildinfo
-
         # Store the SCM URL to avoid multiple retrievals.
         if self.scmurl is None:
             logger.debug(f"Retrieving SCM URL for {self.build_id}")
             try:
-                buildinfo = await get_buildinfo(self.build_id)
-            except Exception:
-                logger.exception("Unexpected error retrieving SCM URL")
-                raise
+                buildinfo = await call_koji("getBuild", self.build_id, strict=True)
+            except koji.GenericError as e:
+                raise kojihelpers.errors.InfoUnavailableError(
+                    f"SCM URL for {self.build_id} is not available"
+                ) from e
+
             self.scmurl = buildinfo["source"]
 
         if self.scmurl is None:
-            raise ValueError(f"SCM URL for {self.build_id} is not available")
+            raise kojihelpers.errors.InfoUnavailableError(
+                f"SCM URL for {self.build_id} is not available"
+            )
 
         return self.scmurl
 

@@ -33,24 +33,6 @@ logger = logging.getLogger(__name__)
 KOJI_BACKGROUND_PRIORITY = 5
 
 
-async def get_buildinfo(build_id, **kwargs):
-    """
-    Get all information about a particular build
-
-    :param build_id: The ID of the build (likely retrieved from a tagging message)
-    :returns: A dictionary of information about the build
-    """
-    try:
-        buildinfo = await call_koji("getBuild", build_id, **kwargs)
-    except koji.GenericError as e:
-        logger.exception(f"Could not retrieve information for build {build_id}")
-        raise InfoUnavailableError(
-            f"Could not retrieve information for build {build_id}"
-        ) from e
-
-    return buildinfo
-
-
 def _get_multi_buildinfo_thread(bsys, build_ids, **kwargs):
     build_vcalls = {}
 
