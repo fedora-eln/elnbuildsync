@@ -17,6 +17,7 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 import asyncio
+import html
 import importlib.metadata
 import json
 import logging
@@ -48,6 +49,17 @@ started = False
 alive = True
 # Fully substituted status.html bytes; loaded once at startup.
 status_page_html = None
+
+
+def _escape_html(value: str) -> str:
+    return html.escape(value, quote=True)
+
+
+def _render_user_html(user: dict) -> tuple[str, str]:
+    username = _escape_html(str(user.get("username", "")))
+    groups = user.get("groups") or []
+    groups_html = ", ".join(_escape_html(str(group)) for group in groups)
+    return username, groups_html
 
 
 def _elnbuildsync_version() -> str:
@@ -281,6 +293,7 @@ class TriggerBuildResource(ProtectedResource):
         """Show a simple form or info page for the trigger endpoint."""
         request.setHeader("Content-Type", "text/html; charset=utf-8")
         request.setHeader("Cache-Control", "no-cache")
+        username_html, groups_html = _render_user_html(user)
 
         token_block = _bearer_token_html_block(
             request,
@@ -294,8 +307,8 @@ class TriggerBuildResource(ProtectedResource):
 <head><title>ELN Build Trigger</title></head>
 <body>
 <h1>ELN Build Trigger</h1>
-<p>Logged in as: <strong>{user["username"]}</strong></p>
-<p>Groups: {", ".join(user["groups"])}</p>
+<p>Logged in as: <strong>{username_html}</strong></p>
+<p>Groups: {groups_html}</p>
 <p>To trigger builds, POST a JSON array of downstream component names to this endpoint.</p>
 {token_block}
 <p><a href="/logout">Logout</a></p>
@@ -359,19 +372,23 @@ class LogLevelPage(ProtectedResource):
         self.loglevel = name.decode("UTF-8").upper()
 
     def _log_level_path(self):
-        return f"/loglevel/{self.loglevel}"
+        return f"/loglevel/{quote(self.loglevel, safe='')}"
 
     async def _handle_get(self, request, user):
         request.setHeader("Content-Type", "text/html; charset=utf-8")
         request.setHeader("Cache-Control", "no-cache")
+        username_html, groups_html = _render_user_html(user)
+        loglevel_html = _escape_html(self.loglevel)
+        current_level_html = _escape_html(
+            str(logging.getLevelName(logging.getLogger().getEffectiveLevel()))
+        )
 
-        current_level = logging.getLevelName(logging.getLogger().getEffectiveLevel())
         invalid_block = ""
         try:
             logging._checkLevel(self.loglevel)
         except (TypeError, ValueError):
             invalid_block = (
-                f"<p><strong>Invalid log level: {self.loglevel}</strong></p>"
+                f"<p><strong>Invalid log level: {loglevel_html}</strong></p>"
             )
 
         token_block = _bearer_token_html_block(
@@ -384,11 +401,11 @@ class LogLevelPage(ProtectedResource):
 <html>
 <head><title>ELN Build Sync Log Level</title></head>
 <body>
-<h1>ELN Build Sync Log Level — {self.loglevel}</h1>
-<p>Logged in as: <strong>{user["username"]}</strong></p>
-<p>Groups: {", ".join(user["groups"])}</p>
-<p>Current root log level: {current_level}</p>
-<p>To set the log level to {self.loglevel}, POST to this endpoint with a Bearer token.</p>
+<h1>ELN Build Sync Log Level — {loglevel_html}</h1>
+<p>Logged in as: <strong>{username_html}</strong></p>
+<p>Groups: {groups_html}</p>
+<p>Current root log level: {current_level_html}</p>
+<p>To set the log level to {loglevel_html}, POST to this endpoint with a Bearer token.</p>
 {invalid_block}
 {token_block}
 <p><a href="/logout">Logout</a></p>
@@ -436,7 +453,7 @@ class ControlPage(ProtectedResource):
         self.action = name.decode("UTF-8").lower()
 
     def _control_path(self):
-        return f"/control/{self.action}"
+        return f"/control/{quote(self.action, safe='')}"
 
     def _persistence_warning(self):
         if config.scmurl:
@@ -465,8 +482,13 @@ class ControlPage(ProtectedResource):
             return
 
         request.setHeader("Content-Type", "text/html; charset=utf-8")
-        current_state = "paused" if config.is_paused() else "active"
-        action_verb = "pause" if self.action == "pause" else "unpause"
+        username_html, groups_html = _render_user_html(user)
+        action_html = _escape_html(self.action)
+        current_state_html = _escape_html("paused" if config.is_paused() else "active")
+        action_verb_html = _escape_html(
+            "pause" if self.action == "pause" else "unpause"
+        )
+        persistence_warning_html = _escape_html(self._persistence_warning())
 
         token_block = _bearer_token_html_block(
             request,
@@ -478,12 +500,12 @@ class ControlPage(ProtectedResource):
 <html>
 <head><title>ELN Build Sync Control</title></head>
 <body>
-<h1>ELN Build Sync Control — {self.action}</h1>
-<p>Logged in as: <strong>{user["username"]}</strong></p>
-<p>Groups: {", ".join(user["groups"])}</p>
-<p>Current state: {current_state}</p>
-<p>To {action_verb} processing, POST to this endpoint with a Bearer token.</p>
-<pre>{self._persistence_warning()}</pre>
+<h1>ELN Build Sync Control — {action_html}</h1>
+<p>Logged in as: <strong>{username_html}</strong></p>
+<p>Groups: {groups_html}</p>
+<p>Current state: {current_state_html}</p>
+<p>To {action_verb_html} processing, POST to this endpoint with a Bearer token.</p>
+<pre>{persistence_warning_html}</pre>
 {token_block}
 <p><a href="/logout">Logout</a></p>
 </body>
@@ -556,10 +578,8 @@ def _bearer_token_html_block(
         b"yes",
     )
     if not show_token:
-        return (
-            f'<p><a href="{page_url}?show_token=1">'
-            "Display authorization token for curl</a></p>"
-        )
+        show_url = _escape_html(f"{page_url}?show_token=1")
+        return f'<p><a href="{show_url}">Display authorization token for curl</a></p>'
 
     session_id = auth.get_bearer_token(request) or auth.get_session_cookie(request)
     if not session_id:
@@ -569,13 +589,16 @@ def _bearer_token_html_block(
     curl_example = (
         f'curl -X POST -H "Authorization: Bearer {session_id}" {curl_extra}{post_url}'
     )
+    page_url_html = _escape_html(page_url)
+    session_id_html = _escape_html(session_id)
+    curl_example_html = _escape_html(curl_example)
     return f"""
 <h2>Authorization token for curl</h2>
 <p>Use this token in the <code>Authorization: Bearer</code> header:</p>
-<pre style="background:#f5f5f5; padding: 0.5em; overflow-x: auto;">{session_id}</pre>
+<pre style="background:#f5f5f5; padding: 0.5em; overflow-x: auto;">{session_id_html}</pre>
 <h2>Example curl command</h2>
-<pre style="background:#f5f5f5; padding: 0.5em; overflow-x: auto;">{curl_example}</pre>
-<p><a href="{page_url}">Hide token</a></p>
+<pre style="background:#f5f5f5; padding: 0.5em; overflow-x: auto;">{curl_example_html}</pre>
+<p><a href="{page_url_html}">Hide token</a></p>
 """
 
 
