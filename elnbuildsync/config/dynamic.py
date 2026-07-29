@@ -244,40 +244,42 @@ async def _fetch_dynamic_config_file(
             "Cloning dynamic config from %s at ref %s", scm["link"], scm["ref"]
         )
 
-        with tempfile.TemporaryDirectory(prefix=TEMP_DIR_PREFIX) as cdir:
-            for attempt in range(retry):
-                try:
+        # Use a fresh empty directory for each attempt. Reusing a temp dir after a
+        # failed/partial clone makes git refuse: destination is not empty.
+        for attempt in range(retry):
+            try:
+                with tempfile.TemporaryDirectory(prefix=TEMP_DIR_PREFIX) as cdir:
                     repo = await deferToThread(git.Repo.clone_from, scm["link"], cdir)
                     await deferToThread(repo.git.checkout, scm["ref"])
-                except Exception:
-                    logger.warning(
-                        "Failed to fetch configuration, retrying (#%d).",
-                        attempt + 1,
-                        exc_info=True,
-                    )
-                    continue
-                else:
                     logger.info("Configuration fetched successfully.")
-                    break
-            else:
-                raise ConfigError("Failed to fetch configuration, giving up.")
 
-            config_path = os.path.join(cdir, DYNAMIC_CONFIG_FILENAME)
-            if not os.path.isfile(config_path):
-                raise ConfigError(
-                    f"Configuration repository does not contain {DYNAMIC_CONFIG_FILENAME}."
+                    config_path = os.path.join(cdir, DYNAMIC_CONFIG_FILENAME)
+                    if not os.path.isfile(config_path):
+                        raise ConfigError(
+                            f"Configuration repository does not contain {DYNAMIC_CONFIG_FILENAME}."
+                        )
+
+                    try:
+                        y = await load_yaml_file(config_path)
+                        logger.debug(
+                            "%s loaded, processing dynamic configuration.",
+                            config_path,
+                        )
+                    except Exception as e:
+                        logger.info(e)
+                        raise ConfigError(f"Could not parse {config_path}.") from e
+
+                    return scmurl, y
+            except ConfigError:
+                raise
+            except Exception:
+                logger.warning(
+                    "Failed to fetch configuration, retrying (#%d).",
+                    attempt + 1,
+                    exc_info=True,
                 )
 
-            try:
-                y = await load_yaml_file(config_path)
-                logger.debug(
-                    "%s loaded, processing dynamic configuration.", config_path
-                )
-            except Exception as e:
-                logger.info(e)
-                raise ConfigError(f"Could not parse {config_path}.")
-
-            return scmurl, y
+        raise ConfigError("Failed to fetch configuration, giving up.")
 
     try:
         y = await load_yaml_file(dynamic_config_file)
