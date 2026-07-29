@@ -247,13 +247,16 @@ if [ -z "${_arg_krb5_keytab_principal}" ] && [ -n "${_arg_keytab_principal}" ]; 
   _arg_krb5_keytab_principal="${_arg_keytab_principal}"
 fi
 
-# When acquiring via keytab, use a shared file ccache unless one is already set.
+# When acquiring via keytab, use a private file ccache unless one is already set.
 # Without a keytab, leave $KRB5CCNAME alone (existing TGT / KCM / system default).
 if [ -n "${_arg_krb5_keytab_principal}" ] && [ -z "${_arg_krb5_keytab_file}" ]; then
   die "--krb5-keytab-principal requires --krb5-keytab-file" 1
 fi
 if [ -n "${_arg_krb5_keytab_file}" ] && [ -z "${KRB5CCNAME:-}" ]; then
-  export KRB5CCNAME=FILE:${TMPDIR}/tgt
+  # Avoid a fixed path in world-writable $TMPDIR (symlink / pre-create races).
+  _krb5_ccache_dir="$(mktemp -d "${TMPDIR}/elnbuildsync-krb5-XXXXXX")"
+  chmod 700 "${_krb5_ccache_dir}"
+  export KRB5CCNAME="FILE:${_krb5_ccache_dir}/tgt"
 fi
 
 STATIC_ARG="--static-config-file /etc/elnbuildsync/static-config/elnbuildsync.yaml"
