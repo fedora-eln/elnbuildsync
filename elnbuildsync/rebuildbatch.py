@@ -136,23 +136,6 @@ class RebuildBatch:
         self.build_triggers[message.component] = message
 
     @staticmethod
-    def _get_srpm_nvr_from_task_msg(msg_body) -> str:
-        try:
-            children = msg_body["info"]["children"]
-        except NameError as e:
-            raise ValueError("Missing children in message") from e
-
-        for child in children:
-            if child["method"] == "buildSRPMFromSCM":
-                try:
-                    srpm_field = child["result"]["srpm"]
-                except KeyError as e:
-                    raise ValueError("Missing 'srpm' in message") from e
-                break
-
-        return srpm_field.split("/")[-1].partition(".src.rpm")[0]
-
-    @staticmethod
     def extract_package_name_from_scm_url(url: str) -> str:
         """Extracts the package name from a SCM URL."""
 
@@ -203,14 +186,13 @@ class RebuildBatch:
 
         # Get the list of NVRs that we will need to tag.
         build_nvrs = []
-        for task_id, msg_body in all_successes.items():
+        for task_id in all_successes:
             try:
-                nvr = RebuildBatch._get_srpm_nvr_from_task_msg(msg_body)
-            except ValueError:
-                # This message was missing some key information
-                logger.critical(f"Couldn't get the NVR from {task_id}")
-                logger.critical(msg_body)
-                # Nothing we can do about this, so just give up.
+                nvr = (await kojihelpers.builds.get_build_info_from_task(task_id))[
+                    "nvr"
+                ]
+            except kojihelpers.errors.InfoUnavailableError:
+                logger.exception(f"Could not retrieve build info for task {task_id}")
                 continue
             build_nvrs.append(nvr)
 
