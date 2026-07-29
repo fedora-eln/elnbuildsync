@@ -276,7 +276,7 @@ async def validate_session(session_id: str) -> dict | None:
         if datetime.now(timezone.utc) > db_session.expires_at:
             logger.debug(f"Session expired for user {db_session.username}")
             # Clean up expired session
-            session.delete(db_session)
+            await session.delete(db_session)
             await session.commit()
             return None
 
