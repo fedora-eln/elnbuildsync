@@ -69,7 +69,7 @@ class BuildTrigger:
     @as_deferred
     async def drop(self):
         async with db_models.async_session() as session:
-            session.delete(self._db_obj)
+            await session.delete(self._db_obj)
             await session.commit()
 
     async def get_scmurl(self):
