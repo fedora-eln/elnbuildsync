@@ -34,6 +34,8 @@ KOJI_BACKGROUND_PRIORITY = 5
 
 
 def _get_multi_buildinfo_thread(bsys, build_ids, **kwargs):
+    # Force strict=True so missing builds raise instead of returning None.
+    kwargs = {**kwargs, "strict": True}
     build_vcalls = {}
 
     with bsys.multicall(batch=config.koji_batch) as mc:
@@ -42,7 +44,12 @@ def _get_multi_buildinfo_thread(bsys, build_ids, **kwargs):
 
     results = {}
     for build_id, vcall in build_vcalls.items():
-        results[build_id] = vcall.result
+        buildinfo = vcall.result
+        if not buildinfo:
+            raise InfoUnavailableError(
+                f"Could not retrieve information for build {build_id}"
+            )
+        results[build_id] = buildinfo
 
     return results
 
@@ -54,12 +61,15 @@ async def get_multi_buildinfo(build_ids, **kwargs):
     :param build_ids: List of build IDs to retrieve
     :param kwargs: Additional arguments passed to getBuild
     :returns: A dictionary mapping build_id -> buildinfo dict
+    :raises InfoUnavailableError: If any build cannot be retrieved or does not exist
     """
     if not build_ids:
         return {}
 
     try:
         results = await call_koji(_get_multi_buildinfo_thread, build_ids, **kwargs)
+    except InfoUnavailableError:
+        raise
     except koji.GenericError as e:
         logger.exception(f"Could not retrieve information for builds {build_ids}")
         raise InfoUnavailableError("Could not retrieve information for builds") from e
