@@ -36,6 +36,12 @@ from .rebuildbatchslice import RebuildBatchSlice
 logger = logging.getLogger(__name__)
 
 
+class EmptyPromotionError(Exception):
+    """
+    Raised when no builds were promoted from draft status for a batch.
+    """
+
+
 class RebuildBatch:
     def __init__(
         self,
@@ -80,26 +86,35 @@ class RebuildBatch:
         ) = await kojihelpers.tags.get_tags_for_target(self.target)
 
         # Create the side-tag for this batch
-        self.side_tag = await self._create_and_populate_side_tag(build_ids_to_tag)
+        self.side_tag, _ = await self._create_and_populate_side_tag(build_ids_to_tag)
 
         return self
 
     async def _create_and_populate_side_tag(
         self, build_ids: list[int], promote_builds: bool = False
-    ) -> str:
+    ) -> tuple[str, list[str]]:
         """
-        Creates a side-tag for this batch.
+        Creates a side-tag for this batch. If promote_builds is True, the builds
+        will be promoted before tagging. This will return the NVRs that were
+        tagged, which may not be the same as the input build_ids/NVRs if some
+        builds were not able to be promoted (e.g. if another draft build was
+        already promoted with the same NVR).
 
         :param build_ids: The list of build_ids to tag into the side-tag.
         :type build_ids: list[int]
         :param promote_builds: Whether to promote draft builds before tagging.
 
-        :return: The name of the side-tag.
-        :rtype: str
+        :return: The side-tag name and the refs that were tagged (promoted NVRs
+            when promote_builds is True, otherwise the input build_ids/NVRs).
+        :rtype: tuple[str, list[str]]
         """
 
         if promote_builds:
             build_nvrs = await kojihelpers.builds.promote_builds(build_ids)
+            if not build_nvrs:
+                raise EmptyPromotionError(
+                    f"No builds were promoted from draft status for {build_ids}"
+                )
         else:
             build_nvrs = build_ids
 
@@ -119,7 +134,7 @@ class RebuildBatch:
 
             # Side-tag is ready. Proceed.
             break
-        return side_tag
+        return side_tag, build_nvrs
 
     async def add_build_trigger(self, message: BuildTrigger):
         # Overwrite any earlier instance of this component, since we only want
@@ -206,13 +221,16 @@ class RebuildBatch:
             # Submit Bodhi updates for the builds
             # This will create the side-tag and submit the Bodhi updates
             # from it.
-            await self._create_and_submit_bodhi_updates(build_nvrs)
+            tagging_nvrs = await self._create_and_submit_bodhi_updates(build_nvrs)
 
             # Wait for the Bodhi update to make it to stable by verifying
             # that all the builds are tagged into the stable tag.
+            # We'll use the NVRs that were tagged, not the input build_nvrs,
+            # since some builds may not have been promoted from draft status
+            # if the NVR was already in use.
             stable_tag = config.main["koji"]["stable_tag"]
             results = await kojihelpers.tags.wait_for_nvrs_in_tag(
-                stable_tag, build_nvrs
+                stable_tag, tagging_nvrs
             )
             for success, value in results:
                 if success:
@@ -231,7 +249,9 @@ class RebuildBatch:
         logger.info(f"Removing side-tag {self.side_tag}")
         await kojihelpers.tags.remove_side_tag(self.side_tag)
 
-    async def _create_and_submit_bodhi_updates(self, build_nvrs: list[str]) -> None:
+    async def _create_and_submit_bodhi_updates(
+        self, build_nvrs: list[str]
+    ) -> list[str]:
         def _build_batch_generator(
             build_nvrs: list[str],
         ) -> Generator[list[str], None, None]:
@@ -243,11 +263,24 @@ class RebuildBatch:
             for i in range(0, len(build_nvrs), batch_size):
                 yield build_nvrs[i : i + batch_size]  # noqa: E203
 
+        promoted_nvrs: list[str] = []
+
         async def _process_batch(batch_nvrs: list[str]) -> None:
             if len(batch_nvrs) == 0:
                 return
 
-            update_tag = await self._create_and_populate_side_tag(batch_nvrs)
+            try:
+                (
+                    update_tag,
+                    batch_promoted_nvrs,
+                ) = await self._create_and_populate_side_tag(
+                    batch_nvrs, promote_builds=True
+                )
+            except EmptyPromotionError:
+                logger.exception(
+                    f"No builds were promoted from draft status for {batch_nvrs}"
+                )
+                return
 
             logger.info(f"Submitting Bodhi update for {update_tag}")
             try:
@@ -256,12 +289,15 @@ class RebuildBatch:
                 logger.exception(f"Failed to submit Bodhi update for {update_tag}")
                 raise
             logger.debug(f"Submitted Bodhi update for {batch_nvrs}")
+            promoted_nvrs.extend(batch_promoted_nvrs)
 
         for batch_nvrs in _build_batch_generator(build_nvrs):
             # If an exception is raised here, we want it to bubble up so we
             # don't inadvertently remove the build side-tag. This will be
             # caught up in batching.process_message_batch().
             await _process_batch(batch_nvrs)
+
+        return promoted_nvrs
 
     @retry(
         wait=wait_exponential(),
