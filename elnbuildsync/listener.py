@@ -26,6 +26,8 @@ from twisted.internet.defer import AlreadyCalledError, Deferred
 from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 from twisted.internet.threads import blockingCallFromThread
 
+from elnbuildsync.kojihelpers.connection import call_koji
+
 from . import batching, config, kojihelpers
 from .buildtrigger import BuildTrigger
 from .state import ELNBuildSyncState as state
@@ -210,7 +212,14 @@ async def check_tasks():
 
     for task in watched_tasks:
         try:
-            taskinfo = await kojihelpers.builds.get_taskinfo(task, request=True)
+            taskinfo = await call_koji("getTaskInfo", task, request=True)
+
+            # Ensure that the taskinfo dictionary has the same layout as a
+            # state-change message from Koji. This will be used by RebuildBatchSlice
+            # to determine the request that triggered the task.
+            request = taskinfo.get("request", [None, None, None])
+            taskinfo["request"] = request
+            taskinfo["info"] = {"request": request}
 
             # Atomically pop the task and claim ownership of the Deferred.
             # If a message handler already claimed it during the await, skip.
