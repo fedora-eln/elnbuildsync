@@ -23,6 +23,7 @@ import logging
 import os
 import secrets
 from string import Template
+from urllib.parse import quote, urlparse
 
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred
@@ -601,11 +602,37 @@ async def _check_request_auth(request):
 
 def _redirect_to_login(request):
     """Redirect unauthenticated user to login page."""
-    return_to = request.uri.decode("utf-8")
-    login_url = f"/login?return_to={return_to}"
+    return_to = _safe_return_to(request.uri, default="/status.html")
+    login_url = f"/login?return_to={quote(return_to, safe='')}"
     request.redirect(login_url.encode())
     request.finish()
     return NOT_DONE_YET
+
+
+def _safe_return_to(return_to=None, default="/"):
+    """Return a same-origin relative path, or ``default`` if unsafe.
+
+    Rejects absolute URLs, protocol-relative URLs (``//…``), and other
+    open-redirect tricks so post-login/logout redirects stay on this app.
+    """
+    if return_to is None:
+        return default
+    if isinstance(return_to, bytes):
+        return_to = return_to.decode("utf-8", errors="replace")
+    return_to = return_to.strip()
+    if not return_to:
+        return default
+    if any(c in return_to for c in ("\\", "\n", "\r", "\0")):
+        logger.warning("Rejecting unsafe return_to: %r", return_to)
+        return default
+    parsed = urlparse(return_to)
+    if parsed.scheme or parsed.netloc:
+        logger.warning("Rejecting absolute/external return_to: %r", return_to)
+        return default
+    if not return_to.startswith("/") or return_to.startswith("//"):
+        logger.warning("Rejecting non-relative return_to: %r", return_to)
+        return default
+    return return_to
 
 
 class OIDCContainerResource(Resource):
@@ -633,7 +660,10 @@ class LoginResource(Resource):
             return b"Authentication not configured"
 
         # Get the return URL (where to redirect after login)
-        return_to = request.args.get(b"return_to", [b"/status.html"])[0].decode("utf-8")
+        return_to = _safe_return_to(
+            request.args.get(b"return_to", [b"/status.html"])[0],
+            default="/status.html",
+        )
 
         # Build the callback URL
         base_url = _get_base_url(request)
@@ -743,8 +773,10 @@ class OIDCCallbackResource(Resource):
             )
             auth.set_session_cookie(request, session_id, secure=is_secure)
 
-            # Redirect to original destination
-            request.redirect(return_to.encode())
+            # Redirect to original destination (same-origin relative path only)
+            request.redirect(
+                _safe_return_to(return_to, default="/status.html").encode()
+            )
             request.finish()
 
         except auth.OIDCError as e:
@@ -795,8 +827,10 @@ class LogoutResource(Resource):
         auth.clear_session_cookie(request)
 
         # Redirect to home or a logout confirmation page
-        return_to = request.args.get(b"return_to", [b"/"])[0]
-        request.redirect(return_to)
+        return_to = _safe_return_to(
+            request.args.get(b"return_to", [b"/"])[0], default="/"
+        )
+        request.redirect(return_to.encode())
         request.finish()
 
 
