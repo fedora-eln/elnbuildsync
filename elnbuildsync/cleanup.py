@@ -64,7 +64,7 @@ async def periodic_cleanup():
             logger.info(f"\t{nvr}")
 
         if config.do_untagging:
-            kojihelpers.tags.untag_builds(
+            await kojihelpers.tags.untag_builds(
                 config.main["koji"]["stable_tag"], nvrs_to_untag
             )
         else:
