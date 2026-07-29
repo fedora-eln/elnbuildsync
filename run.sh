@@ -259,22 +259,22 @@ if [ -n "${_arg_krb5_keytab_file}" ] && [ -z "${KRB5CCNAME:-}" ]; then
   export KRB5CCNAME="FILE:${_krb5_ccache_dir}/tgt"
 fi
 
-STATIC_ARG="--static-config-file /etc/elnbuildsync/static-config/elnbuildsync.yaml"
+STATIC_ARGS=(--static-config-file /etc/elnbuildsync/static-config/elnbuildsync.yaml)
 if [ -n "${_arg_static_config_file}" ]; then
-  STATIC_ARG="--static-config-file ${_arg_static_config_file}"
+  STATIC_ARGS=(--static-config-file "${_arg_static_config_file}")
 fi
 
 if [ -n "${_arg_dynamic_config_file}" ]; then
   echo "Using dynamic config file at ${_arg_dynamic_config_file}"
-  DYNAMIC_ARG="--dynamic-config-file ${_arg_dynamic_config_file}"
+  DYNAMIC_ARGS=(--dynamic-config-file "${_arg_dynamic_config_file}")
 elif [ -f /etc/elnbuildsync/dynamic-config/elnbuildsync_dynamic.yaml ]; then
   # Check if we have mounted a dynamic config file into the container.
   # This is mostly useful for local development with a mounted dynamic config.
   echo "Using dynamic config file at /etc/elnbuildsync/dynamic-config/elnbuildsync_dynamic.yaml"
-  DYNAMIC_ARG="--dynamic-config-file /etc/elnbuildsync/dynamic-config/elnbuildsync_dynamic.yaml"
+  DYNAMIC_ARGS=(--dynamic-config-file /etc/elnbuildsync/dynamic-config/elnbuildsync_dynamic.yaml)
 else
   echo "Using dynamic config URL at ${_arg_dynamic_config_url}#${_arg_dynamic_config_branch}"
-  DYNAMIC_ARG="--dynamic-config-url ${_arg_dynamic_config_url}#${_arg_dynamic_config_branch}"
+  DYNAMIC_ARGS=(--dynamic-config-url "${_arg_dynamic_config_url}#${_arg_dynamic_config_branch}")
 fi
 
 # Check that the DB password file exists
@@ -284,17 +284,19 @@ if [ ! -f /etc/elnbuildsync/secrets/ebs_db_pw ]; then
 fi
 
 # Check that the SMTP password file exists
+SMTP_ARGS=()
 if [ ! -f /etc/elnbuildsync/secrets/ebs_smtp_pw ]; then
   echo "Warning: SMTP password file /etc/elnbuildsync/secrets/ebs_smtp_pw is missing. If using SMTP, mount it with --volume /local/dir:/etc/elnbuildsync/secrets:Z"
 else
-  SMTP_ARG="--smtp-pw-file /etc/elnbuildsync/secrets/ebs_smtp_pw"
+  SMTP_ARGS=(--smtp-pw-file /etc/elnbuildsync/secrets/ebs_smtp_pw)
 fi
 
 # OIDC client secret (when mounted under /etc/elnbuildsync/)
+OIDC_ARGS=()
 if [ ! -f /etc/elnbuildsync/secrets/ebs_oidc_client_secret ]; then
   echo "Warning: OIDC client secret file /etc/elnbuildsync/secrets/ebs_oidc_client_secret is missing. If using OIDC, mount it with --volume /local/dir:/etc/elnbuildsync/secrets:Z"
 else
-  OIDC_ARG="--openid-client-secret-file /etc/elnbuildsync/secrets/ebs_oidc_client_secret"
+  OIDC_ARGS=(--openid-client-secret-file /etc/elnbuildsync/secrets/ebs_oidc_client_secret)
 fi
 
 OPENID_CA_ARG=()
@@ -313,8 +315,8 @@ fi
 python3 --version
 
 echo "Activating virtualenv"
-virtualenv --system-site-packages ${TMPDIR}/.venv
-. ${TMPDIR}/.venv/bin/activate
+virtualenv --system-site-packages "${TMPDIR}/.venv"
+. "${TMPDIR}/.venv/bin/activate"
 pip install --upgrade pip
 pip install -r requirements.txt
 pip install "${SCRIPT_DIR}"
@@ -322,14 +324,14 @@ pip install "${SCRIPT_DIR}"
 export FEDORA_MESSAGING_CONF=/etc/fedora-messaging/config.toml
 
 elnbuildsync \
-  $STATIC_ARG \
-  $DYNAMIC_ARG \
-  --log-level ${_arg_log_level} \
+  "${STATIC_ARGS[@]}" \
+  "${DYNAMIC_ARGS[@]}" \
+  --log-level "${_arg_log_level}" \
   --db-pw-file /etc/elnbuildsync/secrets/ebs_db_pw \
-  $SMTP_ARG \
-  $OIDC_ARG \
+  "${SMTP_ARGS[@]}" \
+  "${OIDC_ARGS[@]}" \
   "${OPENID_CA_ARG[@]}" \
   "${KRB5_ARGS[@]}" \
-  ${_arg_custom[@]}
+  "${_arg_custom[@]}"
 
 # ] <-- needed because of Argbash
