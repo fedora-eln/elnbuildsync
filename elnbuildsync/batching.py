@@ -69,11 +69,14 @@ async def process_message_batch():
         except Exception:
             # If something goes unrecoverably wrong here, always log it and skip
             # to the next batch.
+            # INTENTIONAL: Fall through to marking build triggers as completed.
             logger.exception("Unexpected error while processing batch")
 
         # Mark all the build triggers as completed
-        # If the batch failed badly enough that the exception above fired,
-        # it would be unsafe to retry those builds.
+        # INTENTIONAL: If the batch failed badly enough that the exception
+        # above fired, it would be unsafe to retry those builds because they
+        # will almost certainly fail again, resulting in an infinite retry
+        # loop.
         for build_trigger in build_triggers:
             try:
                 await build_trigger.mark_completed()
