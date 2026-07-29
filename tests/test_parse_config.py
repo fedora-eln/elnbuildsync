@@ -481,13 +481,19 @@ class TestParseComponents:
         }
 
     @pytest.mark.asyncio
-    async def test_autopackagelist_view_list(self):
-        with patch(
-            "elnbuildsync.config.get_distro_packages",
-            new_callable=AsyncMock,
-            return_value={},
+    async def test_autopackagelist_empty_raises(self):
+        with (
+            patch(
+                "elnbuildsync.config.get_distro_packages",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            pytest.raises(
+                ConfigError,
+                match="components list is empty",
+            ),
         ):
-            result = await _parse_components(
+            await _parse_components(
                 {
                     "autopackagelist": {
                         "view": ["eln", "eln-extras"],
@@ -495,8 +501,6 @@ class TestParseComponents:
                     }
                 }
             )
-        assert result["downstream_components"] == {}
-        assert result["upstream_components"] == {}
 
     @pytest.mark.asyncio
     async def test_autopackagelist_missing_view_raises(self):
@@ -551,10 +555,9 @@ class TestParseComponents:
             )
 
     @pytest.mark.asyncio
-    async def test_overrides_only(self):
-        result = await _parse_components({"overrides": {}})
-        assert result["downstream_components"] == {}
-        assert result["upstream_components"] == {}
+    async def test_overrides_only_empty_raises(self):
+        with pytest.raises(ConfigError, match="components list is empty"):
+            await _parse_components({"overrides": {}})
 
     @pytest.mark.asyncio
     async def test_overrides_with_downstream_name(self):
@@ -658,7 +661,8 @@ configuration:
     trigger_tag: f40
     pause: false
 components:
-  overrides: {}
+  overrides:
+    testpkg: {}
 """
 
 MINIMAL_STATIC_CONFIG_OIDC_YAML = """
@@ -741,8 +745,8 @@ class TestLoadConfig:
             assert config_mod.main["bodhi"]["batch_size"] == 0
             assert config_mod.main["open_id_connect"] is None
             assert config_mod.comps is not None
-            assert config_mod.comps["downstream_components"] == {}
-            assert config_mod.comps["upstream_components"] == {}
+            assert "testpkg" in config_mod.comps["downstream_components"]
+            assert "testpkg" in config_mod.comps["upstream_components"]
             assert config_mod.main["email"]["smtp_host"] == "localhost"
             assert config_mod.emailer is not None
         finally:

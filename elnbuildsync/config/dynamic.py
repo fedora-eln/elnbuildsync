@@ -182,6 +182,8 @@ async def _parse_components(cnf_components, get_distro_packages, ConfigError):
         len(downstream_components),
         len(upstream_components),
     )
+    if not downstream_components:
+        raise ConfigError("components list is empty; refusing to apply configuration.")
     return {
         "downstream_components": downstream_components,
         "upstream_components": upstream_components,
