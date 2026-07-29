@@ -310,9 +310,6 @@ if [ -n "${_arg_krb5_keytab_principal}" ]; then
   KRB5_ARGS+=(--krb5-keytab-principal "${_arg_krb5_keytab_principal}")
 fi
 
-echo "EXECUTING klist"
-KRB5_TRACE=/dev/stderr klist -A || true
-
 python3 --version
 
 echo "Activating virtualenv"
