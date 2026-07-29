@@ -44,9 +44,9 @@ def _handle_repo_init(msg):
     if tag in kojihelpers.awaiting_repo_init:
         logger.info(f"repo {tag} has started regenerating")
         for deferred in kojihelpers.awaiting_repo_init[tag]:
-            # Enqueue the callbacks onto the reactor so we aren't
-            # blocking handling new messages
-            reactor.callLater(0, fire_task_callback, deferred, tag)
+            # Schedule on the reactor thread without blocking the
+            # fedora-messaging callback thread.
+            reactor.callFromThread(fire_task_callback, deferred, tag)
 
         # Remove it from the awaited list
         del kojihelpers.awaiting_repo_init[tag]
@@ -64,9 +64,9 @@ def _handle_repo_done(msg):
     if tag in kojihelpers.awaited_repos:
         logger.info(f"Repo {tag} has regenerated")
         for deferred in kojihelpers.awaited_repos[tag]:
-            # Enqueue the callbacks onto the reactor so we aren't
-            # blocking handling new messages
-            reactor.callLater(0, fire_task_callback, deferred, tag)
+            # Schedule on the reactor thread without blocking the
+            # fedora-messaging callback thread.
+            reactor.callFromThread(fire_task_callback, deferred, tag)
 
         # Remove it from the awaited list
         del kojihelpers.awaited_repos[tag]
@@ -93,15 +93,15 @@ def _handle_task_state_change(msg):
             logger.info(
                 f"Task {task_id} ({msg.body['info']['request']}) completed successfully"
             )
-            reactor.callLater(
-                0, fire_task_callback, state.active_tasks[task_id], msg.body
+            reactor.callFromThread(
+                fire_task_callback, state.active_tasks[task_id], msg.body
             )
 
         else:
             # It either failed or was canceled. Call the errback
             logger.info(f"Task {task_id} failed.")
-            reactor.callLater(
-                0, fire_task_errback, state.active_tasks[task_id], msg.body
+            reactor.callFromThread(
+                fire_task_errback, state.active_tasks[task_id], msg.body
             )
 
         del state.active_tasks[task_id]
@@ -161,7 +161,7 @@ def _handle_awaited_tag(msg):
 
     try:
         deferred = state.pending_nvr_tags.pop(tag, nvr)
-        reactor.callLater(0, fire_task_callback, deferred, nvr)
+        reactor.callFromThread(fire_task_callback, deferred, nvr)
     except KeyError:
         logger.debug(f"NVR {nvr} not found in tag {tag}, ignoring.")
         raise Drop()
@@ -233,7 +233,7 @@ async def check_tasks():
                 logger.info(
                     f"Task {task} ({taskinfo['request'][0]}) completed successfully"
                 )
-                reactor.callLater(0, fire_task_callback, deferred, taskinfo)
+                reactor.callFromThread(fire_task_callback, deferred, taskinfo)
 
             elif taskinfo["state"] in (
                 koji.TASK_STATES["FREE"],
@@ -247,7 +247,7 @@ async def check_tasks():
             else:
                 # It either failed or was canceled. Call the errback
                 logger.info(f"Task {task} failed.")
-                reactor.callLater(0, fire_task_errback, deferred, taskinfo)
+                reactor.callFromThread(fire_task_errback, deferred, taskinfo)
 
         except Exception:
             # Log any failures so we don't block future checks.
@@ -256,7 +256,7 @@ async def check_tasks():
             # Try to claim the Deferred and cancel it
             deferred = state.active_tasks.pop(task, None)
             if deferred is not None:
-                reactor.callLater(0, deferred.cancel)
+                reactor.callFromThread(deferred.cancel)
 
 
 async def check_tags():
@@ -280,7 +280,7 @@ async def check_tags():
             if nvr in watched_nvrs:
                 try:
                     deferred = state.pending_nvr_tags.pop(tag, nvr)
-                    reactor.callLater(0, fire_task_callback, deferred, nvr)
+                    reactor.callFromThread(fire_task_callback, deferred, nvr)
                 except KeyError:
                     # Already claimed by a message handler
                     # We will just log this and avoid calling the callback again
@@ -356,7 +356,7 @@ def cancel_timed_out_task(failure, task_id):
     # cancel it. Do this asynchronously so we don't block on it. It's
     # technically possible that the cancelation might fail, but there's
     # nothing we can do to recover from that anyway.
-    reactor.callLater(0, _do_cancelation, task_id)
+    reactor.callFromThread(_do_cancelation, task_id)
 
     # Raise a TaskTimeoutError with the task_id
     err = kojihelpers.errors.TaskTimeoutError()
