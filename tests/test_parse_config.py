@@ -42,6 +42,7 @@ from elnbuildsync.config import (
     clear_pause_override,
     ensure_downstream_name,
     get_config_ref,
+    get_distro_packages,
     get_order,
     get_rawhide_tag,
     is_debug,
@@ -1475,3 +1476,68 @@ class TestGetRawhideTag:
             pytest.raises(ConfigError, match="HTTP Error"),
         ):
             await get_tag()
+
+
+# --- get_distro_packages() tests (Content Resolver mocked) ---
+
+
+def _get_distro_packages_impl():
+    """Use unwrapped function for tests that expect ConfigError so retries don't mask errors."""
+    f = get_distro_packages
+    while hasattr(f, "__wrapped__"):
+        f = f.__wrapped__
+    return f
+
+
+class TestGetDistroPackages:
+    """Tests for get_distro_packages() with Content Resolver HTTP call mocked."""
+
+    @pytest.mark.asyncio
+    async def test_returns_packages_from_response(self):
+        mock_response = MagicMock()
+        mock_response.text = "pkg-a\npkg-b\n"
+        mock_response.raise_for_status = MagicMock()
+
+        mock_get = AsyncMock(return_value=mock_response)
+        mock_session = MagicMock()
+        mock_session.get = mock_get
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=False)
+
+        with patch("elnbuildsync.config.Session", return_value=mock_session):
+            packages = await get_distro_packages(
+                distro_url="https://example.test",
+                distro_view=["eln"],
+                which_source=["source"],
+            )
+
+        assert "pkg-a" in packages
+        assert "pkg-b" in packages
+        assert packages["pkg-a"]["view"] == "eln"
+        assert packages["pkg-a"]["source"] == "source"
+        mock_get.assert_called_once()
+        mock_response.raise_for_status.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_raises_on_http_error(self):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock(
+            side_effect=requests.exceptions.HTTPError("404")
+        )
+
+        mock_get = AsyncMock(return_value=mock_response)
+        mock_session = MagicMock()
+        mock_session.get = mock_get
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=False)
+
+        get_packages = _get_distro_packages_impl()
+        with (
+            patch("elnbuildsync.config.Session", return_value=mock_session),
+            pytest.raises(ConfigError, match="HTTP Error"),
+        ):
+            await get_packages(
+                distro_url="https://example.test",
+                distro_view=["eln"],
+                which_source=["source"],
+            )

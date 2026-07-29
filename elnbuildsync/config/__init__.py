@@ -269,11 +269,17 @@ async def update_config():
     except ConfigError as e:
         logger.info(e)
         logger.critical(
-            f"The configuration is invalid, skipping update.  Checking again in {config_timer} seconds."
+            f"The configuration is invalid, skipping update; retaining previous "
+            f"configuration.  Checking again in {config_timer} seconds."
         )
         return
 
 
+@retry_on_exception(
+    wait=wait_exponential(),
+    stop=stop_after_delay(60),
+    reraise=True,
+)
 async def get_distro_packages(
     distro_url,
     distro_view=DEFAULT_DISTRO_VIEWS,
@@ -298,7 +304,12 @@ async def get_distro_packages(
             logger.debug(f"downloading {url}")
 
             with Session() as session:
-                r = await session.get(url, allow_redirects=True)
+                try:
+                    r = await session.get(url, allow_redirects=True)
+                    r.raise_for_status()
+                except requests.exceptions.HTTPError as e:
+                    raise ConfigError(f"HTTP Error downloading {url}") from e
+
                 for line in r.text.splitlines():
                     packages[line] = {
                         "view": view,
