@@ -254,9 +254,14 @@ if [ -n "${_arg_krb5_keytab_principal}" ] && [ -z "${_arg_krb5_keytab_file}" ]; 
 fi
 if [ -n "${_arg_krb5_keytab_file}" ] && [ -z "${KRB5CCNAME:-}" ]; then
   # Avoid a fixed path in world-writable $TMPDIR (symlink / pre-create races).
-  _krb5_ccache_dir="$(mktemp -d "${TMPDIR}/elnbuildsync-krb5-XXXXXX")"
+  _krb5_ccache_dir="$(mktemp -d "${TMPDIR}/elnbuildsync-krb5-XXXXXX")" || true
+  if [ -z "${_krb5_ccache_dir}" ] || [ ! -d "${_krb5_ccache_dir}" ]; then
+    die "Failed to create private Kerberos ccache directory" 1
+  fi
   chmod 700 "${_krb5_ccache_dir}"
   export KRB5CCNAME="FILE:${_krb5_ccache_dir}/tgt"
+  # Remove the private ccache directory (and TGT file) on shutdown.
+  trap 'rm -rf -- "${_krb5_ccache_dir}"' EXIT
 fi
 
 STATIC_ARGS=(--static-config-file /etc/elnbuildsync/static-config/elnbuildsync.yaml)
