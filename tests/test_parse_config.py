@@ -1414,6 +1414,9 @@ class TestGetRawhideTag:
             tag = await get_rawhide_tag()
         assert tag == "f41"
         mock_get.assert_called_once()
+        assert (
+            mock_get.await_args.kwargs.get("timeout") == config_mod.config_fetch_timeout
+        )
         mock_response.raise_for_status.assert_called_once()
 
     @pytest.mark.asyncio
@@ -1481,6 +1484,23 @@ class TestGetRawhideTag:
         ):
             await get_tag()
 
+    @pytest.mark.asyncio
+    async def test_raises_on_request_exception(self):
+        mock_get = AsyncMock(
+            side_effect=requests.exceptions.ConnectionError("connection reset")
+        )
+        mock_session = MagicMock()
+        mock_session.get = mock_get
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=False)
+
+        get_tag = _get_rawhide_tag_impl()
+        with (
+            patch("elnbuildsync.config.Session", return_value=mock_session),
+            pytest.raises(ConfigError, match="HTTP Error"),
+        ):
+            await get_tag()
+
 
 # --- get_distro_packages() tests (Content Resolver mocked) ---
 
@@ -1520,6 +1540,9 @@ class TestGetDistroPackages:
         assert packages["pkg-a"]["view"] == "eln"
         assert packages["pkg-a"]["source"] == "source"
         mock_get.assert_called_once()
+        assert (
+            mock_get.await_args.kwargs.get("timeout") == config_mod.config_fetch_timeout
+        )
         mock_response.raise_for_status.assert_called_once()
 
     @pytest.mark.asyncio
@@ -1530,6 +1553,25 @@ class TestGetDistroPackages:
         )
 
         mock_get = AsyncMock(return_value=mock_response)
+        mock_session = MagicMock()
+        mock_session.get = mock_get
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=False)
+
+        get_packages = _get_distro_packages_impl()
+        with (
+            patch("elnbuildsync.config.Session", return_value=mock_session),
+            pytest.raises(ConfigError, match="HTTP Error"),
+        ):
+            await get_packages(
+                distro_url="https://example.test",
+                distro_view=["eln"],
+                which_source=["source"],
+            )
+
+    @pytest.mark.asyncio
+    async def test_raises_on_request_exception(self):
+        mock_get = AsyncMock(side_effect=requests.exceptions.Timeout("timed out"))
         mock_session = MagicMock()
         mock_session.get = mock_get
         mock_session.__enter__ = MagicMock(return_value=mock_session)

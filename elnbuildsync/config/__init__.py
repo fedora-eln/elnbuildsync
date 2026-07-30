@@ -48,6 +48,10 @@ task_check_timer = 5 * 60  # 5 minutes
 tag_check_timer = 5 * 60  # 5 minutes
 task_timeout = 24 * 60 * 60  # 24 hours
 tag_timeout = 1 * 60 * 60  # 1 hour
+# Per-request HTTP timeout for Content Resolver / Bodhi config fetches.
+# Kept below the tenacity stop_after_delay(60) budget so hung sockets
+# cannot stall retries for the full window.
+config_fetch_timeout = 15
 message_batch_timer = 60  # 1 minute
 koji_batch = 500
 configuration = None
@@ -305,9 +309,13 @@ async def get_distro_packages(
 
             with Session() as session:
                 try:
-                    r = await session.get(url, allow_redirects=True)
+                    r = await session.get(
+                        url,
+                        allow_redirects=True,
+                        timeout=config_fetch_timeout,
+                    )
                     r.raise_for_status()
-                except requests.exceptions.HTTPError as e:
+                except requests.exceptions.RequestException as e:
                     raise ConfigError(f"HTTP Error downloading {url}") from e
 
                 for line in r.text.splitlines():
@@ -340,14 +348,18 @@ async def get_rawhide_tag():
     url = "https://bodhi.fedoraproject.org/releases?state=pending"
     with Session() as session:
         try:
-            r = await session.get(url, allow_redirects=True)
+            r = await session.get(
+                url,
+                allow_redirects=True,
+                timeout=config_fetch_timeout,
+            )
             r.raise_for_status()
             releases = json.loads(r.text)
             logger.debug(releases)
         except json.decoder.JSONDecodeError as e:
             raise ConfigError("Could not parse JSON from Bodhi releases") from e
 
-        except requests.exceptions.HTTPError as e:
+        except requests.exceptions.RequestException as e:
             raise ConfigError("HTTP Error") from e
 
     # Get the stable tag corresponding to the rawhide branch
