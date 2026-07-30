@@ -23,7 +23,7 @@ import threading
 import koji
 from fedora_messaging.exceptions import Drop, Nack
 from twisted.internet import reactor
-from twisted.internet.defer import AlreadyCalledError, Deferred
+from twisted.internet.defer import AlreadyCalledError, CancelledError, Deferred
 from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 from twisted.internet.threads import blockingCallFromThread
 
@@ -368,16 +368,15 @@ def register_nvr_tag(
 
 
 def cancel_timed_out_task(failure, task_id):
-    # Reraise the original exception, catching TimeoutError if it happened
+    # Reraise the original exception, catching timeout/cancel so we can
+    # still request Koji cancellation below. Unrelated failures propagate.
     try:
         failure.raiseException()
-    except DeferredTimeoutError:
+    except (DeferredTimeoutError, CancelledError):
         pass
 
-    # If we got a timeout, the Koji task is still running, so we will need to
-    # cancel it. Do this asynchronously so we don't block on it. It's
-    # technically possible that the cancelation might fail, but there's
-    # nothing we can do to recover from that anyway.
+    # If we got a timeout (or a manual cancel), the Koji task may still be
+    # running, so cancel it asynchronously. Cancellation is best-effort.
     reactor.callFromThread(_do_cancelation, task_id)
 
     # Remove the Deferred from the active tasks dictionary
