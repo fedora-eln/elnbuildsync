@@ -59,7 +59,6 @@ config_ref = None
 distrogitsync = None
 dry_run = False
 do_untagging = False
-retry = 3
 scmurl = None
 main = None
 control = None
@@ -163,19 +162,6 @@ def is_debug():
     sqlalchemy logger.
     """
     return loglevel() <= logging.DEBUG
-
-
-def retries(val=None):
-    """Gets or, optionally, sets the number of retries for various
-    operational failures.  Typically used for handling dist-git requests.
-
-    :param val: The number of retries to attept, optional
-    :returns: The current value of retries
-    """
-    global retry
-    if val is not None:
-        retry = val
-    return retry
 
 
 def split_scmurl(url):

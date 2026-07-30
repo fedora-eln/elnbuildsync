@@ -53,7 +53,6 @@ from elnbuildsync.config import (
     load_static_config,
     loglevel,
     pause_processing,
-    retries,
     skip_tag,
     split_module,
     split_scmurl,
@@ -1054,18 +1053,6 @@ class TestIsDebug:
             assert is_debug() is False
         finally:
             config_mod.logger.setLevel(original)
-
-
-class TestRetries:
-    def test_get_and_set(self, monkeypatch):
-        original = config_mod.retry
-        try:
-            monkeypatch.setattr(config_mod, "retry", 5)
-            assert retries() == 5
-            retries(3)
-            assert retries() == 3
-        finally:
-            config_mod.retry = original
 
 
 class TestGetConfigRef:
