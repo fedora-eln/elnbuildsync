@@ -18,6 +18,7 @@
 
 
 import logging
+import threading
 
 import koji
 from fedora_messaging.exceptions import Drop, Nack
@@ -35,6 +36,22 @@ from .state import ELNBuildSyncState as state
 logger = logging.getLogger(__name__)
 
 task_check_processor = None
+
+# Serializes ownership transitions of state.active_tasks across the
+# fedora-messaging callback thread, reactor polling, and timeout errbacks.
+_active_tasks_lock = threading.Lock()
+
+
+def _claim_active_task(task_id):
+    """Atomically remove and return the Deferred for ``task_id``, or None."""
+    with _active_tasks_lock:
+        return state.active_tasks.pop(task_id, None)
+
+
+def _reinsert_active_task(task_id, deferred):
+    """Put a previously claimed Deferred back into ``active_tasks``."""
+    with _active_tasks_lock:
+        state.active_tasks[task_id] = deferred
 
 
 def _handle_repo_init(msg):
@@ -81,36 +98,34 @@ def _handle_task_state_change(msg):
     """Handle buildsys.task.state.change messages for tasks we are tracking."""
     task_id = msg.body["id"]
 
-    if task_id in state.active_tasks:
-        if msg.body["new"] in ("FREE", "OPEN", "ASSIGNED"):
+    if msg.body["new"] in ("FREE", "OPEN", "ASSIGNED"):
+        with _active_tasks_lock:
+            tracked = task_id in state.active_tasks
+        if tracked:
             logger.debug(
                 f"Task {task_id} ({msg.body['info']['request']}) is {msg.body['new']}"
             )
             raise Drop()
+        logger.debug(f"Unknown task_id {task_id}. Ignoring.")
+        raise Drop()
 
-        elif msg.body["new"] == "CLOSED":
-            # Successful build
-            logger.info(
-                f"Task {task_id} ({msg.body['info']['request']}) completed successfully"
-            )
-            reactor.callFromThread(
-                fire_task_callback, state.active_tasks[task_id], msg.body
-            )
-
-        else:
-            # It either failed or was canceled. Call the errback
-            logger.info(f"Task {task_id} failed.")
-            reactor.callFromThread(
-                fire_task_errback, state.active_tasks[task_id], msg.body
-            )
-
-        del state.active_tasks[task_id]
-        return
-
-    else:
+    # Claim ownership before dispatching so polling/timeout cannot also fire.
+    deferred = _claim_active_task(task_id)
+    if deferred is None:
         # Ignore messages from unrelated builds
         logger.debug(f"Unknown task_id {task_id}. Ignoring.")
         raise Drop()
+
+    if msg.body["new"] == "CLOSED":
+        # Successful build
+        logger.info(
+            f"Task {task_id} ({msg.body['info']['request']}) completed successfully"
+        )
+        reactor.callFromThread(fire_task_callback, deferred, msg.body)
+    else:
+        # It either failed or was canceled. Call the errback
+        logger.info(f"Task {task_id} failed.")
+        reactor.callFromThread(fire_task_errback, deferred, msg.body)
 
 
 def _handle_tag(msg):
@@ -208,9 +223,11 @@ def message_handler(msg):
 async def check_tasks():
     # Snapshot task IDs before awaiting to avoid issues with dict changing
     # during iteration. Don't store Deferred references across await points.
-    watched_tasks = list(state.active_tasks.keys())
+    with _active_tasks_lock:
+        watched_tasks = list(state.active_tasks.keys())
 
     for task in watched_tasks:
+        deferred = None
         try:
             taskinfo = await call_koji("getTaskInfo", task, request=True)
 
@@ -223,7 +240,7 @@ async def check_tasks():
 
             # Atomically pop the task and claim ownership of the Deferred.
             # If a message handler already claimed it during the await, skip.
-            deferred = state.active_tasks.pop(task, None)
+            deferred = _claim_active_task(task)
             if deferred is None:
                 # Already handled by a message handler
                 continue
@@ -241,7 +258,7 @@ async def check_tasks():
                 koji.TASK_STATES["ASSIGNED"],
             ):
                 # Still processing; put it back and continue
-                state.active_tasks[task] = deferred
+                _reinsert_active_task(task, deferred)
                 continue
 
             else:
@@ -253,8 +270,10 @@ async def check_tasks():
             # Log any failures so we don't block future checks.
             logger.exception(f"Unexpected failure in task {task}")
 
-            # Try to claim the Deferred and cancel it
-            deferred = state.active_tasks.pop(task, None)
+            # Cancel the Deferred we already claimed, or claim it now if the
+            # failure happened before ownership was taken.
+            if deferred is None:
+                deferred = _claim_active_task(task)
             if deferred is not None:
                 reactor.callFromThread(deferred.cancel)
 
@@ -309,14 +328,17 @@ def fire_task_errback(deferred, data):
 
 def register_task_id(task_id, timeout=config.task_timeout):
     logger.debug(f"Registering task {task_id}")
-    if task_id in state.active_tasks:
-        raise ValueError("Cannot register the same task ID twice")
+    with _active_tasks_lock:
+        if task_id in state.active_tasks:
+            raise ValueError("Cannot register the same task ID twice")
 
-    state.active_tasks[task_id] = Deferred()
-    state.active_tasks[task_id].addTimeout(timeout, reactor)
-    state.active_tasks[task_id].addErrback(cancel_timed_out_task, task_id)
+        deferred = Deferred()
+        state.active_tasks[task_id] = deferred
 
-    return state.active_tasks[task_id]
+    deferred.addTimeout(timeout, reactor)
+    deferred.addErrback(cancel_timed_out_task, task_id)
+
+    return deferred
 
 
 def register_nvr_tag(
@@ -359,7 +381,7 @@ def cancel_timed_out_task(failure, task_id):
     reactor.callFromThread(_do_cancelation, task_id)
 
     # Remove the Deferred from the active tasks dictionary
-    state.active_tasks.pop(task_id, None)
+    _claim_active_task(task_id)
 
     # Raise a TaskTimeoutError with the task_id
     err = kojihelpers.errors.TaskTimeoutError()
