@@ -64,9 +64,15 @@ async def periodic_cleanup():
             logger.info(f"\t{nvr}")
 
         if config.do_untagging:
-            await kojihelpers.tags.untag_builds(
-                config.main["koji"]["stable_tag"], nvrs_to_untag
-            )
+            try:
+                await kojihelpers.tags.untag_builds(
+                    config.main["koji"]["stable_tag"], nvrs_to_untag
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to untag builds from %s; continuing with rebuilds",
+                    config.main["koji"]["stable_tag"],
+                )
         else:
             logger.info("Untagging is disabled, skipping untagging.")
 
