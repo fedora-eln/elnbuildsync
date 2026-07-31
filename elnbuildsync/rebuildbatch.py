@@ -17,6 +17,8 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
+from __future__ import annotations
+
 import logging
 import os
 from collections import defaultdict
@@ -26,7 +28,6 @@ from urllib.parse import urlparse
 
 from bodhi.client.bindings import BodhiClient, BodhiClientException
 from tenacity import retry, stop_after_delay, wait_exponential
-from twisted.internet.defer import TimeoutError as DeferredTimeoutError
 from twisted.internet.threads import deferToThread
 
 from . import config, kojihelpers
@@ -91,8 +92,8 @@ class RebuildBatch:
         return self
 
     async def _create_and_populate_side_tag(
-        self, build_ids: list[int], promote_builds: bool = False
-    ) -> tuple[str, list[str]]:
+        self, build_ids: list[int | str], promote_builds: bool = False
+    ) -> tuple[kojihelpers.tags.SideTag, list[int | str]]:
         """
         Creates a side-tag for this batch. If promote_builds is True, the builds
         will be promoted before tagging. This will return the NVRs that were
@@ -100,13 +101,13 @@ class RebuildBatch:
         builds were not able to be promoted (e.g. if another draft build was
         already promoted with the same NVR).
 
-        :param build_ids: The list of build_ids to tag into the side-tag.
-        :type build_ids: list[int]
+        :param build_ids: Build IDs or NVR strings to tag into the side-tag.
+        :type build_ids: list[int | str]
         :param promote_builds: Whether to promote draft builds before tagging.
 
-        :return: The side-tag name and the refs that were tagged (promoted NVRs
+        :return: The SideTag object and the refs that were tagged (promoted NVRs
             when promote_builds is True, otherwise the input build_ids/NVRs).
-        :rtype: tuple[str, list[str]]
+        :rtype: tuple[kojihelpers.tags.SideTag, list[int | str]]
         """
 
         if promote_builds:
@@ -120,11 +121,11 @@ class RebuildBatch:
 
         while True:
             try:
-                side_tag = await kojihelpers.tags.prepare_side_tag(
+                side_tag = await kojihelpers.tags.SideTag.create(
                     self._side_tag_base,
                     build_nvrs,
                 )
-            except DeferredTimeoutError:
+            except kojihelpers.tags.SideTagTimeoutError:
                 # Keep retrying to create a side-tag.
                 # Any other exception will be propagated up the stack.
                 logger.warning(
@@ -246,8 +247,8 @@ class RebuildBatch:
         # Remove the side-tag where we performed the rebuilds.
         # The update tag will be automatically removed when the Bodhi update
         # makes it to stable.
-        logger.info(f"Removing side-tag {self.side_tag}")
-        await kojihelpers.tags.remove_side_tag(self.side_tag)
+        logger.info(f"Removing side-tag {self.side_tag.name}")
+        await self.side_tag.remove()
 
     async def _create_and_submit_bodhi_updates(
         self, build_nvrs: list[str]
@@ -282,11 +283,11 @@ class RebuildBatch:
                 )
                 return
 
-            logger.info(f"Submitting Bodhi update for {update_tag}")
+            logger.info(f"Submitting Bodhi update for {update_tag.name}")
             try:
                 await deferToThread(self._submit_bodhi_update, update_tag)
             except Exception:
-                logger.exception(f"Failed to submit Bodhi update for {update_tag}")
+                logger.exception(f"Failed to submit Bodhi update for {update_tag.name}")
                 raise
             logger.debug(f"Submitted Bodhi update for {batch_nvrs}")
             promoted_nvrs.extend(batch_promoted_nvrs)
@@ -304,7 +305,7 @@ class RebuildBatch:
         stop=stop_after_delay(900),
         reraise=True,
     )
-    def _submit_bodhi_update(self, update_tag: str) -> None:
+    def _submit_bodhi_update(self, update_tag: kojihelpers.tags.SideTag) -> None:
         try:
             # Submitting a Bodhi update is infrequent-enough that it doesn't
             # really make sense to try to cache the connection. Just
@@ -328,10 +329,10 @@ class RebuildBatch:
             # Rawhide updates.
             bodhi.save(
                 type="unspecified",
-                from_tag=update_tag,
+                from_tag=update_tag.name,
                 notes="Automatic update for ELN rebuild batch",
             )
-            logger.info(f"Submitted Bodhi update for {update_tag}")
+            logger.info(f"Submitted Bodhi update for {update_tag.name}")
         except BodhiClientException as e:
             logger.error(f"Failed to submit Bodhi update: {e}")
             raise
