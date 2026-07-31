@@ -151,6 +151,37 @@ async def cancel_task(task_id):
         logger.exception("Could not cancel task %s. Ignoring.", task_id)
 
 
+async def cancel_tasks(task_ids: list[int]) -> dict[int, dict]:
+    """
+    Cancel multiple tasks.
+
+    :param task_ids: List of task IDs to cancel
+    :returns: A dictionary mapping task_id -> result dict
+    """
+    logger.debug(f"Canceling {len(task_ids)} tasks")
+    results: dict[int, dict] = {}
+    try:
+        results = await call_koji(_cancel_multiple_tasks_thread, task_ids, recurse=True)
+    except Exception:
+        # Cancellation is best-effort
+        logger.exception("Could not cancel tasks %s. Ignoring.", task_ids)
+
+    return results
+
+
+def _cancel_multiple_tasks_thread(bsys, task_ids, **kwargs):
+    task_vcalls = {}
+    with bsys.multicall(batch=config.koji_batch) as mc:
+        for task_id in task_ids:
+            task_vcalls[task_id] = mc.cancelTask(task_id, **kwargs)
+
+    results = {}
+    for task_id, vcall in task_vcalls.items():
+        results[task_id] = vcall.result
+
+    return results
+
+
 async def promote_builds(draft_build_ids):
     promoted_nvrs = await call_koji(_promote_builds_thread, draft_build_ids)
     return promoted_nvrs
