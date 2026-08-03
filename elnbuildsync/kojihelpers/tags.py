@@ -237,7 +237,9 @@ async def wait_for_nvrs_in_tag(tag, nvrs):
 
     :params str tag: The tag name to wait for
     :params list nvrs: The list of nvrs to wait for
-    :return list: A list of results
+    :return list: A list of (success, value) results. On failure, ``value`` is
+        the underlying exception (e.g. DeferredTimeoutError), not a Twisted
+        Failure, so callers can isinstance-check timeout errors.
     """
     # Imported lazily to avoid a circular import with listener/batching.
     from .. import listener
@@ -250,7 +252,16 @@ async def wait_for_nvrs_in_tag(tag, nvrs):
         deferreds.append(deferred)
 
     result = await DeferredList(deferreds, consumeErrors=True)
-    return result
+    # DeferredList(consumeErrors=True) wraps failures as Failure objects.
+    # Unwrap to the underlying exception so timeout handling can match
+    # DeferredTimeoutError directly.
+    unwrapped = []
+    for success, value in result:
+        if success:
+            unwrapped.append((True, value))
+        else:
+            unwrapped.append((False, value.value if hasattr(value, "value") else value))
+    return unwrapped
 
 
 async def get_nvrs_from_tag(tag):
