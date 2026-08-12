@@ -20,11 +20,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime
+from sqlalchemy import JSON, DateTime, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.pool import NullPool
 
+from . import config
 from .decorators import as_deferred
 
 async_session: async_sessionmaker[AsyncSession]
@@ -90,6 +92,70 @@ class DBBuildTrigger(Base):
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
+
+
+class DBFailedBuilds(Base):
+    __tablename__ = "failed_builds"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utc_now, index=True
+    )
+
+    url: Mapped[str] = mapped_column(nullable=False, unique=True, index=True)
+
+
+@as_deferred
+async def find_failed_build_urls(urls: list[str]) -> set[str]:
+    """
+    Return SCM URLs from ``urls`` that exist in the failed_builds denylist.
+
+    Queries are batched by ``config.main["db"]["page_size"]`` within a single
+    session so the full denylist table is never loaded into memory.
+    """
+    if not urls:
+        return set()
+
+    page_size = config.main["db"]["page_size"]
+    failed_urls: set[str] = set()
+
+    async with async_session() as session:
+        for offset in range(0, len(urls), page_size):
+            batch = urls[offset : offset + page_size]
+            result = await session.execute(
+                select(DBFailedBuilds.url).where(DBFailedBuilds.url.in_(batch))
+            )
+            failed_urls.update(result.scalars().all())
+
+    return failed_urls
+
+
+@as_deferred
+async def record_failed_build_urls(urls: list[str], created_at: datetime) -> None:
+    """
+    Record SCM URLs in the failed_builds denylist.
+
+    Existing URLs are left unchanged (ON CONFLICT DO NOTHING on ``url``).
+    """
+    if not urls:
+        return
+
+    # Preserve order while dropping duplicates and null entries.
+    unique_urls = list(dict.fromkeys(url for url in urls if url is not None))
+    if not unique_urls:
+        return
+
+    values = [{"url": url, "created_at": created_at} for url in unique_urls]
+
+    async with async_session() as session:
+        stmt = (
+            insert(DBFailedBuilds)
+            .values(values)
+            .on_conflict_do_nothing(index_elements=["url"])
+        )
+        await session.execute(stmt)
+        await session.commit()
 
 
 @as_deferred
