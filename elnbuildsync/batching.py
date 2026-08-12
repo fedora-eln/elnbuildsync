@@ -25,7 +25,7 @@ import rpm
 from . import config, kojihelpers
 from .buildtrigger import BuildTrigger
 from .kojihelpers.connection import call_koji
-from .rebuildbatch import RebuildBatch
+from .rebuildbatch import RebuildBatch, RebuildBatchEmptyError
 
 message_batch_processor = None
 
@@ -53,24 +53,27 @@ async def process_message_batch():
 
         # Create Batch object
         running = True
-        batch = await RebuildBatch(
-            target=config.main["koji"]["build_target"],
-            build_triggers=build_triggers,
-            scratch=config.main["koji"]["scratch_build"],
-            fail_fast=config.main["koji"]["fail_fast"],
-        ).async_init()
-
-        # Run the batch.
-        # IMPORTANT: this must complete before other batches are started. A large
-        # number of packages may queue up in this time, but they will be processed
-        # as a single batch.
         try:
-            await batch.run()
-        except Exception:
-            # If something goes unrecoverably wrong here, always log it and skip
-            # to the next batch.
-            # INTENTIONAL: Fall through to marking build triggers as completed.
-            logger.exception("Unexpected error while processing batch")
+            batch = await RebuildBatch(
+                target=config.main["koji"]["build_target"],
+                build_triggers=build_triggers,
+                scratch=config.main["koji"]["scratch_build"],
+                fail_fast=config.main["koji"]["fail_fast"],
+            ).async_init()
+        except RebuildBatchEmptyError:
+            logger.info("No builds remain in batch after filtering; skipping.")
+        else:
+            # Run the batch.
+            # IMPORTANT: this must complete before other batches are started. A large
+            # number of packages may queue up in this time, but they will be processed
+            # as a single batch.
+            try:
+                await batch.run()
+            except Exception:
+                # If something goes unrecoverably wrong here, always log it and skip
+                # to the next batch.
+                # INTENTIONAL: Fall through to marking build triggers as completed.
+                logger.exception("Unexpected error while processing batch")
 
         # Mark all the build triggers as completed
         # INTENTIONAL: If the batch failed badly enough that the exception
@@ -82,7 +85,9 @@ async def process_message_batch():
                 await build_trigger.mark_completed()
             except Exception:
                 logger.exception(
-                    f"Could not mark build trigger {build_trigger.id} as completed"
+                    "Could not mark build trigger %s (build_id=%s) as completed",
+                    build_trigger.component,
+                    build_trigger.build_id,
                 )
     except Exception:
         # We need to catch all exceptions here. If we allow them to bubble up,

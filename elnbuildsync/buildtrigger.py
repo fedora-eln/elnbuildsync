@@ -21,6 +21,7 @@ import logging
 from datetime import datetime, timezone
 
 import koji
+from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.sql.expression import select
 
 from elnbuildsync.kojihelpers.connection import call_koji
@@ -53,6 +54,8 @@ class BuildTrigger:
 
     @property
     def id(self):
+        if self._db_obj is None:
+            return None
         return self._db_obj.id
 
     @as_deferred
@@ -69,11 +72,41 @@ class BuildTrigger:
 
         return self
 
+    async def _mark_completed_impl(self) -> None:
+        if self._db_obj is None:
+            return
+        try:
+            async with db_models.async_session() as session:
+                db_obj = await session.merge(self._db_obj)
+                if db_obj.completed_at is not None:
+                    return
+                db_obj.completed_at = datetime.now(timezone.utc)
+                await session.commit()
+        except StaleDataError:
+            self._db_obj = None
+
+    async def _complete_and_log_impl(
+        self, reason: str, *, level: int = logging.INFO
+    ) -> None:
+        """Log why a trigger is being skipped, then mark it completed."""
+        logger.log(
+            level,
+            "Skipping build trigger for %s (build_id=%s): %s",
+            self.component,
+            self.build_id,
+            reason,
+        )
+        await self._mark_completed_impl()
+
     @as_deferred
-    async def drop(self):
-        async with db_models.async_session() as session:
-            await session.delete(self._db_obj)
-            await session.commit()
+    async def complete_and_log(self, reason: str, *, level: int = logging.INFO) -> None:
+        """
+        Log and mark a trigger completed from a plain asyncio context.
+
+        When already inside an @as_deferred coroutine, call
+        ``_complete_and_log_impl`` instead to avoid nested Deferred bridges.
+        """
+        await self._complete_and_log_impl(reason, level=level)
 
     async def get_scmurl(self):
         """Get the SCMURL that the build was created from
@@ -115,7 +148,6 @@ class BuildTrigger:
             async for db_build_trigger in result.scalars():
                 # If this component already has a build trigger, drop the older one.
                 # We only want to rebuild the most recent build for each component.
-                # (OR do we want to build both, but in different slices?)
                 if db_build_trigger.component in build_triggers:
                     # Save the build trigger to drop later, so we aren't
                     # modifying the dictionary while iterating over it.
@@ -129,15 +161,17 @@ class BuildTrigger:
                 build_trigger._db_obj = db_build_trigger
                 build_triggers[db_build_trigger.component] = build_trigger
 
-        # If we have any expired build triggers to drop, do so now.
+        # Mark superseded triggers completed so they are not retried. Completion
+        # does not imply the build succeeded—only that EBS will not process this
+        # trigger again.
         for build_trigger in to_drop:
-            await build_trigger.drop()
+            await build_trigger._complete_and_log_impl(
+                f"Superseded by newer unprocessed trigger for component "
+                f"{build_trigger.component}"
+            )
 
         return list(build_triggers.values())
 
     @as_deferred
     async def mark_completed(self):
-        async with db_models.async_session() as session:
-            self._db_obj.completed_at = datetime.now(timezone.utc)
-            session.add(self._db_obj)
-            await session.commit()
+        await self._mark_completed_impl()

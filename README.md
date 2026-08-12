@@ -36,10 +36,12 @@ lives primarily in `elnbuildsync/batching.py`,
 | Queue | Eligible messages go into an in-memory `message_queue`. |
 | Lull | `batching.process_message_batch` drains the queue after lull. |
 | Serialize | If `batching.running`, new triggers are `Nack`'d until done. |
+| Denylist | Before a batch runs, each trigger's SCM URL is checked against the `failed_builds` table (batched queries; the full table is never loaded into memory).<br>Triggers on the denylist or without a retrievable SCM URL are marked completed and skipped.<br>If no builds remain, the batch is skipped (`RebuildBatchEmptyError`). |
 
 ### 2. Build side-tag preparation
 
-`RebuildBatch` creates a **build side-tag** derived from the ELN buildroot:
+`RebuildBatch.async_init()` admits triggers (see denylist step above), then
+creates a **build side-tag** derived from the ELN buildroot:
 
 1. Resolve the ELN target's parent and destination tags via Koji
    (`kojihelpers.tags`).
@@ -71,7 +73,24 @@ For each slice, `RebuildBatchSlice`:
    stops decreasing (the same set of failures twice in a row is treated as
    legitimate build breakage).
 
-### 4. Errata creation (Bodhi)
+Persistent failure SCM URLs are collected in `RebuildBatch.run()` and
+recorded in the denylist after all slices finish (see **Failed-build
+denylist** below).
+
+### 4. Failed-build denylist
+
+Each batch retries failures at least once, so builds that still fail are
+treated as real breakage rather than transient flakes. EBS persists their
+SCM URLs in PostgreSQL (`failed_builds`, model `DBFailedBuilds`) so they
+are not submitted again on future batches.
+
+| When | What happens |
+|------|--------------|
+| Batch init | Batched `SELECT` checks each trigger's SCM URL against `failed_builds` (`db_models.find_failed_build_urls`).<br>Matches are marked completed via `BuildTrigger.complete_and_log()`. |
+| After slices | In `RebuildBatch.run()`, filtered SCM URLs from persistent failures are inserted (before failure email) with a shared `created_at` (`db_models.record_failed_build_urls`).<br>Duplicates use `ON CONFLICT DO NOTHING` so the original `created_at` is preserved. |
+| Empty batch | If every trigger is filtered out, `RebuildBatchEmptyError` is raised.<br>`batching.process_message_batch` logs and skips the batch. |
+
+### 5. Errata creation (Bodhi)
 
 After all slices succeed or exhaust retries:
 
@@ -86,7 +105,7 @@ After all slices succeed or exhaust retries:
 
 Scratch builds (used in local testing) skip Bodhi submission and tagging.
 
-### 5. Completion
+### 6. Completion
 
 When `RebuildBatch.run()` finishes, `batching.running` is cleared and
 queued Fedora Messages can be processed again.
@@ -113,7 +132,7 @@ work (Koji calls, Bodhi submission, Git operations) is delegated via
 │       │                                                      ▼          │
 │  HTTP :8080 ◄── web.py (status, trigger, OIDC)    RebuildBatchSlice     │
 │                                                      RebuildAttempt     │
-│  PostgreSQL ◄── db_models.py (build triggers, sessions)                  │
+│  PostgreSQL ◄── db_models.py (build triggers, failed_builds, sessions)   │
 │  Koji / Bodhi ◄── kojihelpers/ + bodhi-client                           │
 │  Config YAML ◄── config.py (file, URL, or git checkout)                 │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -129,10 +148,10 @@ work (Koji calls, Bodhi submission, Git operations) is delegated via
 | `rebuildbatch.py` | Side-tag lifecycle, slices, Bodhi updates. |
 | `rebuildbatchslice.py` | Per-ordering slice execution and retries. |
 | `rebuildattempt.py` | Koji build submission and in-memory task tracking. |
-| `buildtrigger.py` | Build triggers; SCM URLs and DB records. |
+| `buildtrigger.py` | Build triggers; SCM URLs, DB records, `complete_and_log`. |
 | `kojihelpers/` | Koji connection pooling, tags, builds, errors. |
 | `config.py` | YAML load/refresh; eligibility and ordering. |
-| `db_models.py` | SQLAlchemy models for build triggers and sessions. |
+| `db_models.py` | SQLAlchemy models (`build_trigger`, `failed_builds`, sessions). |
 | `web.py` | Health, status, `/trigger`, OIDC login/logout. |
 | `status.py` | Periodic status page generation. |
 | `cleanup.py` | Periodic cleanup of stale state. |
@@ -170,7 +189,8 @@ Important sections:
   pause flag, status interval (dynamic).
 - **`configuration.bodhi`**: Maximum builds per Bodhi update (`batch_size`;
   `0` means no splitting).
-- **`configuration.db`**: PostgreSQL connection settings.
+- **`configuration.db`**: PostgreSQL connection settings (`page_size` also
+  bounds batched denylist queries).
 - **`configuration.open_id_connect`**: OIDC settings for `/trigger`
   (client secret via `--openid-client-secret-file`, not in YAML; use
   `--openid-ca-file` when the OIDC provider uses a non-public CA)

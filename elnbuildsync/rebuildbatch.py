@@ -23,6 +23,7 @@ import logging
 import os
 from collections import defaultdict
 from collections.abc import Generator
+from datetime import datetime, timezone
 from urllib.error import URLError
 from urllib.parse import urlparse
 
@@ -30,7 +31,7 @@ from bodhi.client.bindings import BodhiClient, BodhiClientException
 from tenacity import retry, stop_after_delay, wait_exponential
 from twisted.internet.threads import deferToThread
 
-from . import config, kojihelpers
+from . import config, db_models, kojihelpers
 from .buildtrigger import BuildTrigger
 from .rebuildbatchslice import RebuildBatchSlice
 
@@ -41,6 +42,10 @@ class EmptyPromotionError(Exception):
     """
     Raised when no builds were promoted from draft status for a batch.
     """
+
+
+class RebuildBatchEmptyError(Exception):
+    """Raised when no builds remain in a batch after trigger filtering."""
 
 
 class RebuildBatch:
@@ -70,8 +75,45 @@ class RebuildBatch:
         )
 
     async def async_init(self):
+        triggers_with_scmurl: list[tuple[BuildTrigger, str]] = []
+
         for build_trigger in self._unprocessed_build_triggers:
-            await self.add_build_trigger(build_trigger)
+            try:
+                scmurl = await build_trigger.get_scmurl()
+            except kojihelpers.errors.InfoUnavailableError as e:
+                await build_trigger.complete_and_log(
+                    f"SCM URL not available: {e}",
+                    level=logging.WARNING,
+                )
+            except Exception:
+                logger.exception(
+                    "Could not retrieve SCM URL for %s (build_id=%s)",
+                    build_trigger.component,
+                    build_trigger.build_id,
+                )
+                await build_trigger.complete_and_log(
+                    "SCM URL not available",
+                    level=logging.WARNING,
+                )
+            else:
+                triggers_with_scmurl.append((build_trigger, scmurl))
+
+        if triggers_with_scmurl:
+            scm_urls = [scmurl for _, scmurl in triggers_with_scmurl]
+            failed_urls = await db_models.find_failed_build_urls(scm_urls)
+
+            for build_trigger, scmurl in triggers_with_scmurl:
+                if scmurl in failed_urls:
+                    await build_trigger.complete_and_log(
+                        f"SCM URL on failed-build denylist: {scmurl}"
+                    )
+                else:
+                    await self.add_build_trigger(build_trigger)
+
+        if not self.build_triggers:
+            raise RebuildBatchEmptyError(
+                "No builds remain in batch after trigger filtering"
+            )
 
         # Get the list of build_ids from self.build_triggers, since it will
         # have deduplicated the set of components in self.add_build_trigger().
@@ -145,9 +187,11 @@ class RebuildBatch:
             # There's an earlier build already queued.
             drop_message = self.build_triggers[message.component]
 
-            # Remove this entry from the database so it doesn't get
-            # re-loaded in the future
-            await drop_message.drop()
+            # Mark superseded so it is not retried. Completion does not imply
+            # the build succeeded—only that EBS will not process this trigger again.
+            await drop_message.complete_and_log(
+                f"Superseded by newer build for component {message.component}"
+            )
 
         self.build_triggers[message.component] = message
 
@@ -183,6 +227,11 @@ class RebuildBatch:
             successes, failed_requests = await slice.run()
             all_successes.update(successes)
             all_failures.extend(failed_requests)
+
+        if all_failures:
+            await db_models.record_failed_build_urls(
+                all_failures, datetime.now(timezone.utc)
+            )
 
         # Email notification of failures
         if all_failures and config.emailer is not None:
