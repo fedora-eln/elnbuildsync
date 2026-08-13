@@ -223,14 +223,6 @@ def _get_tags_for_target_thread(bsys, target):
     return targetinfo["build_tag_name"], targetinfo["dest_tag_name"]
 
 
-async def remove_side_tag(side_tag):
-    await call_koji(_remove_side_tag_thread, side_tag)
-
-
-def _remove_side_tag_thread(bsys, side_tag):
-    bsys.removeSideTag(side_tag)
-
-
 async def wait_for_nvrs_in_tag(tag, nvrs):
     """
     Wait for a list of nvrs to appear in a tag.
