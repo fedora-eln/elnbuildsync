@@ -271,7 +271,7 @@ async def _main(
         logger.info("Database Initialized")
 
         # Schedule configuration updates
-        updater = task.LoopingCall(config.update_config)
+        updater = task.LoopingCall(config.schedule_update_config)
         updater.start(config.config_timer, now=False)
 
         # Schedule batch checking
