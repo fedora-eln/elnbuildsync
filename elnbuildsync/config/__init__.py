@@ -17,6 +17,7 @@
 # SPDX-License-Identifier: 	GPL-3.0-or-later
 
 
+import asyncio
 import json
 import logging
 import re
@@ -25,6 +26,7 @@ import requests.exceptions
 import twisted.internet.utils
 from tenacity import retry as retry_on_exception
 from tenacity import stop_after_delay, wait_exponential
+from twisted.internet.defer import Deferred
 from txrequests import Session
 
 from . import dynamic as dynamic_config
@@ -263,6 +265,16 @@ async def update_config():
             f"configuration.  Checking again in {config_timer} seconds."
         )
         return
+
+
+def schedule_update_config():
+    """
+    LoopingCall entry point for update_config().
+
+    Runs the coroutine in a dedicated asyncio task so tenacity retries and
+    other asyncio primitives work under the Twisted asyncio reactor.
+    """
+    return Deferred.fromFuture(asyncio.ensure_future(update_config()))
 
 
 @retry_on_exception(

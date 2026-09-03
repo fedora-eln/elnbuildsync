@@ -24,6 +24,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import requests.exceptions
+from tenacity import stop_after_attempt, wait_fixed
 
 import elnbuildsync.config as config_mod
 from elnbuildsync.config import (
@@ -1574,3 +1575,58 @@ class TestGetDistroPackages:
                 distro_view=["eln"],
                 which_source=["source"],
             )
+
+    @pytest.mark.asyncio
+    async def test_retries_connection_error_then_succeeds(self):
+        mock_response = MagicMock()
+        mock_response.text = "pkg-a\n"
+        mock_response.raise_for_status = MagicMock()
+
+        mock_get = AsyncMock(
+            side_effect=[
+                requests.exceptions.ConnectionError("connection refused"),
+                mock_response,
+            ]
+        )
+        mock_session = MagicMock()
+        mock_session.get = mock_get
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("elnbuildsync.config.Session", return_value=mock_session),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
+            packages = await get_distro_packages(
+                distro_url="https://example.test",
+                distro_view=["eln"],
+                which_source=["source"],
+            )
+
+        assert "pkg-a" in packages
+        assert mock_get.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_retries_exhausted_on_connection_error(self):
+        mock_get = AsyncMock(
+            side_effect=requests.exceptions.ConnectionError("connection refused")
+        )
+        mock_session = MagicMock()
+        mock_session.get = mock_get
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("elnbuildsync.config.Session", return_value=mock_session),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+            patch.object(get_distro_packages.retry, "stop", stop_after_attempt(3)),
+            patch.object(get_distro_packages.retry, "wait", wait_fixed(0)),
+            pytest.raises(ConfigError, match="HTTP Error"),
+        ):
+            await get_distro_packages(
+                distro_url="https://example.test",
+                distro_view=["eln"],
+                which_source=["source"],
+            )
+
+        assert mock_get.await_count == 3
