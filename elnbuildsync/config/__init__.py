@@ -240,31 +240,36 @@ async def get_config_ref(url):
 async def update_config():
     global config_ref
 
-    if not scmurl:
-        logger.info("Config URL not provided.")
-        return
-
-    logger.critical("Updating configuration")
-
     try:
-        ref = await get_config_ref(scmurl)
-    except UnknownRefError as e:
-        logger.info(e)
-        logger.critical(
-            f"The configuration repository is unavailable, skipping update.  Checking again in {config_timer} seconds."
-        )
-        return
+        if not scmurl:
+            logger.info("Config URL not provided.")
+            return
 
-    try:
-        await load_dynamic_config(dynamic_config_git_url=scmurl)
-        config_ref = ref
-    except ConfigError as e:
-        logger.info(e)
-        logger.critical(
-            f"The configuration is invalid, skipping update; retaining previous "
-            f"configuration.  Checking again in {config_timer} seconds."
-        )
-        return
+        logger.critical("Updating configuration")
+
+        try:
+            ref = await get_config_ref(scmurl)
+        except UnknownRefError as e:
+            logger.info(e)
+            logger.critical(
+                f"The configuration repository is unavailable, skipping update.  Checking again in {config_timer} seconds."
+            )
+            return
+
+        try:
+            await load_dynamic_config(dynamic_config_git_url=scmurl)
+            config_ref = ref
+        except ConfigError as e:
+            logger.info(e)
+            logger.critical(
+                f"The configuration is invalid, skipping update; retaining previous "
+                f"configuration.  Checking again in {config_timer} seconds."
+            )
+            return
+    except Exception:
+        # Include a catch-all exception to ensure that we always reschedule
+        logger.exception("Error updating configuration")
+        logger.critical(f"Checking again in {config_timer} seconds.")
 
 
 def schedule_update_config():
