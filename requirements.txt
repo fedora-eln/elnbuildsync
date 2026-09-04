@@ -2,6 +2,7 @@ asyncpg
 bodhi-client
 cachetools
 click >= 8
+fastapi
 fedora_messaging >= 3.7.1, < 4
 GitPython
 gssapi
@@ -12,5 +13,5 @@ rpm
 sqlalchemy >= 2
 tenacity >= 8
 twisted >= 22
-txrequests
 httpx
+uvicorn

@@ -18,6 +18,7 @@
 
 # Reactor bootstrap lives in elnbuildsync/__init__.py (package entrypoint).
 
+import asyncio
 import importlib.metadata
 import logging
 import sys
@@ -41,6 +42,7 @@ from . import (
 )
 from .config import ConfigError
 from .kojihelpers import connection as koji_connection
+from .scheduling import PeriodicTask
 
 logger = logging.getLogger(__name__)
 
@@ -185,11 +187,24 @@ def main(
         dynamic_config_url, dynamic_config_file
     )
 
+    # task.react() is the one remaining irreducible Twisted dependency in
+    # this codebase: fedora_messaging.api.twisted_consume() (below, in
+    # _main()) requires a live Twisted reactor because its AMQP transport is
+    # built on pika's Twisted adapter. Everything else in the process runs
+    # on plain asyncio primitives sharing that same reactor's event loop
+    # (see elnbuildsync/__init__.py's AsyncioSelectorReactor install). Do
+    # not try to replace this with asyncio.run(): switching to
+    # fedora_messaging.api.consume() (its blocking, non-Twisted-reactor-facing
+    # sibling) was investigated and rejected, since it just hides a second
+    # Twisted reactor behind crochet, running in its own thread.
     logger.debug("Starting Twisted mainloop")
-    return task.react(
-        lambda reactor: Deferred.fromCoroutine(
+
+    def _run(reactor):
+        # Schedule _main() as a genuine asyncio.Task via asyncio.ensure_future()
+        # and bridge *that* to a Deferred with Deferred.fromFuture(), allowing
+        # us to run both Twisted and asyncio code in the same event loop.
+        main_task = asyncio.ensure_future(
             _main(
-                reactor,
                 db_pw_file,
                 smtp_pw_file,
                 static_config_file,
@@ -201,11 +216,12 @@ def main(
                 krb5_keytab_principal,
             )
         )
-    )
+        return Deferred.fromFuture(main_task)
+
+    return task.react(_run)
 
 
 async def _main(
-    reactor,
     db_pw_file,
     smtp_pw_file,
     static_config_file,
@@ -217,7 +233,7 @@ async def _main(
     krb5_keytab_principal=None,
 ) -> None:
     auth.openid_ca_file = openid_ca_file
-    config.terminator = Deferred()
+    config.terminator = asyncio.Future()
     with tempfile.TemporaryDirectory(prefix="elnbuildsync-") as cdir:
         config.tmpdir = cdir
 
@@ -271,37 +287,36 @@ async def _main(
         logger.info("Database Initialized")
 
         # Schedule configuration updates
-        updater = task.LoopingCall(config.schedule_update_config)
+        updater = PeriodicTask(config.update_config)
         updater.start(config.config_timer, now=False)
 
         # Schedule batch checking
-        batching.message_batch_processor = task.LoopingCall(
-            batching.process_message_batch
-        )
+        batching.message_batch_processor = PeriodicTask(batching.process_message_batch)
         batching.message_batch_processor.start(config.message_batch_timer, now=False)
 
         # Schedule periodic status page and run it once at startup
-        config.status_processor = task.LoopingCall(status.create_status_page)
+        config.status_processor = PeriodicTask(status.create_status_page)
         config.status_processor.start(config.control["status_interval"], now=True)
 
         # Schedule periodic cleanup
-        config.cleanup_processor = task.LoopingCall(cleanup.periodic_cleanup)
+        config.cleanup_processor = PeriodicTask(cleanup.periodic_cleanup)
         config.cleanup_processor.start(config.cleanup_timer, now=False)
 
         # Add a five-minute timer to check for task completion, because Koji
         # does not always send out an AMQP message as expected
-        listener.task_check_processor = task.LoopingCall(listener.check_tasks)
+        listener.task_check_processor = PeriodicTask(listener.check_tasks)
         listener.task_check_processor.start(config.task_check_timer, now=False)
 
         # Schedule periodic tag checking
-        listener.tag_check_processor = task.LoopingCall(listener.check_tags)
+        listener.tag_check_processor = PeriodicTask(listener.check_tags)
         listener.tag_check_processor.start(config.tag_check_timer, now=False)
 
         # Start listening for Fedora Messages
         fedora_messaging.api.twisted_consume(listener.message_handler)
 
         logger.info("Starting HTTP server")
-        reactor.listenTCP(8080, web.setup_web_resources())
+        web.app = web.create_app()
+        await web.start_web_server(web.app, port=8080)
         logger.info("HTTP server ready")
 
         await config.terminator

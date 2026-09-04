@@ -35,6 +35,9 @@ test = ["pytest>=7", "pytest-asyncio>=0.21"]
 asyncio_default_fixture_loop_scope = "function"
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "integration: end-to-end tests that fake Koji/Bodhi/Fedora Messaging and require a real Postgres database (see tests/integration/).",
+]
 
 [build-system]
 requires = ["setuptools >= 40.6.0", "wheel"]
@@ -53,3 +56,9 @@ per-file-ignores = { "elnbuildsync/__init__.py" = ["E402"] }
 
 [tool.ruff.lint.isort]
 known-first-party = ["elnbuildsync"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection pattern relies on calling Depends(...) (and
+# similar) in argument defaults; that's not the mutable-default footgun B008
+# looks for.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body"]
