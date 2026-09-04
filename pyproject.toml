@@ -53,3 +53,9 @@ per-file-ignores = { "elnbuildsync/__init__.py" = ["E402"] }
 
 [tool.ruff.lint.isort]
 known-first-party = ["elnbuildsync"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection pattern relies on calling Depends(...) (and
+# similar) in argument defaults; that's not the mutable-default footgun B008
+# looks for.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body"]
