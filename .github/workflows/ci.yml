@@ -77,6 +77,43 @@ jobs:
           name: flake8-code-quality
           path: gl-code-quality-report.json
 
+  pytest:
+    name: Pytest
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/fedora/fedora:44
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install dependencies
+        run: |
+          INSTALL_PKGS=" \
+            bash \
+            bodhi-client \
+            fedora-messaging \
+            koji \
+            krb5-workstation \
+            python3-cachetools \
+            python3-click \
+            python3-GitPython \
+            python3-gssapi \
+            python3-httpx \
+            python3-krb5 \
+            python3-pip \
+            python3-pyyaml \
+            python3-requests \
+            python3-rpm \
+            python3-sqlalchemy+postgresql_asyncpg \
+            python3-tenacity \
+            python3-twisted \
+            python3-virtualenv \
+            " && \
+          dnf -y --setopt=tsflags=nodocs install $INSTALL_PKGS && \
+          dnf -y clean all --enablerepo='*'
+          pip install txrequests
+          pip install -e ".[test]"
+      - name: Run pytest
+        run: pytest tests
+
   project_version:
     runs-on: ubuntu-latest
     container: python:3.14-alpine
