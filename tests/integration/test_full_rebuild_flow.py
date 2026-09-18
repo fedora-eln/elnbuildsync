@@ -313,6 +313,11 @@ async def test_full_rebuild_flow_multi_round_retry_with_decreasing_failures(
         assert trigger.completed_at is not None
 
 
+# ---------------------------------------------------------------------------
+# P, Q - Bodhi stable-tag timeout and slow-update warning emails
+# ---------------------------------------------------------------------------
+
+
 async def test_full_rebuild_flow_sends_update_timeout_email(make_harness):
     """Scenario P: when a Bodhi update's stable-tag delivery times out,
     config.emailer.send_email() is awaited once with the correct
@@ -348,6 +353,135 @@ async def test_full_rebuild_flow_sends_update_timeout_email(make_harness):
     build_side_tag = harness.koji.created_side_tags[0]
     assert build_side_tag in harness.koji.removed_side_tags
     trigger = await _get_trigger("pkg-p")
+    assert trigger.completed_at is not None
+
+
+async def test_full_rebuild_flow_warn_timeout_fires_before_stable_tag(make_harness):
+    """Scenario Q1: bodhi.warn_timeout elapses while the stable-tag wait is
+    still running → warning email is sent with the correct subject/body/headers.
+    The wait itself then times out and sends the failure email too."""
+    email_mock = AsyncMock()
+    harness = await make_harness(
+        packages=["pkg-q1"],
+        skip_tag=["^pkg-q1$"],
+        bodhi_warn_timeout=0.0005,  # 0.03 s — fires well before tag_timeout
+        tag_timeout=0.2,
+        emailer=email_mock,
+    )
+    pkg = harness.add_package("pkg-q1", build_id=7301, outcomes=["CLOSED"])
+    harness.bodhi.suppress_stable_delivery = True
+
+    await harness.trigger("f44", pkg)
+    await batching.process_message_batch()
+
+    assert len(_build_calls_for(harness, pkg.scmurl)) == 1
+    assert len(harness.bodhi.save_calls) == 1
+
+    built_nvr = harness.koji.nvr_for_scmurl(pkg.scmurl)
+    assert built_nvr not in _stable_tag_nvrs(harness)
+
+    assert email_mock.send_email.await_count == 2
+    subjects = {
+        call.kwargs["subject"] for call in email_mock.send_email.await_args_list
+    }
+    assert "ELNBuildSync Bodhi update warning" in subjects
+    assert "ELNBuildSync update failure" in subjects
+
+    warn_call = next(
+        c
+        for c in email_mock.send_email.await_args_list
+        if c.kwargs["subject"] == "ELNBuildSync Bodhi update warning"
+    )
+    assert warn_call.kwargs["body"] == (
+        "The ELNBuildSync Bodhi update has not yet reached stable "
+        "after 0 minutes. "
+        "ELNBuildSync will continue waiting for up to "
+        "0 more minutes "
+        "before moving on to the next batch.\n"
+        "The following NVRs are being awaited:\n" + built_nvr
+    )
+    assert warn_call.kwargs["headers"] == {"elnbuildsync-updates": built_nvr}
+
+    build_side_tag = harness.koji.created_side_tags[0]
+    assert build_side_tag in harness.koji.removed_side_tags
+    trigger = await _get_trigger("pkg-q1")
+    assert trigger.completed_at is not None
+
+
+async def test_full_rebuild_flow_warn_timeout_not_sent_when_stable_tag_arrives(
+    make_harness,
+):
+    """Scenario Q2: stable tag is delivered before bodhi.warn_timeout elapses
+    → the warning task is canceled and no warning email is sent."""
+    email_mock = AsyncMock()
+    harness = await make_harness(
+        packages=["pkg-q2"],
+        skip_tag=["^pkg-q2$"],
+        bodhi_warn_timeout=999,  # effectively infinite — will never fire
+        stable_timeout=1.0,
+        emailer=email_mock,
+    )
+    pkg = harness.add_package("pkg-q2", build_id=7401, outcomes=["CLOSED"])
+
+    await harness.trigger("f44", pkg)
+    await batching.process_message_batch()
+
+    assert len(_build_calls_for(harness, pkg.scmurl)) == 1
+    assert len(harness.bodhi.save_calls) == 1
+
+    built_nvr = harness.koji.nvr_for_scmurl(pkg.scmurl)
+    assert built_nvr in _stable_tag_nvrs(harness)
+
+    email_mock.send_email.assert_not_awaited()
+
+    trigger = await _get_trigger("pkg-q2")
+    assert trigger.completed_at is not None
+
+
+async def test_full_rebuild_flow_warn_timeout_fires_but_stable_tag_eventually_arrives(
+    make_harness,
+):
+    """Scenario Q3: bodhi.warn_timeout elapses (warning email is sent) but the
+    stable tag is eventually delivered → no failure email, pipeline completes
+    successfully with the build in the stable tag."""
+    email_mock = AsyncMock()
+    harness = await make_harness(
+        packages=["pkg-q3"],
+        skip_tag=["^pkg-q3$"],
+        bodhi_warn_timeout=0.0005,  # 0.03 s — fires before stable delivery
+        stable_timeout=1.0,
+        emailer=email_mock,
+    )
+    pkg = harness.add_package("pkg-q3", build_id=7501, outcomes=["CLOSED"])
+    # Delay delivery by 0.1 s so the 0.03 s warning fires first, but the
+    # stable tag still arrives well within the default 1-hour tag_timeout.
+    harness.bodhi.stable_delivery_delay = 0.1
+
+    await harness.trigger("f44", pkg)
+    await batching.process_message_batch()
+
+    assert len(_build_calls_for(harness, pkg.scmurl)) == 1
+    assert len(harness.bodhi.save_calls) == 1
+
+    built_nvr = harness.koji.nvr_for_scmurl(pkg.scmurl)
+    assert built_nvr in _stable_tag_nvrs(harness)
+
+    assert email_mock.send_email.await_count == 1
+    warn_call = email_mock.send_email.await_args
+    assert warn_call.kwargs["subject"] == "ELNBuildSync Bodhi update warning"
+    assert warn_call.kwargs["body"] == (
+        "The ELNBuildSync Bodhi update has not yet reached stable "
+        "after 0 minutes. "
+        "ELNBuildSync will continue waiting for up to "
+        "60 more minutes "
+        "before moving on to the next batch.\n"
+        "The following NVRs are being awaited:\n" + built_nvr
+    )
+    assert warn_call.kwargs["headers"] == {"elnbuildsync-updates": built_nvr}
+
+    build_side_tag = harness.koji.created_side_tags[0]
+    assert build_side_tag in harness.koji.removed_side_tags
+    trigger = await _get_trigger("pkg-q3")
     assert trigger.completed_at is not None
 
 
