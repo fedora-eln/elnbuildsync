@@ -64,6 +64,11 @@ class FakeBodhiClient:
         # exercises the stable-tag timeout email path added in the staged diff.
         self.suppress_stable_delivery = False
 
+        # Seconds to sleep before delivering stable-tag messages. Use this to
+        # let a concurrent warn_timeout fire before the stable tag arrives
+        # without suppressing delivery entirely (Scenario Q3).
+        self.stable_delivery_delay: float = 0.0
+
     def ensure_auth(self) -> None:
         self.ensure_auth_calls += 1
 
@@ -91,5 +96,7 @@ class FakeBodhiClient:
         if self.suppress_stable_delivery:
             self.suppress_stable_delivery = False
             return
+        if self.stable_delivery_delay > 0:
+            await asyncio.sleep(self.stable_delivery_delay)
         for nvr in nvrs:
             await self._fake_koji.deliver_tag_when_pending(self._stable_tag, nvr)

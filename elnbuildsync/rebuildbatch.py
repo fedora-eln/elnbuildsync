@@ -285,9 +285,15 @@ class RebuildBatch:
                     await asyncio.sleep(warn_timeout_minutes * 60)
                     await config.emailer.send_email(
                         subject="ELNBuildSync Bodhi update warning",
-                        body="The ELNBuildSync Bodhi update has not yet "
-                        + "reached stable for the following requests: "
-                        + "\n".join(tagging_nvrs),
+                        body=(
+                            f"The ELNBuildSync Bodhi update has not yet reached stable "
+                            f"after {warn_timeout_minutes:.0f} minutes. "
+                            f"ELNBuildSync will continue waiting for up to "
+                            f"{config.tag_timeout / 60 - warn_timeout_minutes:.0f} more minutes "
+                            f"before moving on to the next batch.\n"
+                            "The following NVRs are being awaited:\n"
+                            + "\n".join(tagging_nvrs)
+                        ),
                         headers={
                             "elnbuildsync-updates": ", ".join(tagging_nvrs),
                         },
