@@ -313,6 +313,44 @@ async def test_full_rebuild_flow_multi_round_retry_with_decreasing_failures(
         assert trigger.completed_at is not None
 
 
+async def test_full_rebuild_flow_sends_update_timeout_email(make_harness):
+    """Scenario P: when a Bodhi update's stable-tag delivery times out,
+    config.emailer.send_email() is awaited once with the correct
+    subject/body/headers (NVRs taken from the update, not the build trigger)."""
+    email_mock = AsyncMock()
+    harness = await make_harness(
+        packages=["pkg-p"],
+        skip_tag=["^pkg-p$"],
+        tag_timeout=0.05,
+        emailer=email_mock,
+    )
+    pkg = harness.add_package("pkg-p", build_id=7201, outcomes=["CLOSED"])
+    harness.bodhi.suppress_stable_delivery = True
+
+    await harness.trigger("f44", pkg)
+    await batching.process_message_batch()
+
+    assert len(_build_calls_for(harness, pkg.scmurl)) == 1
+    assert len(harness.bodhi.save_calls) == 1
+
+    built_nvr = harness.koji.nvr_for_scmurl(pkg.scmurl)
+    assert built_nvr not in _stable_tag_nvrs(harness)
+
+    email_mock.send_email.assert_awaited_once()
+    call = email_mock.send_email.await_args
+    assert call.kwargs["subject"] == "ELNBuildSync update failure"
+    assert call.kwargs["body"] == (
+        "The ELNBuildSync Bodhi update timed out for the following requests: "
+        + built_nvr
+    )
+    assert call.kwargs["headers"] == {"elnbuildsync-updates": built_nvr}
+
+    build_side_tag = harness.koji.created_side_tags[0]
+    assert build_side_tag in harness.koji.removed_side_tags
+    trigger = await _get_trigger("pkg-p")
+    assert trigger.completed_at is not None
+
+
 async def test_full_rebuild_flow_sends_failure_email_content(make_harness):
     """Scenario I: on total failure, config.emailer.send_email() is awaited
     with the expected subject/body/headers."""

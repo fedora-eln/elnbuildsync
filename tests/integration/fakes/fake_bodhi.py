@@ -59,6 +59,11 @@ class FakeBodhiClient:
         self.ensure_auth_calls = 0
         self.save_calls: list[dict[str, Any]] = []
 
+        # Set to True to suppress stable-tag message delivery on the next
+        # save() call; the waiter in RebuildBatch will then time out, which
+        # exercises the stable-tag timeout email path added in the staged diff.
+        self.suppress_stable_delivery = False
+
     def ensure_auth(self) -> None:
         self.ensure_auth_calls += 1
 
@@ -83,5 +88,8 @@ class FakeBodhiClient:
         # the Future is actually registered, or the buildsys.tag message
         # would be dropped (tag not yet in state.pending_nvr_tags) and the
         # waiter would then hang/timeout.
+        if self.suppress_stable_delivery:
+            self.suppress_stable_delivery = False
+            return
         for nvr in nvrs:
             await self._fake_koji.deliver_tag_when_pending(self._stable_tag, nvr)
