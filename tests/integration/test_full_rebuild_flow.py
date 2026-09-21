@@ -326,7 +326,7 @@ async def test_full_rebuild_flow_sends_update_timeout_email(make_harness):
     harness = await make_harness(
         packages=["pkg-p"],
         skip_tag=["^pkg-p$"],
-        tag_timeout=0.05,
+        stable_timeout=0.05,
         emailer=email_mock,
     )
     pkg = harness.add_package("pkg-p", build_id=7201, outcomes=["CLOSED"])
@@ -364,8 +364,8 @@ async def test_full_rebuild_flow_warn_timeout_fires_before_stable_tag(make_harne
     harness = await make_harness(
         packages=["pkg-q1"],
         skip_tag=["^pkg-q1$"],
-        bodhi_warn_timeout=0.0005,  # 0.03 s — fires well before tag_timeout
-        tag_timeout=0.2,
+        bodhi_warn_timeout=0.0005,  # 0.03 s — fires well before stable_timeout
+        stable_timeout=0.2,
         emailer=email_mock,
     )
     pkg = harness.add_package("pkg-q1", build_id=7301, outcomes=["CLOSED"])
@@ -454,7 +454,7 @@ async def test_full_rebuild_flow_warn_timeout_fires_but_stable_tag_eventually_ar
     )
     pkg = harness.add_package("pkg-q3", build_id=7501, outcomes=["CLOSED"])
     # Delay delivery by 0.1 s so the 0.03 s warning fires first, but the
-    # stable tag still arrives well within the default 1-hour tag_timeout.
+    # stable tag still arrives within the 1-second stable_timeout.
     harness.bodhi.stable_delivery_delay = 0.1
 
     await harness.trigger("f44", pkg)

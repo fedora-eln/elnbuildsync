@@ -100,7 +100,8 @@ def _parse_open_id_connect(oidc_raw, ConfigError):
 
 def _parse_koji(cnf_koji, ConfigError):
     """Parse koji configuration. Returns dict with profile, build_target, stable_tag,
-    scratch_build, fail_fast, wait_repo, and optionally username.
+    scratch_build, fail_fast, wait_repo, instance, side_tag_timeout, and optionally
+    username.
     """
     if "profile" not in cnf_koji:
         raise ConfigError("koji.profile missing.")
@@ -136,15 +137,29 @@ def _parse_koji(cnf_koji, ConfigError):
             "koji.wait_repo cannot be false when koji.profile is 'koji'; "
             "disabling wait_repo is unacceptable in the production deployment."
         )
+    result["instance"] = str(cnf_koji.get("instance", "primary"))
+    if "side_tag_timeout" in cnf_koji:
+        try:
+            parsed = float(cnf_koji["side_tag_timeout"])
+            if parsed <= 0:
+                raise ConfigError("koji.side_tag_timeout must be a positive number")
+            result["side_tag_timeout"] = parsed
+        except (ValueError, TypeError):
+            raise ConfigError("koji.side_tag_timeout must be a positive number")
+    else:
+        result["side_tag_timeout"] = float(60 * 60)  # 1 hour in seconds
     logger.debug(
         "Parsed koji config: profile=%s build_target=%s stable_tag=%s "
-        "scratch_build=%s fail_fast=%s wait_repo=%s username=%s",
+        "scratch_build=%s fail_fast=%s wait_repo=%s instance=%s "
+        "side_tag_timeout=%s username=%s",
         result["profile"],
         result["build_target"],
         result["stable_tag"],
         result["scratch_build"],
         result["fail_fast"],
         result["wait_repo"],
+        result["instance"],
+        result["side_tag_timeout"],
         result.get("username"),
     )
     return result
@@ -397,7 +412,6 @@ async def load_static_config(
         )
         logger.debug("OIDC client secret loaded from %s", oidc_client_secret_file)
     config_module.main = n
-    config_module.tag_timeout = n["bodhi"]["stable_timeout"]
     logger.debug("Static configuration applied to config.main")
 
     if not config_module.db_url:
