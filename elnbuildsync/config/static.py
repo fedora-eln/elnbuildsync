@@ -18,6 +18,7 @@
 
 
 import logging
+import math
 import os
 
 import sqlalchemy
@@ -141,7 +142,7 @@ def _parse_koji(cnf_koji, ConfigError):
     if "side_tag_timeout" in cnf_koji:
         try:
             parsed = float(cnf_koji["side_tag_timeout"])
-            if parsed <= 0:
+            if not math.isfinite(parsed) or parsed <= 0:
                 raise ConfigError("koji.side_tag_timeout must be a positive number")
             result["side_tag_timeout"] = parsed
         except (ValueError, TypeError):
@@ -225,7 +226,7 @@ def _parse_bodhi(cnf_bodhi, koji_profile, ConfigError):
     if "warn_timeout" in cnf_bodhi:
         try:
             parsed = float(cnf_bodhi["warn_timeout"])
-            if parsed < 0:
+            if not math.isfinite(parsed) or parsed < 0:
                 raise ConfigError("bodhi.warn_timeout must be a non-negative number")
             result["warn_timeout"] = None if parsed == 0 else parsed
         except (ValueError, TypeError):
@@ -236,7 +237,7 @@ def _parse_bodhi(cnf_bodhi, koji_profile, ConfigError):
     if "stable_timeout" in cnf_bodhi:
         try:
             parsed = float(cnf_bodhi["stable_timeout"])
-            if parsed <= 0:
+            if not math.isfinite(parsed) or parsed <= 0:
                 raise ConfigError("bodhi.stable_timeout must be a positive number")
             result["stable_timeout"] = parsed
         except (ValueError, TypeError):

@@ -253,6 +253,45 @@ class TestParseKoji:
                 }
             )
 
+    def test_side_tag_timeout_nan_raises(self):
+        with pytest.raises(
+            ConfigError, match="koji.side_tag_timeout must be a positive number"
+        ):
+            _parse_koji(
+                {
+                    "profile": "koji",
+                    "build_target": "eln",
+                    "stable_tag": "eln",
+                    "side_tag_timeout": float("nan"),
+                }
+            )
+
+    def test_side_tag_timeout_positive_infinity_raises(self):
+        with pytest.raises(
+            ConfigError, match="koji.side_tag_timeout must be a positive number"
+        ):
+            _parse_koji(
+                {
+                    "profile": "koji",
+                    "build_target": "eln",
+                    "stable_tag": "eln",
+                    "side_tag_timeout": float("inf"),
+                }
+            )
+
+    def test_side_tag_timeout_negative_infinity_raises(self):
+        with pytest.raises(
+            ConfigError, match="koji.side_tag_timeout must be a positive number"
+        ):
+            _parse_koji(
+                {
+                    "profile": "koji",
+                    "build_target": "eln",
+                    "stable_tag": "eln",
+                    "side_tag_timeout": float("-inf"),
+                }
+            )
+
 
 class TestParseBodhi:
     def test_default_batch_size_zero(self):
@@ -366,6 +405,24 @@ class TestParseBodhi:
         ):
             _parse_bodhi({"warn_timeout": "soon"}, koji_profile="koji")
 
+    def test_warn_timeout_nan_raises(self):
+        with pytest.raises(
+            ConfigError, match="bodhi.warn_timeout must be a non-negative number"
+        ):
+            _parse_bodhi({"warn_timeout": float("nan")}, koji_profile="koji")
+
+    def test_warn_timeout_positive_infinity_raises(self):
+        with pytest.raises(
+            ConfigError, match="bodhi.warn_timeout must be a non-negative number"
+        ):
+            _parse_bodhi({"warn_timeout": float("inf")}, koji_profile="koji")
+
+    def test_warn_timeout_negative_infinity_raises(self):
+        with pytest.raises(
+            ConfigError, match="bodhi.warn_timeout must be a non-negative number"
+        ):
+            _parse_bodhi({"warn_timeout": float("-inf")}, koji_profile="koji")
+
     def test_stable_timeout_absent_defaults_to_24_hours(self):
         result = _parse_bodhi({}, koji_profile="koji")
         assert result["stable_timeout"] == 60 * 60 * 24
@@ -395,6 +452,24 @@ class TestParseBodhi:
             ConfigError, match="bodhi.stable_timeout must be a positive number"
         ):
             _parse_bodhi({"stable_timeout": "forever"}, koji_profile="koji")
+
+    def test_stable_timeout_nan_raises(self):
+        with pytest.raises(
+            ConfigError, match="bodhi.stable_timeout must be a positive number"
+        ):
+            _parse_bodhi({"stable_timeout": float("nan")}, koji_profile="koji")
+
+    def test_stable_timeout_positive_infinity_raises(self):
+        with pytest.raises(
+            ConfigError, match="bodhi.stable_timeout must be a positive number"
+        ):
+            _parse_bodhi({"stable_timeout": float("inf")}, koji_profile="koji")
+
+    def test_stable_timeout_negative_infinity_raises(self):
+        with pytest.raises(
+            ConfigError, match="bodhi.stable_timeout must be a positive number"
+        ):
+            _parse_bodhi({"stable_timeout": float("-inf")}, koji_profile="koji")
 
 
 # Minimal valid db config (all keys mandatory)
