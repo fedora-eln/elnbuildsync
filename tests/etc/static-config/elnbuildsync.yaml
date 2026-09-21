@@ -6,6 +6,9 @@ configuration:
     scratch_build: true
     fail_fast: true
     username: eln-buildsync
+    # Seconds to wait for builds to land in the side-tag buildroot before
+    # giving up and retrying. Defaults to 3600 (1 hour).
+    # side_tag_timeout: 3600
   bodhi:
     staging: false
     # Only start splitting into batch_size-sized updates once a rebuild

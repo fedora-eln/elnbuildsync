@@ -210,18 +210,23 @@ def _get_tags_for_target_thread(bsys, target):
     return targetinfo["build_tag_name"], targetinfo["dest_tag_name"]
 
 
-async def wait_for_nvrs_in_tag(tag, nvrs):
+async def wait_for_nvrs_in_tag(tag, nvrs, timeout: float | None = None):
     """
     Wait for a list of nvrs to appear in a tag.
 
     :params str tag: The tag name to wait for
     :params list nvrs: The list of nvrs to wait for
+    :params float timeout: How many seconds to wait before giving up. Defaults
+        to ``config.main["koji"]["side_tag_timeout"]``.
     :return list: A list of (success, value) results. On failure, ``value`` is
         the underlying exception (e.g. kojihelpers.errors.TaskTimeoutError),
         so callers can isinstance-check timeout errors directly.
     """
     # Imported lazily to avoid a circular import with listener/batching.
     from .. import listener
+
+    if timeout is None:
+        timeout = config.main["koji"]["side_tag_timeout"]
 
     nvrs = list(nvrs)
     logger.info(f"Waiting for {len(nvrs)} nvrs to appear in tag {tag}")
@@ -237,9 +242,7 @@ async def wait_for_nvrs_in_tag(tag, nvrs):
 
     results = await asyncio.gather(
         *(
-            listener.wait_for_registered_nvr_tag(
-                tag, nvr, future, timeout=config.tag_timeout
-            )
+            listener.wait_for_registered_nvr_tag(tag, nvr, future, timeout=timeout)
             for nvr, future in nvr_futures.items()
         ),
         return_exceptions=True,

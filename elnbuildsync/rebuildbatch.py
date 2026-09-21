@@ -277,6 +277,7 @@ class RebuildBatch:
             # since some builds may not have been promoted from draft status
             # if the NVR was already in use.
             stable_tag = config.main["koji"]["stable_tag"]
+            stable_timeout = config.main["bodhi"]["stable_timeout"]
 
             warn_timeout_minutes = config.main["bodhi"].get("warn_timeout")
             if warn_timeout_minutes is not None and config.emailer is not None:
@@ -289,7 +290,7 @@ class RebuildBatch:
                             f"The ELNBuildSync Bodhi update has not yet reached stable "
                             f"after {warn_timeout_minutes:.0f} minutes. "
                             f"ELNBuildSync will continue waiting for up to "
-                            f"{config.tag_timeout / 60 - warn_timeout_minutes:.0f} more minutes "
+                            f"{stable_timeout / 60 - warn_timeout_minutes:.0f} more minutes "
                             f"before moving on to the next batch.\n"
                             "The following NVRs are being awaited:\n"
                             + "\n".join(tagging_nvrs)
@@ -305,7 +306,7 @@ class RebuildBatch:
 
             try:
                 results = await kojihelpers.tags.wait_for_nvrs_in_tag(
-                    stable_tag, tagging_nvrs
+                    stable_tag, tagging_nvrs, stable_timeout
                 )
             finally:
                 # Always cancel the warning task. If it already fired, this

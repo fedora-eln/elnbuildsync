@@ -169,6 +169,90 @@ class TestParseKoji:
         with pytest.raises(ConfigError, match="koji.build_target missing"):
             _parse_koji({"profile": "koji", "stable_tag": "eln"})
 
+    def test_instance_defaults_to_primary(self):
+        result = _parse_koji(
+            {"profile": "koji", "build_target": "eln", "stable_tag": "eln"}
+        )
+        assert result["instance"] == "primary"
+
+    def test_instance_custom_value(self):
+        result = _parse_koji(
+            {
+                "profile": "koji",
+                "build_target": "eln",
+                "stable_tag": "eln",
+                "instance": "secondary",
+            }
+        )
+        assert result["instance"] == "secondary"
+
+    def test_side_tag_timeout_absent_defaults_to_one_hour(self):
+        result = _parse_koji(
+            {"profile": "koji", "build_target": "eln", "stable_tag": "eln"}
+        )
+        assert result["side_tag_timeout"] == 60 * 60
+
+    def test_side_tag_timeout_integer_stored_as_float(self):
+        result = _parse_koji(
+            {
+                "profile": "koji",
+                "build_target": "eln",
+                "stable_tag": "eln",
+                "side_tag_timeout": 7200,
+            }
+        )
+        assert result["side_tag_timeout"] == 7200.0
+
+    def test_side_tag_timeout_float_accepted(self):
+        result = _parse_koji(
+            {
+                "profile": "koji",
+                "build_target": "eln",
+                "stable_tag": "eln",
+                "side_tag_timeout": 1800.5,
+            }
+        )
+        assert result["side_tag_timeout"] == 1800.5
+
+    def test_side_tag_timeout_zero_raises(self):
+        with pytest.raises(
+            ConfigError, match="koji.side_tag_timeout must be a positive number"
+        ):
+            _parse_koji(
+                {
+                    "profile": "koji",
+                    "build_target": "eln",
+                    "stable_tag": "eln",
+                    "side_tag_timeout": 0,
+                }
+            )
+
+    def test_side_tag_timeout_negative_raises(self):
+        with pytest.raises(
+            ConfigError, match="koji.side_tag_timeout must be a positive number"
+        ):
+            _parse_koji(
+                {
+                    "profile": "koji",
+                    "build_target": "eln",
+                    "stable_tag": "eln",
+                    "side_tag_timeout": -3600,
+                }
+            )
+
+    def test_side_tag_timeout_non_numeric_raises(self):
+        with pytest.raises(
+            ConfigError, match="koji.side_tag_timeout must be a positive number"
+        ):
+            _parse_koji(
+                {
+                    "profile": "koji",
+                    "build_target": "eln",
+                    "stable_tag": "eln",
+                    "side_tag_timeout": "forever",
+                }
+            )
+
 
 class TestParseBodhi:
     def test_default_batch_size_zero(self):

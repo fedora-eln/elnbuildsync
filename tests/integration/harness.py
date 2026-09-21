@@ -140,6 +140,7 @@ async def build_harness(
     bodhi_max_single_batch_size: int | None = None,
     bodhi_warn_timeout: float | None = None,
     tag_timeout: float | None = None,
+    stable_timeout: float | None = None,
     task_timeout: float | None = None,
     emailer: Any = None,
     rawhide_releases_body: str | None = None,
@@ -163,18 +164,18 @@ async def build_harness(
         bodhi_max_single_batch_size: `bodhi.max_single_batch_size`. Omitted
             from the written config (so it defaults to `bodhi_batch_size`,
             per `_parse_bodhi()`) unless explicitly set.
-        tag_timeout: If set, overrides `config.tag_timeout` for this test
-            only (monkeypatch restores the original value afterwards).
+        tag_timeout: If set, overrides `config.main["koji"]["side_tag_timeout"]`
+            (the buildroot side-tag wait) for this test only.
+        stable_timeout: If set, overrides `config.main["bodhi"]["stable_timeout"]`
+            (the Bodhi stable-tag wait) for this test only.
         task_timeout: If set, overrides the effective Koji task-wait timeout
             used by `kojihelpers.builds.wait_for_tasks()` for this test only.
-            Unlike `tag_timeout` (read fresh from `config.tag_timeout` on
-            every call), this function declares `timeout=config.task_timeout`
-            as an ordinary *default parameter value*, which Python binds once
-            at import time - long before any test runs - so monkeypatching
-            `config.task_timeout` itself would have no effect here. Patching
-            the function's `__defaults__` tuple directly achieves the same
-            effect a test needs (a short timeout) without changing that
-            behavior.
+            This function declares `timeout=config.task_timeout` as an ordinary
+            *default parameter value*, which Python binds once at import time -
+            long before any test runs - so monkeypatching `config.task_timeout`
+            itself would have no effect here. Patching the function's
+            `__defaults__` tuple directly achieves the same effect a test needs
+            (a short timeout) without changing that behavior.
         emailer: Assigned to `config.emailer` after config load (defaults to
             None, i.e. failure emails are disabled for most scenarios).
         rawhide_releases_body: Canned JSON body for Bodhi's
@@ -258,7 +259,10 @@ async def build_harness(
     config.emailer = emailer
 
     if tag_timeout is not None:
-        monkeypatch.setattr("elnbuildsync.config.tag_timeout", tag_timeout)
+        monkeypatch.setitem(config.main["koji"], "side_tag_timeout", tag_timeout)
+
+    if stable_timeout is not None:
+        monkeypatch.setitem(config.main["bodhi"], "stable_timeout", stable_timeout)
 
     if task_timeout is not None:
         monkeypatch.setattr(
