@@ -473,7 +473,7 @@ async def test_full_rebuild_flow_warn_timeout_fires_but_stable_tag_eventually_ar
         "The ELNBuildSync Bodhi update has not yet reached stable "
         "after 0 minutes. "
         "ELNBuildSync will continue waiting for up to "
-        "60 more minutes "
+        "0 more minutes "
         "before moving on to the next batch.\n"
         "The following NVRs are being awaited:\n" + built_nvr
     )

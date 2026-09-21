@@ -13,6 +13,9 @@ configuration:
     # everything as a single Bodhi update. Defaults to batch_size if unset.
     max_single_batch_size: 750
     batch_size: 500
+    # Seconds to wait for Bodhi to push builds to the stable tag before
+    # giving up and sending a failure email. Defaults to 86400 (24 hours).
+    # stable_timeout: 86400
   db:
     host: temp_postgres
     port: 5432
