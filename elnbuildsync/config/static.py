@@ -352,7 +352,10 @@ def _parse_static_configuration(cnf, ConfigError):
 
     if "bodhi" not in cnf:
         raise ConfigError("bodhi missing.")
-    n["bodhi"] = _parse_bodhi(cnf["bodhi"], n["koji"]["profile"], ConfigError)
+    if cnf["bodhi"] is False:
+        n["bodhi"] = False
+    else:
+        n["bodhi"] = _parse_bodhi(cnf["bodhi"], n["koji"]["profile"], ConfigError)
 
     if "db" not in cnf:
         raise ConfigError("db missing.")
