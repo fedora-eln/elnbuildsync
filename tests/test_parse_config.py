@@ -574,6 +574,19 @@ class TestParseStaticConfiguration:
         with pytest.raises(ConfigError, match="koji missing"):
             _parse_static_configuration(cnf)
 
+    def test_bodhi_false_sets_bodhi_to_false(self):
+        cnf = _minimal_static_cnf()
+        cnf["bodhi"] = False
+        n = _parse_static_configuration(cnf)
+        assert n["bodhi"] is False
+
+    def test_bodhi_dict_still_parsed_normally(self):
+        cnf = _minimal_static_cnf()
+        cnf["bodhi"] = {"batch_size": 100, "staging": False}
+        n = _parse_static_configuration(cnf)
+        assert isinstance(n["bodhi"], dict)
+        assert n["bodhi"]["batch_size"] == 100
+
 
 class TestParseConfigurationBlock:
     def test_full_valid_cnf_returns_n(self):

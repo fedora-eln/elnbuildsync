@@ -139,6 +139,7 @@ async def build_harness(
     bodhi_batch_size: int = 0,
     bodhi_max_single_batch_size: int | None = None,
     bodhi_warn_timeout: float | None = None,
+    bodhi_disabled: bool = False,
     koji_instance: str = "primary",
     tag_timeout: float | None = None,
     stable_timeout: float | None = None,
@@ -165,6 +166,8 @@ async def build_harness(
         bodhi_max_single_batch_size: `bodhi.max_single_batch_size`. Omitted
             from the written config (so it defaults to `bodhi_batch_size`,
             per `_parse_bodhi()`) unless explicitly set.
+        bodhi_disabled: When `True`, writes `bodhi: false` in the static config
+            so that `finalize_via_tagging()` is used instead of Bodhi.
         tag_timeout: If set, overrides `config.main["koji"]["side_tag_timeout"]`
             (the buildroot side-tag wait) for this test only.
         stable_timeout: If set, overrides `config.main["bodhi"]["stable_timeout"]`
@@ -187,14 +190,18 @@ async def build_harness(
             `config.control["pause"]` unless overridden at runtime by
             `config.pause_processing()`/`clear_pause_override()`).
     """
-    bodhi_config: dict[str, Any] = {
-        "batch_size": bodhi_batch_size,
-        "staging": False,
-    }
-    if bodhi_max_single_batch_size is not None:
-        bodhi_config["max_single_batch_size"] = bodhi_max_single_batch_size
-    if bodhi_warn_timeout is not None:
-        bodhi_config["warn_timeout"] = bodhi_warn_timeout
+    if bodhi_disabled:
+        bodhi_value: Any = False
+    else:
+        bodhi_config: dict[str, Any] = {
+            "batch_size": bodhi_batch_size,
+            "staging": False,
+        }
+        if bodhi_max_single_batch_size is not None:
+            bodhi_config["max_single_batch_size"] = bodhi_max_single_batch_size
+        if bodhi_warn_timeout is not None:
+            bodhi_config["warn_timeout"] = bodhi_warn_timeout
+        bodhi_value = bodhi_config
 
     static_config = {
         "configuration": {
@@ -206,7 +213,7 @@ async def build_harness(
                 "fail_fast": fail_fast,
                 "instance": koji_instance,
             },
-            "bodhi": bodhi_config,
+            "bodhi": bodhi_value,
             "db": {
                 # Unused: the test harness manages the real test database
                 # directly via db_models.init_db(), not through config.db_url.
@@ -263,7 +270,7 @@ async def build_harness(
     if tag_timeout is not None:
         monkeypatch.setitem(config.main["koji"], "side_tag_timeout", tag_timeout)
 
-    if stable_timeout is not None:
+    if stable_timeout is not None and config.main["bodhi"] is not False:
         monkeypatch.setitem(config.main["bodhi"], "stable_timeout", stable_timeout)
 
     if task_timeout is not None:

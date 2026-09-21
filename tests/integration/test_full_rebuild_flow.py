@@ -1058,3 +1058,41 @@ async def test_instance_mismatch_is_dropped(make_harness):
 
     assert harness.koji.build_calls == []
     assert await _no_trigger_rows("pkg-r3")
+
+
+# ---------------------------------------------------------------------------
+# S - bodhi: false path (finalize_via_tagging)
+# ---------------------------------------------------------------------------
+
+
+async def test_full_rebuild_flow_no_bodhi_tags_directly_into_stable(make_harness):
+    """Scenario S: bodhi: false → finalize_via_tagging() promotes the build
+    and tags it directly into the stable tag without submitting a Bodhi update.
+    The build must appear in the stable tag before run() returns."""
+    harness = await make_harness(
+        packages=["pkg-s"],
+        skip_tag=["^pkg-s$"],
+        bodhi_disabled=True,
+    )
+    pkg = harness.add_package("pkg-s", build_id=8301, outcomes=["CLOSED"])
+
+    await harness.trigger("f44", pkg)
+    await batching.process_message_batch()
+
+    assert len(_build_calls_for(harness, pkg.scmurl)) == 1
+
+    # No Bodhi update was submitted.
+    assert harness.bodhi.save_calls == []
+
+    # The build was promoted and tagged directly into the stable tag.
+    built_nvr = harness.koji.nvr_for_scmurl(pkg.scmurl)
+    assert (STABLE_TAG, built_nvr) in harness.koji.tag_build_calls
+
+    # wait_for_nvrs_in_tag() resolved, so the NVR is observable in the stable tag.
+    assert built_nvr in _stable_tag_nvrs(harness)
+
+    build_side_tag = harness.koji.created_side_tags[0]
+    assert build_side_tag in harness.koji.removed_side_tags
+
+    trigger = await _get_trigger("pkg-s")
+    assert trigger.completed_at is not None

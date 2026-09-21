@@ -265,6 +265,14 @@ class RebuildBatch:
                 # We won't promote this draft build and submit it to Bodhi.
                 logger.info(f"Not submitting Bodhi update for {nvr}")
 
+        elif config.main["bodhi"] is False:
+            if not build_nvrs:
+                logger.info(
+                    "No successful builds to tag directly; skipping finalization."
+                )
+            else:
+                await self.finalize_via_tagging(build_nvrs)
+
         else:
             await self.finalize_via_bodhi(build_nvrs)
 
@@ -273,6 +281,43 @@ class RebuildBatch:
         # makes it to stable.
         logger.info(f"Removing side-tag {self.side_tag.name}")
         await self.side_tag.remove()
+
+    async def finalize_via_tagging(self, build_nvrs: list[str]) -> None:
+        """Promote builds and tag them directly into the stable tag, bypassing Bodhi."""
+        promoted_nvrs = await kojihelpers.builds.promote_builds(build_nvrs)
+        if not promoted_nvrs:
+            raise EmptyPromotionError(
+                f"No builds were promoted from draft status for {build_nvrs}"
+            )
+        stable_tag = config.main["koji"]["stable_tag"]
+        await kojihelpers.tags.tag_builds(stable_tag, promoted_nvrs)
+        logger.info(
+            "Tagged %d builds directly into %s: %s",
+            len(promoted_nvrs),
+            stable_tag,
+            ", ".join(promoted_nvrs),
+        )
+        side_tag_timeout = config.main["koji"]["side_tag_timeout"]
+        results = await kojihelpers.tags.wait_for_nvrs_in_tag(
+            stable_tag, promoted_nvrs, side_tag_timeout
+        )
+        tag_failures = []
+        for success, value in results:
+            if success:
+                logger.info("Build %s confirmed in %s", value, stable_tag)
+            else:
+                logger.error("Build failed to tag into %s", stable_tag, exc_info=value)
+                tag_failures.append(value)
+        if tag_failures and config.emailer is not None:
+            await config.emailer.send_email(
+                subject="ELNBuildSync tagging failure",
+                body="The ELNBuildSync direct tagging timed out for "
+                + "the following builds: "
+                + "\n".join(promoted_nvrs),
+                headers={
+                    "elnbuildsync-updates": ", ".join(promoted_nvrs),
+                },
+            )
 
     async def finalize_via_bodhi(self, build_nvrs: list[str]) -> None:
         """Submit Bodhi updates for build_nvrs and wait for them to reach stable."""
