@@ -152,7 +152,7 @@ def _parse_koji(cnf_koji, ConfigError):
 
 def _parse_bodhi(cnf_bodhi, koji_profile, ConfigError):
     """Parse bodhi configuration. Returns dict with batch_size,
-    max_single_batch_size, staging, and warn_timeout."""
+    max_single_batch_size, staging, warn_timeout, and stable_timeout."""
     result = {"batch_size": 0}
     if "batch_size" in cnf_bodhi:
         try:
@@ -218,13 +218,25 @@ def _parse_bodhi(cnf_bodhi, koji_profile, ConfigError):
     else:
         result["warn_timeout"] = 3 * 60  # 3 hours in minutes
 
+    if "stable_timeout" in cnf_bodhi:
+        try:
+            parsed = float(cnf_bodhi["stable_timeout"])
+            if parsed <= 0:
+                raise ConfigError("bodhi.stable_timeout must be a positive number")
+            result["stable_timeout"] = parsed
+        except (ValueError, TypeError):
+            raise ConfigError("bodhi.stable_timeout must be a positive number")
+    else:
+        result["stable_timeout"] = float(60 * 60 * 24)  # 24 hours in seconds
+
     logger.debug(
         "Parsed bodhi config: batch_size=%s max_single_batch_size=%s "
-        "staging=%s warn_timeout=%s",
+        "staging=%s warn_timeout=%s stable_timeout=%s",
         result["batch_size"],
         result["max_single_batch_size"],
         result["staging"],
         result["warn_timeout"],
+        result["stable_timeout"],
     )
     return result
 
@@ -385,6 +397,7 @@ async def load_static_config(
         )
         logger.debug("OIDC client secret loaded from %s", oidc_client_secret_file)
     config_module.main = n
+    config_module.tag_timeout = n["bodhi"]["stable_timeout"]
     logger.debug("Static configuration applied to config.main")
 
     if not config_module.db_url:
