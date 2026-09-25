@@ -42,6 +42,7 @@ from . import (
     web,
 )
 from .config import ConfigError
+from .kojihelpers import builds as koji_builds
 from .kojihelpers import connection as koji_connection
 from .scheduling import PeriodicTask
 
@@ -267,6 +268,10 @@ async def _main(
             logger.exception("Could not load configuration")
             logger.critical("Could not load configuration.")
             sys.exit(128)
+
+        # Cancel any stale Koji tasks left behind by a previous instance
+        # that crashed or was restarted, so they don't tie up builders.
+        await koji_builds.cancel_stale_tasks()
 
         try:
             await web.load_status_page()

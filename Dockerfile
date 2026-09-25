@@ -2,8 +2,6 @@ FROM quay.io/fedora/fedora:44
 
 WORKDIR /tmp
 
-COPY . .
-
 RUN INSTALL_PKGS=" \
     bash \
     bodhi-client \
@@ -29,6 +27,9 @@ RUN INSTALL_PKGS=" \
     " && \
     dnf -y --setopt=tsflags=nodocs install $INSTALL_PKGS && \
     dnf -y clean all --enablerepo='*'
+
+#Keep COPY  layer here, it speeds up build-time
+COPY . .
 
 # Copy in the Koji config files rather than installing fedora-packager because
 # it pulls in far too many dependencies.

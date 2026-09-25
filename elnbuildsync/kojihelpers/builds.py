@@ -214,6 +214,59 @@ def _promote_builds_thread(bsys, draft_build_ids):
     return promoted_nvrs
 
 
+async def cancel_stale_tasks():
+    """Cancel all active Koji tasks owned by the current user.
+
+    Called during startup to clean up tasks left behind by a previous
+    instance that crashed or was restarted.  Network errors are retried
+    automatically by :func:`call_koji`; any other failure is logged and
+    skipped so that startup can continue.
+    """
+    try:
+        user_info = await call_koji("getLoggedInUser")
+    except Exception:
+        logger.exception(
+            "Could not determine logged-in Koji user; skipping stale task cleanup"
+        )
+        return
+
+    user_id = user_info["id"]
+    username = user_info["name"]
+    logger.info("Checking for stale tasks owned by %s (uid %s)", username, user_id)
+
+    try:
+        active_tasks = await call_koji(
+            "listTasks",
+            opts={
+                "owner": user_id,
+                "state": [
+                    koji.TASK_STATES["FREE"],
+                    koji.TASK_STATES["OPEN"],
+                    koji.TASK_STATES["ASSIGNED"],
+                ],
+            },
+        )
+    except Exception:
+        logger.exception("Could not list active tasks; skipping stale task cleanup")
+        return
+
+    if not active_tasks:
+        logger.info("No stale tasks found")
+        return
+
+    task_ids = [t["id"] for t in active_tasks]
+    logger.info("Canceling %d stale task(s): %s", len(task_ids), task_ids)
+    # listTasks() returns both parent and child tasks and there is no way
+    # to filter to parents only, so we cancel every task individually with
+    # recurse=False (no need for the server to walk children we already
+    # listed ourselves).
+    try:
+        await call_koji(_cancel_multiple_tasks_thread, task_ids, recurse=False)
+    except Exception:
+        logger.exception("Could not cancel stale tasks. Ignoring.")
+    logger.info("Stale task cancellation complete")
+
+
 async def get_build_info_from_task(task_id: int) -> dict:
     """
     Get the build information for a given task ID.
