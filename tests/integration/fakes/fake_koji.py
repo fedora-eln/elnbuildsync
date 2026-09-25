@@ -406,6 +406,12 @@ class FakeKojiClientSession:
     # koji.ClientSession API surface used by elnbuildsync
     # ------------------------------------------------------------------
 
+    def getLoggedInUser(self) -> dict:
+        return {"id": 1, "name": "fake-ebs-user"}
+
+    def listTasks(self, opts: dict | None = None, **kwargs: Any) -> list[dict]:
+        return []
+
     def multicall(self, batch: int | None = None, **kwargs: Any) -> _FakeMultiCall:
         return _FakeMultiCall(self, batch=batch)
 
