@@ -410,6 +410,9 @@ class FakeKojiClientSession:
         return {"id": 1, "name": "fake-ebs-user"}
 
     def listTasks(self, opts: dict | None = None, **kwargs: Any) -> list[dict]:
+        # Return an empty list so that the startup cancel_stale_tasks() call
+        # is a no-op during integration tests: the fake Koji has no pre-existing
+        # tasks, so there is nothing to cancel and the daemon starts cleanly.
         return []
 
     def multicall(self, batch: int | None = None, **kwargs: Any) -> _FakeMultiCall:

@@ -218,10 +218,19 @@ async def cancel_stale_tasks():
     """Cancel all active Koji tasks owned by the current user.
 
     Called during startup to clean up tasks left behind by a previous
-    instance that crashed or was restarted.  Network errors are retried
-    automatically by :func:`call_koji`; any other failure is logged and
-    skipped so that startup can continue.
+    instance that crashed or was restarted.  Skipped entirely in dry-run
+    mode and when ``config.enable_stale_task_cancel`` is False (used by local
+    test runs that authenticate with a developer's Kerberos credentials).
+    Network errors are retried automatically by :func:`call_koji`; any
+    other failure is logged and skipped so that startup can continue.
     """
+    if config.dry_run:
+        logger.info("Dry-run mode: skipping stale task cancellation")
+        return
+    if not config.enable_stale_task_cancel:
+        logger.info("Skipping stale task cancellation (--no-enable-stale-task-cancel)")
+        return
+
     try:
         user_info = await call_koji("getLoggedInUser")
     except Exception:
@@ -264,6 +273,7 @@ async def cancel_stale_tasks():
         await call_koji(_cancel_multiple_tasks_thread, task_ids, recurse=False)
     except Exception:
         logger.exception("Could not cancel stale tasks. Ignoring.")
+        return
     logger.info("Stale task cancellation complete")
 
 

@@ -410,6 +410,7 @@ ${CONTAINER_ENGINE} run --rm --interactive --tty \
 	"${CUSTOM_MOUNT_ARGS[@]}" \
 	--volume "${PROJ_DIR}:/tmp:Z" \
 	localhost/elnbuildsync:local_test_daemon \
+	--no-enable-stale-task-cancel \
 	--log-level "$_arg_log_level" \
 	--static-config-file "${CONTAINER_STATIC_CONFIG}" \
 	--dynamic-config-file "${CONTAINER_DYNAMIC_CONFIG}" \
