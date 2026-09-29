@@ -50,6 +50,24 @@ def _reinsert_active_task(task_id, future):
     state.active_tasks[task_id] = future
 
 
+def _check_instance(msg):
+    """
+    Koji messages include a 'body.instance' field, which differentiates
+    between multiple Koji instances communicating on the same AMQP message
+    bus. We need to ensure that we are only listening to messages from the
+    Koji instance we are configured for.
+
+    returns: None
+
+    raises: fedora_messaging.exceptions.Drop if this is not the configured
+    instance. This will be caught by message_handler()
+    """
+
+    instance = msg.body.get("instance", None)
+    if not instance or instance != config.main["koji"]["instance"]:
+        raise Drop()
+
+
 def _handle_repo_init(msg):
     """Handle buildsys.repo.init messages for repositories we are waiting on."""
     tag = msg.body["tag"]
@@ -170,15 +188,19 @@ async def message_handler(msg):
     logger.debug(f"Received {msg.topic}: UUID {msg.id}")
     try:
         if msg.topic.endswith("buildsys.repo.init"):
+            _check_instance(msg)
             _handle_repo_init(msg)
 
         elif msg.topic.endswith("buildsys.repo.done"):
+            _check_instance(msg)
             _handle_repo_done(msg)
 
         elif msg.topic.endswith("buildsys.task.state.change"):
+            _check_instance(msg)
             _handle_task_state_change(msg)
 
         elif msg.topic.endswith("buildsys.tag"):
+            _check_instance(msg)
             await _handle_tag(msg)
 
         else:
@@ -421,14 +443,15 @@ def register_nvr_tag(tag: str, nvr: str) -> asyncio.Future:
     return future
 
 
-async def wait_for_nvr_tag(tag: str, nvr: str, timeout: float = config.tag_timeout):
+async def wait_for_nvr_tag(tag: str, nvr: str, timeout: float | None = None):
     """
     Register an NVR and wait for it to appear in a tag.
 
     Args:
         tag: The tag name to watch
         nvr: The NVR to wait for
-        timeout: Timeout in seconds (defaults to config.tag_timeout)
+        timeout: Timeout in seconds (defaults to
+            ``config.main["koji"]["side_tag_timeout"]``)
 
     Returns:
         The NVR, once it has appeared in the tag.
@@ -440,6 +463,8 @@ async def wait_for_nvr_tag(tag: str, nvr: str, timeout: float = config.tag_timeo
             ``.data``; callers that care (e.g. SideTag._prepare()) can
             isinstance-check for it directly.
     """
+    if timeout is None:
+        timeout = config.main["koji"]["side_tag_timeout"]
     future = register_nvr_tag(tag, nvr)
     return await wait_for_registered_nvr_tag(tag, nvr, future, timeout)
 
@@ -448,7 +473,7 @@ async def wait_for_registered_nvr_tag(
     tag: str,
     nvr: str,
     future: asyncio.Future,
-    timeout: float = config.tag_timeout,
+    timeout: float | None = None,
 ):
     """
     Wait for an NVR/tag pair that has *already* been registered via
@@ -465,7 +490,8 @@ async def wait_for_registered_nvr_tag(
         tag: The tag name that was passed to ``register_nvr_tag(tag, nvr)``
         nvr: The NVR that was passed to ``register_nvr_tag(tag, nvr)``
         future: The Future returned by ``register_nvr_tag(tag, nvr)``
-        timeout: Timeout in seconds (defaults to config.tag_timeout)
+        timeout: Timeout in seconds (defaults to
+            ``config.main["koji"]["side_tag_timeout"]``)
 
     Returns:
         The NVR, once it has appeared in the tag.
@@ -477,6 +503,8 @@ async def wait_for_registered_nvr_tag(
             ``.data``; callers that care (e.g. SideTag._prepare()) can
             isinstance-check for it directly.
     """
+    if timeout is None:
+        timeout = config.main["koji"]["side_tag_timeout"]
     try:
         return await asyncio.wait_for(future, timeout)
     except TimeoutError as exc:

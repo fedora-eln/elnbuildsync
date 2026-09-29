@@ -18,6 +18,7 @@
 
 
 import logging
+import math
 import os
 
 import sqlalchemy
@@ -100,7 +101,8 @@ def _parse_open_id_connect(oidc_raw, ConfigError):
 
 def _parse_koji(cnf_koji, ConfigError):
     """Parse koji configuration. Returns dict with profile, build_target, stable_tag,
-    scratch_build, fail_fast, wait_repo, and optionally username.
+    scratch_build, fail_fast, wait_repo, instance, side_tag_timeout, and optionally
+    username.
     """
     if "profile" not in cnf_koji:
         raise ConfigError("koji.profile missing.")
@@ -136,15 +138,29 @@ def _parse_koji(cnf_koji, ConfigError):
             "koji.wait_repo cannot be false when koji.profile is 'koji'; "
             "disabling wait_repo is unacceptable in the production deployment."
         )
+    result["instance"] = str(cnf_koji.get("instance", "primary"))
+    if "side_tag_timeout" in cnf_koji:
+        try:
+            parsed = float(cnf_koji["side_tag_timeout"])
+            if not math.isfinite(parsed) or parsed <= 0:
+                raise ConfigError("koji.side_tag_timeout must be a positive number")
+            result["side_tag_timeout"] = parsed
+        except (ValueError, TypeError):
+            raise ConfigError("koji.side_tag_timeout must be a positive number")
+    else:
+        result["side_tag_timeout"] = float(60 * 60)  # 1 hour in seconds
     logger.debug(
         "Parsed koji config: profile=%s build_target=%s stable_tag=%s "
-        "scratch_build=%s fail_fast=%s wait_repo=%s username=%s",
+        "scratch_build=%s fail_fast=%s wait_repo=%s instance=%s "
+        "side_tag_timeout=%s username=%s",
         result["profile"],
         result["build_target"],
         result["stable_tag"],
         result["scratch_build"],
         result["fail_fast"],
         result["wait_repo"],
+        result["instance"],
+        result["side_tag_timeout"],
         result.get("username"),
     )
     return result
@@ -152,7 +168,7 @@ def _parse_koji(cnf_koji, ConfigError):
 
 def _parse_bodhi(cnf_bodhi, koji_profile, ConfigError):
     """Parse bodhi configuration. Returns dict with batch_size,
-    max_single_batch_size, and staging."""
+    max_single_batch_size, staging, warn_timeout, and stable_timeout."""
     result = {"batch_size": 0}
     if "batch_size" in cnf_bodhi:
         try:
@@ -207,11 +223,36 @@ def _parse_bodhi(cnf_bodhi, koji_profile, ConfigError):
                 "staging Koji requires staging Bodhi (staging: true)."
             )
 
+    if "warn_timeout" in cnf_bodhi:
+        try:
+            parsed = float(cnf_bodhi["warn_timeout"])
+            if not math.isfinite(parsed) or parsed < 0:
+                raise ConfigError("bodhi.warn_timeout must be a non-negative number")
+            result["warn_timeout"] = None if parsed == 0 else parsed
+        except (ValueError, TypeError):
+            raise ConfigError("bodhi.warn_timeout must be a non-negative number")
+    else:
+        result["warn_timeout"] = 3 * 60  # 3 hours in minutes
+
+    if "stable_timeout" in cnf_bodhi:
+        try:
+            parsed = float(cnf_bodhi["stable_timeout"])
+            if not math.isfinite(parsed) or parsed <= 0:
+                raise ConfigError("bodhi.stable_timeout must be a positive number")
+            result["stable_timeout"] = parsed
+        except (ValueError, TypeError):
+            raise ConfigError("bodhi.stable_timeout must be a positive number")
+    else:
+        result["stable_timeout"] = float(60 * 60 * 24)  # 24 hours in seconds
+
     logger.debug(
-        "Parsed bodhi config: batch_size=%s max_single_batch_size=%s staging=%s",
+        "Parsed bodhi config: batch_size=%s max_single_batch_size=%s "
+        "staging=%s warn_timeout=%s stable_timeout=%s",
         result["batch_size"],
         result["max_single_batch_size"],
         result["staging"],
+        result["warn_timeout"],
+        result["stable_timeout"],
     )
     return result
 
@@ -312,7 +353,10 @@ def _parse_static_configuration(cnf, ConfigError):
 
     if "bodhi" not in cnf:
         raise ConfigError("bodhi missing.")
-    n["bodhi"] = _parse_bodhi(cnf["bodhi"], n["koji"]["profile"], ConfigError)
+    if cnf["bodhi"] is False:
+        n["bodhi"] = False
+    else:
+        n["bodhi"] = _parse_bodhi(cnf["bodhi"], n["koji"]["profile"], ConfigError)
 
     if "db" not in cnf:
         raise ConfigError("db missing.")

@@ -138,7 +138,11 @@ async def build_harness(
     scratch_build: bool = False,
     bodhi_batch_size: int = 0,
     bodhi_max_single_batch_size: int | None = None,
+    bodhi_warn_timeout: float | None = None,
+    bodhi_disabled: bool = False,
+    koji_instance: str = "primary",
     tag_timeout: float | None = None,
+    stable_timeout: float | None = None,
     task_timeout: float | None = None,
     emailer: Any = None,
     rawhide_releases_body: str | None = None,
@@ -162,18 +166,20 @@ async def build_harness(
         bodhi_max_single_batch_size: `bodhi.max_single_batch_size`. Omitted
             from the written config (so it defaults to `bodhi_batch_size`,
             per `_parse_bodhi()`) unless explicitly set.
-        tag_timeout: If set, overrides `config.tag_timeout` for this test
-            only (monkeypatch restores the original value afterwards).
+        bodhi_disabled: When `True`, writes `bodhi: false` in the static config
+            so that `finalize_via_tagging()` is used instead of Bodhi.
+        tag_timeout: If set, overrides `config.main["koji"]["side_tag_timeout"]`
+            (the buildroot side-tag wait) for this test only.
+        stable_timeout: If set, overrides `config.main["bodhi"]["stable_timeout"]`
+            (the Bodhi stable-tag wait) for this test only.
         task_timeout: If set, overrides the effective Koji task-wait timeout
             used by `kojihelpers.builds.wait_for_tasks()` for this test only.
-            Unlike `tag_timeout` (read fresh from `config.tag_timeout` on
-            every call), this function declares `timeout=config.task_timeout`
-            as an ordinary *default parameter value*, which Python binds once
-            at import time - long before any test runs - so monkeypatching
-            `config.task_timeout` itself would have no effect here. Patching
-            the function's `__defaults__` tuple directly achieves the same
-            effect a test needs (a short timeout) without changing that
-            behavior.
+            This function declares `timeout=config.task_timeout` as an ordinary
+            *default parameter value*, which Python binds once at import time -
+            long before any test runs - so monkeypatching `config.task_timeout`
+            itself would have no effect here. Patching the function's
+            `__defaults__` tuple directly achieves the same effect a test needs
+            (a short timeout) without changing that behavior.
         emailer: Assigned to `config.emailer` after config load (defaults to
             None, i.e. failure emails are disabled for most scenarios).
         rawhide_releases_body: Canned JSON body for Bodhi's
@@ -184,12 +190,18 @@ async def build_harness(
             `config.control["pause"]` unless overridden at runtime by
             `config.pause_processing()`/`clear_pause_override()`).
     """
-    bodhi_config: dict[str, Any] = {
-        "batch_size": bodhi_batch_size,
-        "staging": False,
-    }
-    if bodhi_max_single_batch_size is not None:
-        bodhi_config["max_single_batch_size"] = bodhi_max_single_batch_size
+    if bodhi_disabled:
+        bodhi_value: Any = False
+    else:
+        bodhi_config: dict[str, Any] = {
+            "batch_size": bodhi_batch_size,
+            "staging": False,
+        }
+        if bodhi_max_single_batch_size is not None:
+            bodhi_config["max_single_batch_size"] = bodhi_max_single_batch_size
+        if bodhi_warn_timeout is not None:
+            bodhi_config["warn_timeout"] = bodhi_warn_timeout
+        bodhi_value = bodhi_config
 
     static_config = {
         "configuration": {
@@ -199,8 +211,9 @@ async def build_harness(
                 "stable_tag": STABLE_TAG,
                 "scratch_build": scratch_build,
                 "fail_fast": fail_fast,
+                "instance": koji_instance,
             },
-            "bodhi": bodhi_config,
+            "bodhi": bodhi_value,
             "db": {
                 # Unused: the test harness manages the real test database
                 # directly via db_models.init_db(), not through config.db_url.
@@ -255,7 +268,10 @@ async def build_harness(
     config.emailer = emailer
 
     if tag_timeout is not None:
-        monkeypatch.setattr("elnbuildsync.config.tag_timeout", tag_timeout)
+        monkeypatch.setitem(config.main["koji"], "side_tag_timeout", tag_timeout)
+
+    if stable_timeout is not None and config.main["bodhi"] is not False:
+        monkeypatch.setitem(config.main["bodhi"], "stable_timeout", stable_timeout)
 
     if task_timeout is not None:
         monkeypatch.setattr(
@@ -263,7 +279,7 @@ async def build_harness(
         )
 
     loop = asyncio.get_running_loop()
-    bus = FakeMessageBus()
+    bus = FakeMessageBus(instance=koji_instance)
 
     fake_koji = FakeKojiClientSession(loop, bus)
     fake_koji.set_build_target(BUILD_TARGET, BUILD_TAG_NAME, DEST_TAG_NAME)

@@ -265,37 +265,134 @@ class RebuildBatch:
                 # We won't promote this draft build and submit it to Bodhi.
                 logger.info(f"Not submitting Bodhi update for {nvr}")
 
-        else:
-            # Submit Bodhi updates for the builds
-            # This will create the side-tag and submit the Bodhi updates
-            # from it.
-            tagging_nvrs = await self._create_and_submit_bodhi_updates(build_nvrs)
+        elif config.main["bodhi"] is False:
+            if not build_nvrs:
+                logger.info(
+                    "No successful builds to tag directly; skipping finalization."
+                )
+            else:
+                await self.finalize_via_tagging(build_nvrs)
 
-            # Wait for the Bodhi update to make it to stable by verifying
-            # that all the builds are tagged into the stable tag.
-            # We'll use the NVRs that were tagged, not the input build_nvrs,
-            # since some builds may not have been promoted from draft status
-            # if the NVR was already in use.
-            stable_tag = config.main["koji"]["stable_tag"]
-            results = await kojihelpers.tags.wait_for_nvrs_in_tag(
-                stable_tag, tagging_nvrs
-            )
-            for success, value in results:
-                if success:
-                    logger.info(f"Build {value} tagged into {stable_tag}")
-                else:
-                    # The most likely scenario here is that the tagging timed out,
-                    # so we'll just proceed. Failures here are not really
-                    # recoverable. Log and continue.
-                    logger.error(
-                        f"Build failed to tag into {stable_tag}", exc_info=value
-                    )
+        else:
+            await self.finalize_via_bodhi(build_nvrs)
 
         # Remove the side-tag where we performed the rebuilds.
         # The update tag will be automatically removed when the Bodhi update
         # makes it to stable.
         logger.info(f"Removing side-tag {self.side_tag.name}")
         await self.side_tag.remove()
+
+    async def finalize_via_tagging(self, build_nvrs: list[str]) -> None:
+        """Promote builds and tag them directly into the stable tag, bypassing Bodhi."""
+        promoted_nvrs = await kojihelpers.builds.promote_builds(build_nvrs)
+        if not promoted_nvrs:
+            raise EmptyPromotionError(
+                f"No builds were promoted from draft status for {build_nvrs}"
+            )
+        stable_tag = config.main["koji"]["stable_tag"]
+        await kojihelpers.tags.tag_builds(stable_tag, promoted_nvrs)
+        logger.info(
+            "Tagged %d builds directly into %s: %s",
+            len(promoted_nvrs),
+            stable_tag,
+            ", ".join(promoted_nvrs),
+        )
+        side_tag_timeout = config.main["koji"]["side_tag_timeout"]
+        results = await kojihelpers.tags.wait_for_nvrs_in_tag(
+            stable_tag, promoted_nvrs, side_tag_timeout
+        )
+        tag_failures = []
+        for success, value in results:
+            if success:
+                logger.info("Build %s confirmed in %s", value, stable_tag)
+            else:
+                logger.error("Build failed to tag into %s", stable_tag, exc_info=value)
+                tag_failures.append(value)
+        if tag_failures and config.emailer is not None:
+            await config.emailer.send_email(
+                subject="ELNBuildSync tagging failure",
+                body="The ELNBuildSync direct tagging timed out for "
+                + "the following builds: "
+                + "\n".join(promoted_nvrs),
+                headers={
+                    "elnbuildsync-updates": ", ".join(promoted_nvrs),
+                },
+            )
+
+    async def finalize_via_bodhi(self, build_nvrs: list[str]) -> None:
+        """Submit Bodhi updates for build_nvrs and wait for them to reach stable."""
+        # Submit Bodhi updates for the builds
+        # This will create the side-tag and submit the Bodhi updates
+        # from it.
+        tagging_nvrs = await self._create_and_submit_bodhi_updates(build_nvrs)
+
+        # Wait for the Bodhi update to make it to stable by verifying
+        # that all the builds are tagged into the stable tag.
+        # We'll use the NVRs that were tagged, not the input build_nvrs,
+        # since some builds may not have been promoted from draft status
+        # if the NVR was already in use.
+        stable_tag = config.main["koji"]["stable_tag"]
+        stable_timeout = config.main["bodhi"]["stable_timeout"]
+
+        warn_timeout_minutes = config.main["bodhi"].get("warn_timeout")
+        if warn_timeout_minutes is not None and config.emailer is not None:
+
+            async def _warn_if_slow() -> None:
+                await asyncio.sleep(warn_timeout_minutes * 60)
+                await config.emailer.send_email(
+                    subject="ELNBuildSync Bodhi update warning",
+                    body=(
+                        f"The ELNBuildSync Bodhi update has not yet reached stable "
+                        f"after {warn_timeout_minutes:.0f} minutes. "
+                        f"ELNBuildSync will continue waiting for up to "
+                        f"{stable_timeout / 60 - warn_timeout_minutes:.0f} more minutes "
+                        f"before moving on to the next batch.\n"
+                        "The following NVRs are being awaited:\n"
+                        + "\n".join(tagging_nvrs)
+                    ),
+                    headers={
+                        "elnbuildsync-updates": ", ".join(tagging_nvrs),
+                    },
+                )
+
+            warn_task: asyncio.Task | None = asyncio.create_task(_warn_if_slow())
+        else:
+            warn_task = None
+
+        try:
+            results = await kojihelpers.tags.wait_for_nvrs_in_tag(
+                stable_tag, tagging_nvrs, stable_timeout
+            )
+        finally:
+            # Always cancel the warning task. If it already fired, this
+            # will throw a CancelledError, which we can ignore.
+            if warn_task is not None:
+                warn_task.cancel()
+                try:
+                    await warn_task
+                except asyncio.CancelledError:
+                    pass
+        tag_failures = []
+        for success, value in results:
+            if success:
+                logger.info(f"Build {value} tagged into {stable_tag}")
+            else:
+                # The most likely scenario here is that the tagging timed out,
+                # so we'll just proceed. Failures here are not really
+                # recoverable. Log and continue.
+                logger.error(f"Build failed to tag into {stable_tag}", exc_info=value)
+                tag_failures.append(value)
+
+        if tag_failures and config.emailer is not None:
+            await config.emailer.send_email(
+                subject="ELNBuildSync update failure",
+                body="The ELNBuildSync Bodhi update timed out for "
+                + "the following requests: "
+                + "\n".join(tagging_nvrs),
+                headers={
+                    "elnbuildsync-updates": ", ".join(tagging_nvrs),
+                },
+            )
 
     async def _create_and_submit_bodhi_updates(
         self, build_nvrs: list[str]

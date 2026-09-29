@@ -52,7 +52,6 @@ session_cleanup_timer = 24 * 60 * 60  # 24 hours
 task_check_timer = 5 * 60  # 5 minutes
 tag_check_timer = 5 * 60  # 5 minutes
 task_timeout = 24 * 60 * 60  # 24 hours
-tag_timeout = 1 * 60 * 60  # 1 hour
 # Per-request HTTP timeout for Content Resolver / Bodhi config fetches.
 # Kept below the tenacity stop_after_delay(60) budget so hung sockets
 # cannot stall retries for the full window.
