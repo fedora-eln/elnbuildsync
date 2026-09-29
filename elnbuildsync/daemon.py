@@ -89,6 +89,16 @@ def _resolve_dynamic_source(dynamic_config_url, dynamic_config_file):
 )
 @click.option("--dry-run", is_flag=True, help="Simulate actions only")
 @click.option(
+    "--enable-stale-task-cancel/--no-enable-stale-task-cancel",
+    default=True,
+    show_default=True,
+    help=(
+        "Cancel the logged-in user's active Koji tasks on startup. "
+        "Disable when running with personal Kerberos credentials "
+        "(e.g. tests/local_test_daemon.sh) to avoid cancelling unrelated builds."
+    ),
+)
+@click.option(
     "--lull-time",
     default=config.message_batch_timer,
     show_default=True,
@@ -148,6 +158,7 @@ def _resolve_dynamic_source(dynamic_config_url, dynamic_config_file):
 def main(
     log_level,
     dry_run,
+    enable_stale_task_cancel,
     lull_time,
     static_config_file,
     dynamic_config_url,
@@ -173,6 +184,7 @@ def main(
     logging.getLogger("tenacity").addHandler(logging.StreamHandler())
 
     config.dry_run = dry_run
+    config.enable_stale_task_cancel = enable_stale_task_cancel
     config.message_batch_timer = lull_time
 
     if krb5_keytab_principal and not krb5_keytab_file:
