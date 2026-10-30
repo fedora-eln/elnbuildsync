@@ -1,8 +1,9 @@
 [project]
 name = "ELNBuildSync"
-version = "2.1.0"
+version = "2.2.0"
 authors  = [
     { name = "Stephen Gallagher", email = "sgallagh@redhat.com" },
+    { name = "James Troy", email = "jatroy@redhat.com" },
 ]
 
 description = "A tool to automatically rebuild Fedora Rawhide packages for Fedora ELN"

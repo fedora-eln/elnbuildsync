@@ -1,5 +1,52 @@
 # Release Notes
 
+## 2.2.0
+
+This release adds support for Bodhi-less finalisation, Koji instance
+filtering, improved Bodhi timeout handling with email alerts, and
+stale Koji task cancellation on daemon restart.
+
+### Highlights
+
+- **Bodhi-less finalization (`bodhi: false`).** When the static config
+  sets `bodhi` to the literal value `false`, `RebuildBatch.run()` now
+  calls a new `finalize_via_tagging()` path instead of going through
+  Bodhi. This promotes draft builds, tags the NVRs directly into the
+  stable tag, and waits for each NVR to appear using the configured
+  `koji.side_tag_timeout`. Tagging failures are logged at ERROR level
+  and trigger a failure email if the emailer is configured.
+
+- **Koji instance differentiation.** Multiple Koji instances may share
+  the same Fedora Messaging routing keys (e.g. the primary Koji and a
+  secondary new-architecture instance). The daemon now checks
+  `body.instance` in incoming messages and filters for the configured
+  instance, preventing cross-instance interference.
+  Fixes [#81](https://github.com/fedora-eln/elnbuildsync/issues/81).
+
+- **Bodhi timeout monitoring and email alerts.** The daemon now sends a
+  warning email when a Bodhi update is taking longer than expected and
+  a failure email if the update tag wait times out entirely.
+  Fixes [#80](https://github.com/fedora-eln/elnbuildsync/issues/80).
+
+- **Cancel stale Koji tasks on restart.** On startup, the daemon now
+  cancels any Koji tasks left running from a previous process, with a
+  `--skip-stale-task-cancel` CLI flag for local/personal Koji
+  credentials and automatic skipping in dry-run mode.
+
+### Features
+
+- Added `koji.side_tag_timeout` config option, separating the initial
+  side-tag creation wait from the Bodhi update tagging wait.
+- Made the Bodhi stable timeout configurable (default: 24 hours).
+- Added validation checks for unlikely static config values.
+- Added release and deployment documentation.
+
+### Build / packaging
+
+- Reordered Dockerfile `COPY` layer after package installs to improve
+  layer caching and speed up build times.
+- Bumped version to 2.2.0; added James Troy as a project author.
+
 ## 2.1.0
 
 This release represents a large body of work built on top of the `2.0.2`
